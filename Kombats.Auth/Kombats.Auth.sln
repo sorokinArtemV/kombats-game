@@ -1,0 +1,46 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kombats.Auth.Api", "Kombats.Auth.Api\Kombats.Auth.Api.csproj", "{EB3EFD2D-B449-4100-8A10-111B388B4D9C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kombats.Auth.Infrastructure", "Kombats.Auth.Infrastructure\Kombats.Auth.Infrastructure.csproj", "{9D45FB8F-FA25-476E-BB8A-45D4D7149EA2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kombats.Auth.Domain", "Kombats.Auth.Domain\Kombats.Auth.Domain.csproj", "{83FB32F9-F6FC-4905-B57D-93BC1FB02C5C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kombats.Auth.Application", "Kombats.Auth.Application\Kombats.Auth.Application.csproj", "{5E6F05FE-B90A-4694-BC0F-8540B2C85B05}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Shared", "Shared\Shared.csproj", "{E9126323-3A99-432C-8EB9-B5F9B6FC2A09}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Kombats.BuildingBlocks", "Kombats.BuildingBlocks\Kombats.BuildingBlocks.csproj", "{3AA6883B-6B76-4B6F-B9D7-14B2976403DA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EB3EFD2D-B449-4100-8A10-111B388B4D9C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EB3EFD2D-B449-4100-8A10-111B388B4D9C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EB3EFD2D-B449-4100-8A10-111B388B4D9C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EB3EFD2D-B449-4100-8A10-111B388B4D9C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9D45FB8F-FA25-476E-BB8A-45D4D7149EA2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D45FB8F-FA25-476E-BB8A-45D4D7149EA2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9D45FB8F-FA25-476E-BB8A-45D4D7149EA2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D45FB8F-FA25-476E-BB8A-45D4D7149EA2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{83FB32F9-F6FC-4905-B57D-93BC1FB02C5C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83FB32F9-F6FC-4905-B57D-93BC1FB02C5C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83FB32F9-F6FC-4905-B57D-93BC1FB02C5C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83FB32F9-F6FC-4905-B57D-93BC1FB02C5C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5E6F05FE-B90A-4694-BC0F-8540B2C85B05}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5E6F05FE-B90A-4694-BC0F-8540B2C85B05}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5E6F05FE-B90A-4694-BC0F-8540B2C85B05}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5E6F05FE-B90A-4694-BC0F-8540B2C85B05}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E9126323-3A99-432C-8EB9-B5F9B6FC2A09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E9126323-3A99-432C-8EB9-B5F9B6FC2A09}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E9126323-3A99-432C-8EB9-B5F9B6FC2A09}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E9126323-3A99-432C-8EB9-B5F9B6FC2A09}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3AA6883B-6B76-4B6F-B9D7-14B2976403DA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3AA6883B-6B76-4B6F-B9D7-14B2976403DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3AA6883B-6B76-4B6F-B9D7-14B2976403DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3AA6883B-6B76-4B6F-B9D7-14B2976403DA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

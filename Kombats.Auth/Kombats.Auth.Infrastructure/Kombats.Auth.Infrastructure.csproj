@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BCrypt.Net-Next" Version="4.0.3"/>
+        <PackageReference Include="Dapper" Version="2.1.66"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2"/>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2"/>
+        <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.2.1"/>
+        <PackageReference Include="Npgsql" Version="10.0.1"/>
+        <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Kombats.Auth.Application\Kombats.Auth.Application.csproj"/>
+        <ProjectReference Include="..\Kombats.Auth.Domain\Kombats.Auth.Domain.csproj"/>
+        <ProjectReference Include="..\Kombats.BuildingBlocks\Kombats.BuildingBlocks.csproj"/>
+    </ItemGroup>
+
+</Project>
