@@ -1,0 +1,6 @@
+@Kombats.Players.Api_HostAddress = http://localhost:5007
+
+GET {{Kombats.Players.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

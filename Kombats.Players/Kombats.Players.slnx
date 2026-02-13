@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="BuildingBlocks/BuildingBlocks.csproj" />
+  <Project Path="Kombats.Infrastructure/Kombats.Infrastructure.csproj" />
+  <Project Path="Kombats.Players.Api/Kombats.Players.Api.csproj" />
+  <Project Path="Kombats.Players.Application/Kombats.Players.Application.csproj" />
+  <Project Path="Kombats.Players.Domain/Kombats.Players.Domain.csproj" />
+  <Project Path="Kombats.Shared/Kombats.Shared.csproj" />
+</Solution>
