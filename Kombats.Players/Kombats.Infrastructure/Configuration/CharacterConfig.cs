@@ -9,14 +9,19 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
     public void Configure(EntityTypeBuilder<Character> b)
     {
         b.ToTable("characters");
-        b.HasKey(x => x.Id);
 
-        b.Property(x => x.Name).HasMaxLength(32);
-        b.HasIndex(x => x.Name).IsUnique().HasFilter("name is not null");
+        b.HasKey(x => x.Id);
 
         b.Property(x => x.CreatedAt).IsRequired();
         b.Property(x => x.Revision).IsRequired();
-        
+
         b.Property(x => x.RowVersion).IsConcurrencyToken();
+
+        b.Property(x => x.Strength).IsRequired();
+        b.Property(x => x.Agility).IsRequired();
+        b.Property(x => x.Intuition).IsRequired();
+        b.Property(x => x.Vitality).IsRequired();
+        b.Property(x => x.UnspentPoints).IsRequired();
     }
 }
+

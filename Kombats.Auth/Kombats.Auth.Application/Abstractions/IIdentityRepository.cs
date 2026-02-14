@@ -1,7 +1,7 @@
 ﻿using Kombats.Auth.Domain.Entities;
 using Kombats.Auth.Domain.ValueObjects;
 
-namespace Kombats.Auth.Domain.Abstractions;
+namespace Kombats.Auth.Application.Abstractions;
 
 /// <summary>
 /// Repository for managing identity entities.

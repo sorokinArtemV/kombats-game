@@ -23,6 +23,23 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Kombats.Infrastructure.Messaging.Inbox.InboxMessage", b =>
+                {
+                    b.Property<Guid>("MessageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("processed_at");
+
+                    b.HasKey("MessageId")
+                        .HasName("pk_inbox_messages");
+
+                    b.ToTable("inbox_messages", "players");
+                });
+
             modelBuilder.Entity("Kombats.Players.Domain.Entities.Character", b =>
                 {
                     b.Property<Guid>("Id")
@@ -42,9 +59,7 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                         .HasColumnName("intuition");
 
                     b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
+                        .HasColumnType("text")
                         .HasColumnName("name");
 
                     b.Property<long>("Revision")
@@ -71,29 +86,7 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                     b.HasKey("Id")
                         .HasName("pk_characters");
 
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("ix_characters_name")
-                        .HasFilter("name is not null");
-
                     b.ToTable("characters", "players");
-                });
-
-            modelBuilder.Entity("Kombats.Players.Domain.Entities.InboxMessage", b =>
-                {
-                    b.Property<Guid>("MessageId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("message_id");
-
-                    b.Property<DateTimeOffset>("ProcessedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("processed_at");
-
-                    b.HasKey("MessageId")
-                        .HasName("pk_inbox_messages");
-
-                    b.ToTable("inbox_messages", "players");
                 });
 
             modelBuilder.Entity("Kombats.Players.Domain.Entities.Player", b =>
@@ -108,13 +101,17 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("DisplayName")
-                        .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("display_name");
 
                     b.HasKey("Id")
                         .HasName("pk_players");
+
+                    b.HasIndex("DisplayName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_players_display_name")
+                        .HasFilter("display_name IS NOT NULL");
 
                     b.ToTable("players", "players");
                 });

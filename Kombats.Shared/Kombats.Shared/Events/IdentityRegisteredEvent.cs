@@ -5,3 +5,6 @@ public record IdentityRegisteredEvent(
     string Email,
     DateTimeOffset OccurredAt);
 
+public sealed record IdentityRegisteredPayload(
+    Guid IdentityId,
+    string Email);

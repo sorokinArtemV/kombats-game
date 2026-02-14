@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using Kombats.Auth.Application.Abstractions;
-using Kombats.Auth.Domain.Abstractions;
 using Kombats.Auth.Domain.Enums;
 using Kombats.Shared.Types;
 using Microsoft.Extensions.Logging;

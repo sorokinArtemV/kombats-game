@@ -1,5 +1,8 @@
 ﻿using Kombats.Infrastructure.Data;
 using Kombats.Infrastructure.Messaging.Consumers;
+using Kombats.Infrastructure.Persistence.EF;
+using Kombats.Infrastructure.Repository;
+using Kombats.Players.Application.Abstractions;
 using Kombats.Shared.Messaging;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +19,11 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
 
+        services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<IPlayerRepository, PlayerRepository>();
+        services.AddScoped<IInboxRepository, InboxRepository>();
+
+        
         services.AddDbContext<PlayersDbContext>(options =>
         {
             options

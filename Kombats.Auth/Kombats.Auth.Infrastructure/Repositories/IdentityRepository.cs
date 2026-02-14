@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 using Dapper;
-using Kombats.Auth.Domain.Abstractions;
+using Kombats.Auth.Application.Abstractions;
 using Kombats.Auth.Domain.Entities;
 using Kombats.Auth.Domain.ValueObjects;
 using Kombats.Auth.Infrastructure.Data;

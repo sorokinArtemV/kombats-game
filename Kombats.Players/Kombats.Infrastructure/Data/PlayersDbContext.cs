@@ -18,9 +18,5 @@ public sealed class PlayersDbContext : DbContext
         modelBuilder.HasDefaultSchema(Schemas.Players);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlayersDbContext).Assembly);
-        
-        modelBuilder.ApplyConfiguration(new PlayerConfig());
-        modelBuilder.ApplyConfiguration(new CharacterConfig());
-        modelBuilder.ApplyConfiguration(new InboxMessageConfig());
     }
 }

@@ -7,11 +7,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\Kombats.Shared\Kombats.Shared\Kombats.Shared.csproj" />
+        <ProjectReference Include="..\..\Kombats.Shared\Kombats.Shared\Kombats.Shared.csproj"/>
+        <ProjectReference Include="..\Kombats.Players.Domain\Kombats.Players.Domain.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3"/>
     </ItemGroup>
 
 </Project>

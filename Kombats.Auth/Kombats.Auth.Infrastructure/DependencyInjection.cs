@@ -1,6 +1,6 @@
-﻿using Dapper;
+﻿using System.Text.Json;
+using Dapper;
 using Kombats.Auth.Application.Abstractions;
-using Kombats.Auth.Domain.Abstractions;
 using Kombats.Auth.Infrastructure.Data;
 using Kombats.Auth.Infrastructure.Data.Jwt;
 using Kombats.Auth.Infrastructure.Outbox;
@@ -15,6 +15,11 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         DefaultTypeMap.MatchNamesWithUnderscores = true;
+        
+        services.AddSingleton(new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
 
         services.AddTransient<IIdentityRepository, IdentityRepository>();
 

@@ -7,24 +7,24 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
-      <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.8" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+        <PackageReference Include="EFCore.NamingConventions" Version="10.0.1"/>
+        <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.8"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0"/>
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\Kombats.Shared\Kombats.Shared\Kombats.Shared.csproj" />
-      <ProjectReference Include="..\Kombats.Players.Application\Kombats.Players.Application.csproj" />
-      <ProjectReference Include="..\Kombats.Players.Domain\Kombats.Players.Domain.csproj" />
+        <ProjectReference Include="..\..\Kombats.Shared\Kombats.Shared\Kombats.Shared.csproj"/>
+        <ProjectReference Include="..\Kombats.Players.Application\Kombats.Players.Application.csproj"/>
+        <ProjectReference Include="..\Kombats.Players.Domain\Kombats.Players.Domain.csproj"/>
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Persistence\EF\Migrations\" />
+        <Folder Include="Persistence\EF\Migrations\"/>
     </ItemGroup>
 
 </Project>

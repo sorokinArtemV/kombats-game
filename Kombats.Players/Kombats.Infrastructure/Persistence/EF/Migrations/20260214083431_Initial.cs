@@ -33,7 +33,7 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
-                    display_name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    display_name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -47,7 +47,7 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    name = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     revision = table.Column<long>(type: "bigint", nullable: false),
                     row_version = table.Column<long>(type: "bigint", nullable: false),
@@ -70,12 +70,12 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "ix_characters_name",
+                name: "ix_players_display_name",
                 schema: "players",
-                table: "characters",
-                column: "name",
+                table: "players",
+                column: "display_name",
                 unique: true,
-                filter: "name is not null");
+                filter: "display_name IS NOT NULL");
         }
 
         /// <inheritdoc />

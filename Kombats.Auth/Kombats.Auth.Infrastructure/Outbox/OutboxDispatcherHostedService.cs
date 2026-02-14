@@ -23,11 +23,17 @@ public sealed class OutboxDispatcherHostedService : BackgroundService
 
     private readonly ILogger<OutboxDispatcherHostedService> _logger;
     private readonly IServiceProvider _serviceProvider;
+    private readonly JsonSerializerOptions _jsonOptions;
 
-    public OutboxDispatcherHostedService(IServiceProvider serviceProvider, ILogger<OutboxDispatcherHostedService> logger)
+    public OutboxDispatcherHostedService(
+        IServiceProvider serviceProvider, 
+        ILogger<OutboxDispatcherHostedService> logger,
+        JsonSerializerOptions jsonOptions
+        )
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
+        _jsonOptions = jsonOptions;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -122,7 +128,7 @@ public sealed class OutboxDispatcherHostedService : BackgroundService
         }
     }
 
-    private static async Task PublishMessageAsync(
+    private async Task PublishMessageAsync(
         OutboxMessage message,
         IPublishEndpoint publishEndpoint,
         CancellationToken cancellationToken)
@@ -130,11 +136,21 @@ public sealed class OutboxDispatcherHostedService : BackgroundService
         switch (message.Type)
         {
             case EventType.IdentityRegistered:
-                var @event = JsonSerializer.Deserialize<IdentityRegisteredEvent>(message.Payload);
-                if (@event != null)
+            
+                var payload = JsonSerializer.Deserialize<IdentityRegisteredPayload>(
+                    message.Payload,
+                    _jsonOptions);
+
+                if (payload is not null)
                 {
+                    var @event = new IdentityRegisteredEvent(
+                        payload.IdentityId,
+                        payload.Email,
+                        message.OccurredAt);
+
                     await publishEndpoint.Publish(@event, cancellationToken);
                 }
+
                 break;
 
             default:

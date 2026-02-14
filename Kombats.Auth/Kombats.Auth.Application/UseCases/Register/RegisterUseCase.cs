@@ -1,5 +1,4 @@
 using Kombats.Auth.Application.Abstractions;
-using Kombats.Auth.Domain.Abstractions;
 using Kombats.Auth.Domain.Entities;
 using Kombats.Auth.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
