@@ -21,8 +21,6 @@ public static class ApplicationServicesExtensions
         services.Decorate(typeof(ICommandHandler<,>), typeof(LoggingDecorator.CommandHandler<,>));
         services.Decorate(typeof(ICommandHandler<>), typeof(LoggingDecorator.CommandBaseHandler<>));
 
-        services.AddValidatorsFromAssembly(typeof(TAssemblyMarker).Assembly, includeInternalTypes: true);
-
         return services;
     }
 }

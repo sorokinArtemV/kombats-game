@@ -129,7 +129,7 @@ public sealed class OutboxDispatcherHostedService : BackgroundService
     {
         switch (message.Type)
         {
-            case nameof(IdentityRegisteredEvent):
+            case EventType.IdentityRegistered:
                 var @event = JsonSerializer.Deserialize<IdentityRegisteredEvent>(message.Payload);
                 if (@event != null)
                 {

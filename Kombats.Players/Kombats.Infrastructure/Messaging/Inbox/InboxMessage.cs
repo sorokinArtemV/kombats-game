@@ -1,4 +1,4 @@
-﻿namespace Kombats.Players.Domain.Entities;
+﻿namespace Kombats.Infrastructure.Messaging.Inbox;
 
 public sealed class InboxMessage
 {

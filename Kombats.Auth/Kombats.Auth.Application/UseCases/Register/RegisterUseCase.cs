@@ -4,7 +4,6 @@ using Kombats.Auth.Domain.Entities;
 using Kombats.Auth.Domain.ValueObjects;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using Kombats.Auth.Infrastructure.Outbox;
 using Kombats.Shared.Events;
 using Kombats.Shared.Types;
 
@@ -64,12 +63,16 @@ public sealed class RegisterUseCase : ICommandHandler<RegisterCommand, RegisterR
             identity.Email.Value,
             _clock.UtcNow);
 
-        var eventPayload = JsonSerializer.Serialize(@event);
-        var outboxMessage = new OutboxMessage(
-            Guid.NewGuid(),
-            _clock.UtcNow,
-            nameof(IdentityRegisteredEvent),
-            eventPayload);
+        var eventPayload = JsonSerializer.Serialize(new
+        {
+            identityId = identity.Id,
+            email = identity.Email.Value
+        });
+        var outboxMessage = new OutboxEnvelope(
+            Id: Guid.NewGuid(),
+            OccurredAt: _clock.UtcNow,
+            Type: EventType.IdentityRegistered,
+            Payload: eventPayload);
         
         await _unitOfWork.CreateIdentityWithOutboxAsync(identity, outboxMessage, cancellationToken);
 

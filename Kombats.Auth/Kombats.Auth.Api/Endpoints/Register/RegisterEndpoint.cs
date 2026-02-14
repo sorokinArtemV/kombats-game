@@ -1,9 +1,9 @@
 ﻿using Kombats.Auth.Api.Extensions;
 using Kombats.Auth.Api.Filters;
 using Kombats.Auth.Application.UseCases.Register;
+using Kombats.Shared.CustomResults;
 using Kombats.Shared.Types;
-using Shared;
-using static Kombats.Auth.Api.CustomResults.CustomResults;
+
 
 namespace Kombats.Auth.Api.Endpoints.Register;
 
@@ -22,7 +22,7 @@ public class RegisterEndpoint : IEndpoint
 
                 return result.Match(
                     value => Results.Ok(new RegisterResponse(value.IdentityId)),
-                    Problem);
+                    CustomResults.Problem);
             })
             .WithRequestValidation<RegisterRequest>()
             .WithTags(Tags.AuthRegister)

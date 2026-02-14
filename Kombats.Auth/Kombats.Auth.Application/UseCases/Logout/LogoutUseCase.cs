@@ -17,7 +17,7 @@ public sealed class LogoutUseCase : ICommandHandler<LogoutCommand>
         _logger = logger;
     }
 
-    public async Task<Result> Handle(LogoutCommand command, CancellationToken cancellationToken)
+    public async Task<Result> HandleAsync(LogoutCommand command, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(command.RefreshToken))
         {

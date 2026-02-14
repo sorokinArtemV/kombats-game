@@ -3,7 +3,7 @@ using Kombats.Auth.Api.Extensions;
 using Kombats.Auth.Application;
 using Kombats.Auth.Infrastructure;
 using Kombats.Auth.Infrastructure.Outbox;
-using Kombats.BuildingBlocks.Messaging;
+using Kombats.Shared.Messaging;
 using Kombats.Shared.Observability;
 using Serilog;
 

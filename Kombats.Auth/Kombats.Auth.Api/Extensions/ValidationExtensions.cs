@@ -1,8 +1,7 @@
 using System.Reflection;
 using FluentValidation;
-using Kombats.Auth.Api.Filters;
 using Kombats.Auth.Api.Validators;
-using Microsoft.Extensions.DependencyInjection;
+
 
 namespace Kombats.Auth.Api.Extensions;
 

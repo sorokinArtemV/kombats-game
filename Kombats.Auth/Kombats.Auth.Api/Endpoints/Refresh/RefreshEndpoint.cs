@@ -1,8 +1,8 @@
 ﻿using Kombats.Auth.Api.Extensions;
 using Kombats.Auth.Api.Filters;
 using Kombats.Auth.Application.UseCases.Refresh;
-using Shared;
-using static Kombats.Auth.Api.CustomResults.CustomResults;
+using Kombats.Shared.CustomResults;
+using Kombats.Shared.Types;
 
 namespace Kombats.Auth.Api.Endpoints.Refresh;
 
@@ -21,7 +21,7 @@ internal sealed class RefreshEndpoint : IEndpoint
 
                 return result.Match(
                     value => Results.Ok(new RefreshResponse(value.AccessToken, value.RefreshToken)),
-                    Problem);
+                    CustomResults.Problem);
             })
             .WithRequestValidation<RefreshRequest>()
             .WithTags(Tags.AuthRefresh)

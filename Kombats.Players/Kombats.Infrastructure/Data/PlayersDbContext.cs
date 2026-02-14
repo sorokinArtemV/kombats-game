@@ -1,4 +1,5 @@
 ﻿using Kombats.Infrastructure.Configuration;
+using Kombats.Infrastructure.Messaging.Inbox;
 using Kombats.Players.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 

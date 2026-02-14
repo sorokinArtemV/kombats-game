@@ -1,4 +1,5 @@
 ﻿
+
 using Kombats.Shared.Types;
 using Microsoft.Extensions.Logging;
 using Serilog.Context;
@@ -41,13 +42,13 @@ public class LoggingDecorator
         : ICommandHandler<TCommand>
         where TCommand : ICommand
     {
-        public async Task<Result> Handle(TCommand command, CancellationToken cancellationToken)
+        public async Task<Result> HandleAsync(TCommand command, CancellationToken cancellationToken)
         {
             var commandName = typeof(TCommand).Name;
 
             logger.LogInformation("Processing command {Command}", commandName);
 
-            var result = await innerHandler.Handle(command, cancellationToken);
+            var result = await innerHandler.HandleAsync(command, cancellationToken);
 
             if (result.IsSuccess)
             {

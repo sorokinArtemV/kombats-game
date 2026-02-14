@@ -1,8 +1,7 @@
-﻿
+﻿using Kombats.Shared.Types;
+using Microsoft.AspNetCore.Http;
 
-
-
-using Kombats.Shared.Types;
+namespace Kombats.Shared.CustomResults;
 
 public static class CustomResults
 {

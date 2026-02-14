@@ -1,13 +1,12 @@
 using Kombats.Auth.Domain.Entities;
-using Kombats.Auth.Infrastructure.Outbox;
 
 
 namespace Kombats.Auth.Application.Abstractions;
 
 public interface ITransactionalUnitOfWork
 {
-    public Task CreateIdentityWithOutboxAsync(
+    Task CreateIdentityWithOutboxAsync(
         Identity identity,
-        OutboxMessage outboxMessage,
+        OutboxEnvelope outbox,
         CancellationToken cancellationToken = default);
 }
