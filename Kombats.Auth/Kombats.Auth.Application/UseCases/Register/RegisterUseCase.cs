@@ -2,11 +2,11 @@ using Kombats.Auth.Application.Abstractions;
 using Kombats.Auth.Domain.Abstractions;
 using Kombats.Auth.Domain.Entities;
 using Kombats.Auth.Domain.ValueObjects;
-using Kombats.BuildingBlocks.Messaging.Outbox;
 using Microsoft.Extensions.Logging;
-using Shared;
-using Shared.Events;
 using System.Text.Json;
+using Kombats.Auth.Infrastructure.Outbox;
+using Kombats.Shared.Events;
+using Kombats.Shared.Types;
 
 namespace Kombats.Auth.Application.UseCases.Register;
 

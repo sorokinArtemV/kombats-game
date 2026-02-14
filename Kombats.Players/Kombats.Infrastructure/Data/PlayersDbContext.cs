@@ -14,6 +14,10 @@ public sealed class PlayersDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDefaultSchema(Schemas.Players);
+
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlayersDbContext).Assembly);
+        
         modelBuilder.ApplyConfiguration(new PlayerConfig());
         modelBuilder.ApplyConfiguration(new CharacterConfig());
         modelBuilder.ApplyConfiguration(new InboxMessageConfig());

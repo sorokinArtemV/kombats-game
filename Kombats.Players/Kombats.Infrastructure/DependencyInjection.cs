@@ -1,6 +1,8 @@
-﻿using BuildingBlocks.Messaging;
+﻿using Kombats.Infrastructure.Data;
 using Kombats.Infrastructure.Messaging.Consumers;
+using Kombats.Shared.Messaging;
 using MassTransit;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +16,13 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
 
+        services.AddDbContext<PlayersDbContext>(options =>
+        {
+            options
+                .UseNpgsql(configuration.GetConnectionString("PostgresConnection"))
+                .UseSnakeCaseNamingConvention();
+        });
+
         services.AddMessageBus(
             configuration,
             configureConsumers: bus =>
@@ -22,11 +31,12 @@ public static class DependencyInjection
             },
             configure: (context, cfg) =>
             {
-                cfg.ReceiveEndpoint("players-auth-identity-registered", e =>
+                cfg.ReceiveEndpoint("players-identity-registered", e =>
                 {
                     e.ConfigureConsumer<IdentityRegisteredConsumer>(context);
                 });
-            });
+            },
+            autoConfigureEndpoints: false);
 
         return services;
     }

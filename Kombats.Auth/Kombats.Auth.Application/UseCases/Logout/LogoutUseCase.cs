@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using Kombats.Auth.Application.Abstractions;
+using Kombats.Shared.Types;
 using Microsoft.Extensions.Logging;
-using Shared;
 
 namespace Kombats.Auth.Application.UseCases.Logout;
 

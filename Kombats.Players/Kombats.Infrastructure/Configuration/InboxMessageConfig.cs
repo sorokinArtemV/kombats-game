@@ -1,4 +1,5 @@
-﻿using Kombats.Players.Domain.Entities;
+﻿using Kombats.Infrastructure.Data;
+using Kombats.Players.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

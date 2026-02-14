@@ -11,9 +11,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\Kombats.Shared\Kombats.Shared\Kombats.Shared.csproj" />
         <ProjectReference Include="..\Kombats.Auth.Domain\Kombats.Auth.Domain.csproj"/>
-        <ProjectReference Include="..\Kombats.BuildingBlocks\Kombats.BuildingBlocks.csproj"/>
-        <ProjectReference Include="..\Shared\Shared.csproj"/>
     </ItemGroup>
 
 </Project>

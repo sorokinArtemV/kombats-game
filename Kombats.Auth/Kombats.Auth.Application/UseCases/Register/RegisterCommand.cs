@@ -1,4 +1,6 @@
-using Shared;
+
+
+using Kombats.Shared.Types;
 
 namespace Kombats.Auth.Application.UseCases.Register;
 

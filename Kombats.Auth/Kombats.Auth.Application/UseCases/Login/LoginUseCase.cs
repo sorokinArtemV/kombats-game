@@ -2,8 +2,9 @@ using Kombats.Auth.Application.Abstractions;
 using Kombats.Auth.Domain.Abstractions;
 using Kombats.Auth.Domain.Enums;
 using Kombats.Auth.Domain.ValueObjects;
+using Kombats.Shared.Types;
 using Microsoft.Extensions.Logging;
-using Shared;
+
 
 namespace Kombats.Auth.Application.UseCases.Login;
 

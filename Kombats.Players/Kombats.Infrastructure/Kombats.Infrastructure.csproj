@@ -7,6 +7,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
       <PackageReference Include="MassTransit.RabbitMQ" Version="8.5.8" />
       <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.3" />
       <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
@@ -17,9 +18,13 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\BuildingBlocks\BuildingBlocks.csproj" />
+      <ProjectReference Include="..\..\Kombats.Shared\Kombats.Shared\Kombats.Shared.csproj" />
       <ProjectReference Include="..\Kombats.Players.Application\Kombats.Players.Application.csproj" />
       <ProjectReference Include="..\Kombats.Players.Domain\Kombats.Players.Domain.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Persistence\EF\Migrations\" />
     </ItemGroup>
 
 </Project>

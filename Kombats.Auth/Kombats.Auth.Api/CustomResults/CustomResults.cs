@@ -1,6 +1,8 @@
-﻿using Shared;
+﻿
 
-namespace Kombats.Auth.Api.CustomResults;
+
+
+using Kombats.Shared.Types;
 
 public static class CustomResults
 {

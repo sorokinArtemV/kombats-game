@@ -1,9 +1,7 @@
 using System.Text;
 using Kombats.Auth.Infrastructure.Configuration;
-using Kombats.BuildingBlocks.Configuration;
+using Kombats.Shared.Configuration;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 

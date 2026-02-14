@@ -2,9 +2,9 @@ using System.Reflection;
 using Kombats.Auth.Api.Extensions;
 using Kombats.Auth.Application;
 using Kombats.Auth.Infrastructure;
+using Kombats.Auth.Infrastructure.Outbox;
 using Kombats.BuildingBlocks.Messaging;
-using Kombats.BuildingBlocks.Messaging.Outbox;
-using Kombats.BuildingBlocks.Observability;
+using Kombats.Shared.Observability;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);

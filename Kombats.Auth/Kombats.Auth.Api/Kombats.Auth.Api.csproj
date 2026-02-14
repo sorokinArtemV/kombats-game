@@ -18,7 +18,6 @@
         <ProjectReference Include="..\Kombats.Auth.Application\Kombats.Auth.Application.csproj"/>
         <ProjectReference Include="..\Kombats.Auth.Domain\Kombats.Auth.Domain.csproj"/>
         <ProjectReference Include="..\Kombats.Auth.Infrastructure\Kombats.Auth.Infrastructure.csproj"/>
-        <ProjectReference Include="..\Kombats.BuildingBlocks\Kombats.BuildingBlocks.csproj"/>
     </ItemGroup>
 
 </Project>

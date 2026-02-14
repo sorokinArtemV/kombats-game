@@ -1,7 +1,7 @@
 using Dapper;
 using Kombats.Auth.Application.Abstractions;
 using Kombats.Auth.Infrastructure.Data;
-using Kombats.BuildingBlocks.Messaging.Outbox;
+using Kombats.Auth.Infrastructure.Outbox;
 
 namespace Kombats.Auth.Infrastructure.Repositories;
 

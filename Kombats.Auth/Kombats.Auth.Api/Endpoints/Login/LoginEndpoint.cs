@@ -1,10 +1,12 @@
-﻿using Kombats.Auth.Api.Extensions;
+﻿using Kombats.Auth.Api.Endpoints;
+using Kombats.Auth.Api.Endpoints.Login;
 using Kombats.Auth.Api.Filters;
 using Kombats.Auth.Application.UseCases.Login;
-using Shared;
-using static Kombats.Auth.Api.CustomResults.CustomResults;
+using Kombats.Shared.Types;
 
-namespace Kombats.Auth.Api.Endpoints.Login;
+Kombats.Shared.Types;
+
+
 
 internal sealed class LoginEndpoint : IEndpoint
 {

@@ -1,4 +1,5 @@
-using Shared;
+using Kombats.Shared.Types;
+
 
 namespace Kombats.Auth.Api.Extensions;
 

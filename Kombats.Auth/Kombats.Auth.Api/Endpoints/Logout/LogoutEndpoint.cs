@@ -1,7 +1,5 @@
-﻿using Kombats.Auth.Api.Extensions;
-using Kombats.Auth.Api.Filters;
-using Kombats.Auth.Application.UseCases.Logout;
-using Shared;
+﻿
+
 using static Kombats.Auth.Api.CustomResults.CustomResults;
 
 namespace Kombats.Auth.Api.Endpoints.Logout;

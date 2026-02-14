@@ -1,5 +1,6 @@
 using Kombats.Auth.Domain.Entities;
-using Kombats.BuildingBlocks.Messaging.Outbox;
+using Kombats.Auth.Infrastructure.Outbox;
+
 
 namespace Kombats.Auth.Application.Abstractions;
 
