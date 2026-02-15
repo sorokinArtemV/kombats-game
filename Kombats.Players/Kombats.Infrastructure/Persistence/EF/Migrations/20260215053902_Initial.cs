@@ -47,15 +47,14 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "text", nullable: true),
-                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    revision = table.Column<long>(type: "bigint", nullable: false),
-                    row_version = table.Column<long>(type: "bigint", nullable: false),
                     strength = table.Column<int>(type: "integer", nullable: false),
                     agility = table.Column<int>(type: "integer", nullable: false),
                     intuition = table.Column<int>(type: "integer", nullable: false),
                     vitality = table.Column<int>(type: "integer", nullable: false),
-                    unspent_points = table.Column<int>(type: "integer", nullable: false)
+                    unspent_points = table.Column<int>(type: "integer", nullable: false),
+                    revision = table.Column<int>(type: "integer", nullable: false),
+                    created = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    updated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {

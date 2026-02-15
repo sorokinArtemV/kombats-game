@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Kombats.Infrastructure.Persistence.EF.Migrations
 {
     [DbContext(typeof(PlayersDbContext))]
-    [Migration("20260214083431_Initial")]
+    [Migration("20260215053902_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -53,26 +53,18 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("agility");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
+                    b.Property<DateTimeOffset>("Created")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
+                        .HasColumnName("created");
 
                     b.Property<int>("Intuition")
                         .HasColumnType("integer")
                         .HasColumnName("intuition");
 
-                    b.Property<string>("Name")
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<long>("Revision")
-                        .HasColumnType("bigint")
-                        .HasColumnName("revision");
-
-                    b.Property<long>("RowVersion")
+                    b.Property<int>("Revision")
                         .IsConcurrencyToken()
-                        .HasColumnType("bigint")
-                        .HasColumnName("row_version");
+                        .HasColumnType("integer")
+                        .HasColumnName("revision");
 
                     b.Property<int>("Strength")
                         .HasColumnType("integer")
@@ -81,6 +73,10 @@ namespace Kombats.Infrastructure.Persistence.EF.Migrations
                     b.Property<int>("UnspentPoints")
                         .HasColumnType("integer")
                         .HasColumnName("unspent_points");
+
+                    b.Property<DateTimeOffset>("Updated")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated");
 
                     b.Property<int>("Vitality")
                         .HasColumnType("integer")

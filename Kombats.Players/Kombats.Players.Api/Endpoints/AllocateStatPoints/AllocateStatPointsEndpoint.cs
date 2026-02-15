@@ -4,6 +4,7 @@ using Kombats.Players.Api.Filters;
 using Kombats.Players.Application.UseCases.AllocateStatPoints;
 using Kombats.Shared.CustomResults;
 using Kombats.Shared.Types;
+using Microsoft.AspNetCore.Http;
 
 namespace Kombats.Players.Api.Endpoints.AllocateStatPoints;
 
@@ -11,14 +12,22 @@ internal sealed class AllocateStatPointsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("api/v1/players/{playerId:guid}/stats/allocate", async (
-                Guid playerId,
+        app.MapPost("api/v1/players/me/stats/allocate", async (
                 AllocateStatPointsRequest request,
+                HttpContext httpContext,
                 ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult> handler,
                 CancellationToken cancellationToken) =>
             {
+                var playerId = httpContext.User.GetIdentityId();
+                if (playerId is null)
+                {
+                    return Results.Problem(
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        detail: "Unable to extract identity ID from token claims.");
+                }
+
                 var command = new AllocateStatPointsCommand(
-                    PlayerId: playerId,
+                    PlayerId: playerId.Value,
                     ExpectedRevision: request.ExpectedRevision,
                     Str: request.Str,
                     Agi: request.Agi,
@@ -41,11 +50,12 @@ internal sealed class AllocateStatPointsEndpoint : IEndpoint
             .WithTags(Tags.PlayersStats)
             .WithSummary("Allocate stat points")
             .WithDescription("Allocates unspent stat points to character attributes.")
+            .RequireAuthorization()
             .Produces<AllocateStatPointsResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status500InternalServerError);
     }
 }
-
