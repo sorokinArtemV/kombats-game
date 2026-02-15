@@ -10,6 +10,10 @@ internal sealed class AllocateStatPointsRequestValidator : AbstractValidator<All
 {
     public AllocateStatPointsRequestValidator()
     {
+        RuleFor(x => x.ExpectedRevision)
+            .GreaterThanOrEqualTo(1)
+            .WithMessage("ExpectedRevision must be greater than or equal to 1.");
+
         RuleFor(x => x.Str)
             .GreaterThanOrEqualTo(0)
             .WithMessage("Strength points must be greater than or equal to zero.");

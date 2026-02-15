@@ -8,12 +8,12 @@ namespace Kombats.Players.Api.Endpoints.AllocateStatPoints;
 /// <param name="Intuition">Updated intuition stat.</param>
 /// <param name="Vitality">Updated vitality stat.</param>
 /// <param name="UnspentPoints">Remaining unspent stat points.</param>
-/// <param name="Revision">Updated character revision number.</param>
+/// <param name="Revision">Updated character revision number (use as ExpectedRevision in subsequent updates).</param>
 public record AllocateStatPointsResponse(
     int Strength,
     int Agility,
     int Intuition,
     int Vitality,
     int UnspentPoints,
-    long Revision);
+    int Revision);
 

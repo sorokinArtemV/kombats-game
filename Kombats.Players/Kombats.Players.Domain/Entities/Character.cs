@@ -1,4 +1,7 @@
-﻿namespace Kombats.Players.Domain.Entities;
+﻿using Kombats.Players.Domain;
+using Kombats.Players.Domain.Exceptions;
+
+namespace Kombats.Players.Domain.Entities;
 
 public sealed class Character
 {
@@ -40,11 +43,11 @@ public sealed class Character
     public void AllocatePoints(int str, int agi, int intuition, int vit)
     {
         if (str < 0 || agi < 0 || intuition < 0 || vit < 0)
-            throw new InvalidOperationException("NegativePoints");
+            throw new DomainException("NegativePoints", "Stat point values cannot be negative.");
 
         var total = str + agi + intuition + vit;
         if (total > UnspentPoints)
-            throw new InvalidOperationException("NotEnoughPoints");
+            throw new DomainException("NotEnoughPoints", "Insufficient unspent points to allocate.");
 
         Strength += str;
         Agility += agi;

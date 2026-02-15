@@ -12,7 +12,10 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
 
         b.HasKey(x => x.Id);
         
-        b.Property(x => x.Revision).IsRequired();
+        // Configure Revision as optimistic concurrency token
+        b.Property(x => x.Revision)
+            .IsRequired()
+            .IsConcurrencyToken();
 
         b.Property(x => x.Strength).IsRequired();
         b.Property(x => x.Agility).IsRequired();

@@ -3,7 +3,7 @@ using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace Kombats.Infrastructure.Repository;
+namespace Kombats.Infrastructure.Persistence.Repository;
 
 public sealed class PlayerRepository : IPlayerRepository
 {

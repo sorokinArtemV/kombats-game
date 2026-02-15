@@ -3,7 +3,7 @@ using Kombats.Infrastructure.Messaging.Inbox;
 using Kombats.Players.Application.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
-namespace Kombats.Infrastructure.Repository;
+namespace Kombats.Infrastructure.Persistence.Repository;
 
 public sealed class InboxRepository : IInboxRepository
 {

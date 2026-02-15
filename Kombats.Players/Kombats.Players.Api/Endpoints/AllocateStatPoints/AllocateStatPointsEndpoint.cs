@@ -19,6 +19,7 @@ internal sealed class AllocateStatPointsEndpoint : IEndpoint
             {
                 var command = new AllocateStatPointsCommand(
                     PlayerId: playerId,
+                    ExpectedRevision: request.ExpectedRevision,
                     Str: request.Str,
                     Agi: request.Agi,
                     Intuition: request.Intuition,

@@ -6,5 +6,5 @@ public sealed record AllocateStatPointsResult(
     int Intuition,
     int Vitality,
     int UnspentPoints,
-    long Revision);
+    int Revision);
 
