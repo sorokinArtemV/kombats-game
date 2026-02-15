@@ -11,11 +11,8 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
         b.ToTable("characters");
 
         b.HasKey(x => x.Id);
-
-        b.Property(x => x.CreatedAt).IsRequired();
+        
         b.Property(x => x.Revision).IsRequired();
-
-        b.Property(x => x.RowVersion).IsConcurrencyToken();
 
         b.Property(x => x.Strength).IsRequired();
         b.Property(x => x.Agility).IsRequired();

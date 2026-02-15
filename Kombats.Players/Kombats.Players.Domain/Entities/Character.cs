@@ -2,59 +2,58 @@
 
 public sealed class Character
 {
-    public Guid Id { get; private set; }
-    public string? Name { get; private set; }
-    public DateTimeOffset CreatedAt { get; private set; }
+    private Character()
+    {
+    }
 
-    public long Revision { get; private set; }
-    public long RowVersion { get; private set; }
+    public Guid Id { get; private set; }
 
     public int Strength { get; private set; }
     public int Agility { get; private set; }
     public int Intuition { get; private set; }
     public int Vitality { get; private set; }
+
     public int UnspentPoints { get; private set; }
 
-    private Character()
-    {
-    } // EF
+    // Used for optimistic concurrency (configured as EF concurrency token).
+    public int Revision { get; private set; }
 
-    internal static Character CreateDraft(Guid id, DateTimeOffset createdAt)
-        => new Character
+    public DateTimeOffset Created { get; private set; }
+    public DateTimeOffset Updated { get; private set; }
+
+    public static Character CreateDraft(Guid id, DateTimeOffset occurredAt)
+    {
+        return new Character
         {
             Id = id,
-            CreatedAt = createdAt,
-            Revision = 0,
-            Strength = 3,
-            Agility = 3,
-            Intuition = 3,
-            Vitality = 3,
-            UnspentPoints = 3
+            Strength = 1,
+            Agility = 1,
+            Intuition = 1,
+            Vitality = 1,
+            UnspentPoints = 5,
+            Revision = 1,
+            Created = occurredAt,
+            Updated = occurredAt
         };
-
-    public void SetNameOnce(string name)
-    {
-        if (Name is not null)
-            throw new InvalidOperationException("NameAlreadySet");
-
-        Name = name.Trim();
-        Revision++;
     }
 
-    public void AllocatePoints(int str, int agi, int intui, int vit)
+    public void AllocatePoints(int str, int agi, int intuition, int vit)
     {
-        if (str < 0 || agi < 0 || intui < 0 || vit < 0)
+        if (str < 0 || agi < 0 || intuition < 0 || vit < 0)
             throw new InvalidOperationException("NegativePoints");
 
-        var total = str + agi + intui + vit;
+        var total = str + agi + intuition + vit;
         if (total > UnspentPoints)
             throw new InvalidOperationException("NotEnoughPoints");
 
         Strength += str;
         Agility += agi;
-        Intuition += intui;
+        Intuition += intuition;
         Vitality += vit;
+
         UnspentPoints -= total;
+
         Revision++;
+        Updated = DateTimeOffset.UtcNow;
     }
 }
