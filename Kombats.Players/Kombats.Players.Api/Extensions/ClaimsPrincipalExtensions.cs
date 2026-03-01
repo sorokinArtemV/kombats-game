@@ -5,28 +5,21 @@ namespace Kombats.Players.Api.Extensions;
 public static class ClaimsPrincipalExtensions
 {
     /// <summary>
-    /// Extracts the identity ID (player ID) from the JWT token claims.
-    /// The identity ID is stored in either the "identity_id" claim or the "sub" claim.
+    /// Extracts the player ID from the Keycloak "sub" claim.
+    /// Throws if the claim is missing or not a valid GUID.
     /// </summary>
-    /// <param name="principal">The claims principal from HttpContext.User</param>
-    /// <returns>The identity ID as a Guid, or null if not found or invalid</returns>
-    public static Guid? GetIdentityId(this ClaimsPrincipal principal)
+    public static Guid GetPlayerId(this ClaimsPrincipal principal)
     {
-        var identityIdClaim = principal.FindFirst("identity_id")?.Value;
-        if (!string.IsNullOrEmpty(identityIdClaim) && Guid.TryParse(identityIdClaim, out var identityId))
+        var sub = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(sub))
+            throw new InvalidOperationException("JWT claim 'sub' is missing.");
+
+        if (!Guid.TryParse(sub, out var playerId))
         {
-            return identityId;
-        }
-        
-        var subClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal.FindFirst("sub")?.Value;
-        if (!string.IsNullOrEmpty(subClaim) && Guid.TryParse(subClaim, out var subId))
-        {
-            return subId;
+            throw new InvalidOperationException($"JWT claim 'sub' value '{sub}' is not a valid GUID.");
         }
 
-        return null;
+        return playerId;
     }
 }
-
-
-

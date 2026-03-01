@@ -1,0 +1,17 @@
+﻿using Kombats.Players.Infrastructure.Data;
+using Kombats.Players.Domain.Entities;
+using Kombats.Players.Infrastructure.Messaging.Inbox;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Kombats.Players.Infrastructure.Configuration;
+
+public sealed class InboxMessageConfig : IEntityTypeConfiguration<InboxMessage>
+{
+    public void Configure(EntityTypeBuilder<InboxMessage> b)
+    {
+        b.ToTable("inbox_messages");
+        b.HasKey(x => x.MessageId);
+        b.Property(x => x.ProcessedAt).IsRequired();
+    }
+}

@@ -1,0 +1,29 @@
+using Kombats.Players.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace Kombats.Players.Infrastructure.Configuration;
+
+public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
+{
+    public void Configure(EntityTypeBuilder<Character> b)
+    {
+        b.ToTable("characters");
+
+        b.HasKey(x => x.PlayerId);
+        b.Property(x => x.PlayerId).HasColumnName("id");
+
+        // Configure Revision as optimistic concurrency token
+        b.Property(x => x.Revision)
+            .IsRequired()
+            .IsConcurrencyToken();
+
+        b.Property(x => x.Strength).IsRequired();
+        b.Property(x => x.Agility).IsRequired();
+        b.Property(x => x.Intuition).IsRequired();
+        b.Property(x => x.Vitality).IsRequired();
+        b.Property(x => x.UnspentPoints).IsRequired();
+        b.Property(x => x.Name).HasMaxLength(64);
+    }
+}
+

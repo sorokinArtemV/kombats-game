@@ -1,6 +1,5 @@
 using System.Reflection;
-using Kombats.Infrastructure;
-using Kombats.Infrastructure.Configuration;
+using Kombats.Players.Infrastructure;
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Application;
 using Kombats.Shared.Observability;
@@ -15,8 +14,6 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 
 builder.Services.AddValidation(Assembly.GetExecutingAssembly());
 builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
-
-builder.Services.AddAuthorization();
 
 builder.Services.AddSwaggerDocumentation();
 

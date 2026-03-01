@@ -10,12 +10,12 @@ public sealed class AllocateStatPointsHandler
     : ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult>
 {
     private readonly IUnitOfWork _uow;
-    private readonly IPlayerRepository _players;
+    private readonly ICharacterRepository _characters;
 
-    public AllocateStatPointsHandler(IUnitOfWork uow, IPlayerRepository players)
+    public AllocateStatPointsHandler(IUnitOfWork uow, ICharacterRepository characters)
     {
         _uow = uow;
-        _players = players;
+        _characters = characters;
     }
 
     public async Task<Result<AllocateStatPointsResult>> HandleAsync(AllocateStatPointsCommand cmd, CancellationToken ct)
@@ -26,33 +26,25 @@ public sealed class AllocateStatPointsHandler
                 Error.Validation("AllocateStatPoints.ExpectedRevisionInvalid", "ExpectedRevision must be a positive integer."));
         }
 
-        var player = await _players.GetByIdAsync(cmd.PlayerId, ct);
-        if (player is null)
+        var character = await _characters.GetByIdAsync(cmd.PlayerId, ct);
+        if (character is null)
         {
             return Result.Failure<AllocateStatPointsResult>(
-                Error.NotFound("AllocateStatPoints.PlayerNotFound", $"Player with id {cmd.PlayerId} was not found."));
-        }
-
-        var playerCharacter = player.Character;
-        
-        if (playerCharacter is null)
-        {
-            return Result.Failure<AllocateStatPointsResult>(
-                Error.NotFound("AllocateStatPoints.CharacterNotFound", "Character not found for player."));
+                Error.NotFound("AllocateStatPoints.CharacterNotFound", $"Character for player {cmd.PlayerId} was not found."));
         }
 
         // Fast fail: client is stale (nice UX). Still keep DB concurrency catch below.
-        if (playerCharacter.Revision != cmd.ExpectedRevision)
+        if (character.Revision != cmd.ExpectedRevision)
         {
             return Result.Failure<AllocateStatPointsResult>(
                 Error.Conflict(
                     "AllocateStatPoints.RevisionMismatch",
-                    $"Stale character state. Expected {cmd.ExpectedRevision}, but current is {playerCharacter.Revision}. Reload and retry."));
+                    $"Stale character state. Expected {cmd.ExpectedRevision}, but current is {character.Revision}. Reload and retry."));
         }
 
         try
         {
-            playerCharacter.AllocatePoints(cmd.Str, cmd.Agi, cmd.Intuition, cmd.Vit);
+            character.AllocatePoints(cmd.Str, cmd.Agi, cmd.Intuition, cmd.Vit);
         }
         catch (DomainException ex)
         {
@@ -82,11 +74,11 @@ public sealed class AllocateStatPointsHandler
         }
 
         return Result.Success(new AllocateStatPointsResult(
-            Strength: playerCharacter.Strength,
-            Agility: playerCharacter.Agility,
-            Intuition: playerCharacter.Intuition,
-            Vitality: playerCharacter.Vitality,
-            UnspentPoints: playerCharacter.UnspentPoints,
-            Revision: playerCharacter.Revision));
+            Strength: character.Strength,
+            Agility: character.Agility,
+            Intuition: character.Intuition,
+            Vitality: character.Vitality,
+            UnspentPoints: character.UnspentPoints,
+            Revision: character.Revision));
     }
 }

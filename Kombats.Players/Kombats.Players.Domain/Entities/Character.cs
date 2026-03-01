@@ -1,4 +1,4 @@
-﻿using Kombats.Players.Domain;
+using Kombats.Players.Domain;
 using Kombats.Players.Domain.Exceptions;
 
 namespace Kombats.Players.Domain.Entities;
@@ -9,8 +9,10 @@ public sealed class Character
     {
     }
 
-    public Guid Id { get; private set; }
+    public Guid PlayerId { get; private set; }
 
+    public string? Name { get; set; }
+    
     public int Strength { get; private set; }
     public int Agility { get; private set; }
     public int Intuition { get; private set; }
@@ -24,11 +26,11 @@ public sealed class Character
     public DateTimeOffset Created { get; private set; }
     public DateTimeOffset Updated { get; private set; }
 
-    public static Character CreateDraft(Guid id, DateTimeOffset occurredAt)
+    public static Character CreateDraft(Guid playerId, DateTimeOffset occurredAt)
     {
         return new Character
         {
-            Id = id,
+            PlayerId = playerId,
             Strength = 1,
             Agility = 1,
             Intuition = 1,
@@ -38,6 +40,18 @@ public sealed class Character
             Created = occurredAt,
             Updated = occurredAt
         };
+    }
+    
+    public void SetNameOnce(string displayName)
+    {
+        if (Name is not null)
+            throw new InvalidOperationException("Name already set");
+
+        var name = displayName.Trim();
+        if (name.Length < 3 || name.Length > 16)
+            throw new InvalidOperationException("Invalid name");
+
+        Name = name;
     }
 
     public void AllocatePoints(int str, int agi, int intuition, int vit)

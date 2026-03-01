@@ -18,16 +18,10 @@ internal sealed class AllocateStatPointsEndpoint : IEndpoint
                 ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult> handler,
                 CancellationToken cancellationToken) =>
             {
-                var playerId = httpContext.User.GetIdentityId();
-                if (playerId is null)
-                {
-                    return Results.Problem(
-                        statusCode: StatusCodes.Status401Unauthorized,
-                        detail: "Unable to extract identity ID from token claims.");
-                }
+                var playerId = httpContext.User.GetPlayerId();
 
                 var command = new AllocateStatPointsCommand(
-                    PlayerId: playerId.Value,
+                    PlayerId: playerId,
                     ExpectedRevision: request.ExpectedRevision,
                     Str: request.Str,
                     Agi: request.Agi,

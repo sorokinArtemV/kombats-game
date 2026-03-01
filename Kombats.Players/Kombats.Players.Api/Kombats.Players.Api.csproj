@@ -24,7 +24,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\Kombats.Infrastructure\Kombats.Infrastructure.csproj" />
+        <ProjectReference Include="..\Kombats.Players.Infrastructure\Kombats.Players.Infrastructure.csproj" />
     </ItemGroup>
 
 </Project>
