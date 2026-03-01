@@ -1,19 +1,23 @@
 using Kombats.Players.Api.Endpoints;
+using Kombats.Players.Api.Endpoints.AllocateStatPoints;
 using Kombats.Players.Api.Extensions;
-using Kombats.Players.Api.Identity;
 using Kombats.Players.Api.Filters;
+using Kombats.Players.Api.Identity;
 using Kombats.Players.Application.UseCases.AllocateStatPoints;
 using Kombats.Shared.CustomResults;
 using Kombats.Shared.Types;
 using Microsoft.AspNetCore.Http;
 
-namespace Kombats.Players.Api.Endpoints.AllocateStatPoints;
+namespace Kombats.Players.Api.Endpoints.CharacterStats;
 
-internal sealed class AllocateStatPointsEndpoint : IEndpoint
+/// <summary>
+/// Alias for POST api/v1/players/me/stats/allocate. Same handler and request/response; consistent /api/character/* route.
+/// </summary>
+internal sealed class CharacterStatsEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("api/v1/players/me/stats/allocate", async (
+        app.MapPost("api/character/stats", async (
                 AllocateStatPointsRequest request,
                 ICurrentIdentityProvider identityProvider,
                 ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult> handler,
@@ -29,9 +33,8 @@ internal sealed class AllocateStatPointsEndpoint : IEndpoint
                         type: "https://tools.ietf.org/html/rfc7235#section-3.1");
                 }
 
-                var identity = identityResult.Value;
                 var command = new AllocateStatPointsCommand(
-                    IdentityId: identity.Subject,
+                    IdentityId: identityResult.Value.Subject,
                     ExpectedRevision: request.ExpectedRevision,
                     Str: request.Str,
                     Agi: request.Agi,
@@ -52,8 +55,8 @@ internal sealed class AllocateStatPointsEndpoint : IEndpoint
             })
             .WithRequestValidation<AllocateStatPointsRequest>()
             .WithTags(Tags.PlayersStats)
-            .WithSummary("Allocate stat points")
-            .WithDescription("Allocates unspent stat points for the current identity's character. Character must be named first (Draft → Named). Uses IdentityId (JWT sub) and ExpectedRevision for optimistic concurrency.")
+            .WithSummary("Allocate stat points (alias)")
+            .WithDescription("Same as POST api/v1/players/me/stats/allocate. Allocates unspent stat points for the current identity's character.")
             .RequireAuthorization()
             .Produces<AllocateStatPointsResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status400BadRequest)

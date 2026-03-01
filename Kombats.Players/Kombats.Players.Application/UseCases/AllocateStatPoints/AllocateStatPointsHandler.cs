@@ -26,11 +26,11 @@ public sealed class AllocateStatPointsHandler
                 Error.Validation("AllocateStatPoints.ExpectedRevisionInvalid", "ExpectedRevision must be a positive integer."));
         }
 
-        var character = await _characters.GetByIdAsync(cmd.PlayerId, ct);
+        var character = await _characters.GetByIdentityIdAsync(cmd.IdentityId, ct);
         if (character is null)
         {
             return Result.Failure<AllocateStatPointsResult>(
-                Error.NotFound("AllocateStatPoints.CharacterNotFound", $"Character for player {cmd.PlayerId} was not found."));
+                Error.NotFound("AllocateStatPoints.CharacterNotFound", $"Character for identity {cmd.IdentityId} was not found."));
         }
 
         // Fast fail: client is stale (nice UX). Still keep DB concurrency catch below.
@@ -50,6 +50,9 @@ public sealed class AllocateStatPointsHandler
         {
             return ex.Code switch
             {
+                "InvalidState" => Result.Failure<AllocateStatPointsResult>(
+                    Error.Conflict("AllocateStatPoints.InvalidState", ex.Message)),
+
                 "NegativePoints" => Result.Failure<AllocateStatPointsResult>(
                     Error.Validation("AllocateStatPoints.NegativePoints", ex.Message)),
 

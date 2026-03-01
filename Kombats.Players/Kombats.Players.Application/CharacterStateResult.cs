@@ -1,0 +1,31 @@
+using Kombats.Players.Domain.Entities;
+
+namespace Kombats.Players.Application;
+
+/// <summary>
+/// Snapshot of character state returned by provisioning and naming use cases.
+/// </summary>
+public sealed record CharacterStateResult(
+    Guid CharacterId,
+    Guid IdentityId,
+    OnboardingState State,
+    string? Name,
+    int Strength,
+    int Agility,
+    int Intuition,
+    int Vitality,
+    int UnspentPoints,
+    int Revision)
+{
+    public static CharacterStateResult FromCharacter(Character c) => new(
+        CharacterId: c.Id,
+        IdentityId: c.IdentityId,
+        State: c.OnboardingState,
+        Name: c.Name,
+        Strength: c.Strength,
+        Agility: c.Agility,
+        Intuition: c.Intuition,
+        Vitality: c.Vitality,
+        UnspentPoints: c.UnspentPoints,
+        Revision: c.Revision);
+}

@@ -3,7 +3,7 @@ using Kombats.Shared.Types;
 namespace Kombats.Players.Application.UseCases.AllocateStatPoints;
 
 public sealed record AllocateStatPointsCommand(
-    Guid PlayerId,
+    Guid IdentityId,
     int ExpectedRevision,
     int Str,
     int Agi,

@@ -1,4 +1,9 @@
 using Kombats.Players.Api.Extensions;
+using Kombats.Players.Api.Identity;
+using Kombats.Players.Application.UseCases.EnsureCharacterExists;
+using Kombats.Players.Application.UseCases.GetMe;
+using Kombats.Shared.CustomResults;
+using Kombats.Shared.Types;
 
 namespace Kombats.Players.Api.Endpoints.Me;
 
@@ -6,24 +11,79 @@ internal sealed class MeEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapGet("api/me", (HttpContext httpContext) =>
+        // GET /api/me — character-centric; 404 if not provisioned
+        app.MapGet("api/me", async (
+                ICurrentIdentityProvider identityProvider,
+                ICommandHandler<GetMeCommand, Kombats.Players.Application.CharacterStateResult> getMeHandler,
+                CancellationToken ct) =>
             {
-                var user = httpContext.User;
-                var playerId = user.GetPlayerId();
+                var identityResult = identityProvider.GetRequired();
+                if (identityResult.IsFailure)
+                {
+                    return Results.Problem(
+                        title: identityResult.Error.Code,
+                        detail: identityResult.Error.Description,
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        type: "https://tools.ietf.org/html/rfc7235#section-3.1");
+                }
 
-                return Results.Ok(new MeResponse(
-                    PlayerId: playerId,
-                    Subject: user.FindFirst("sub")?.Value ?? string.Empty,
-                    Username: user.FindFirst("preferred_username")?.Value,
-                    Claims: user.Claims
-                        .Select(c => new ClaimDto(c.Type, c.Value))
-                        .ToArray()));
+                var getMeResult = await getMeHandler.HandleAsync(
+                    new GetMeCommand(identityResult.Value.Subject), ct);
+
+                return getMeResult.Match(
+                    value => Results.Ok(MeResponse.FromCharacterState(value)),
+                    failure => CustomResults.Problem(getMeResult));
             })
             .RequireAuthorization()
             .WithTags(Tags.Account)
-            .WithSummary("Current player info")
-            .WithDescription("Returns the authenticated player's identity extracted from the Keycloak access token.")
+            .WithSummary("Current character")
+            .WithDescription("Returns the current identity's character and onboarding state. Returns 404 if not provisioned; call POST /api/me/ensure first.")
             .Produces<MeResponse>()
-            .ProducesProblem(StatusCodes.Status401Unauthorized);
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status404NotFound);
+
+        // POST /api/me/ensure — idempotent provisioning
+        app.MapPost("api/me/ensure", async (
+                ICurrentIdentityProvider identityProvider,
+                ICommandHandler<EnsureCharacterExistsCommand, Kombats.Players.Application.CharacterStateResult> ensureHandler,
+                CancellationToken ct) =>
+            {
+                var identityResult = identityProvider.GetRequired();
+                if (identityResult.IsFailure)
+                {
+                    return Results.Problem(
+                        title: identityResult.Error.Code,
+                        detail: identityResult.Error.Description,
+                        statusCode: StatusCodes.Status401Unauthorized,
+                        type: "https://tools.ietf.org/html/rfc7235#section-3.1");
+                }
+
+                var ensureResult = await ensureHandler.HandleAsync(
+                    new EnsureCharacterExistsCommand(identityResult.Value.Subject), ct);
+
+                return ensureResult.Match(
+                    value => Results.Ok(MeResponse.FromCharacterState(value)),
+                    failure => CustomResults.Problem(ensureResult));
+            })
+            .RequireAuthorization()
+            .WithTags(Tags.Account)
+            .WithSummary("Ensure character exists")
+            .WithDescription("Idempotently creates a draft character for the current identity if missing. Always returns 200 with character snapshot when authenticated.")
+            .Produces<MeResponse>(StatusCodes.Status200OK)
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status409Conflict);
+
+        // GET /api/me/claims — development: dump JWT claims
+        app.MapGet("api/me/claims", (HttpContext httpContext) =>
+            {
+                var user = httpContext.User;
+                var claims = user.Claims.Select(c => new ClaimDto(c.Type, c.Value)).ToArray();
+                return Results.Ok(new { subject = user.FindFirst("sub")?.Value, claims });
+            })
+            .RequireAuthorization()
+            .WithTags(Tags.Account)
+            .WithSummary("Current claims (dev)")
+            .WithDescription("Returns the current JWT claims. For development or debugging.")
+            .Produces<object>();
     }
 }

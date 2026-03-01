@@ -10,10 +10,21 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
     {
         b.ToTable("characters");
 
-        b.HasKey(x => x.PlayerId);
-        b.Property(x => x.PlayerId).HasColumnName("id");
+        b.HasKey(x => x.Id);
+        b.Property(x => x.Id).HasColumnName("id");
 
-        // Configure Revision as optimistic concurrency token
+        b.Property(x => x.IdentityId)
+            .IsRequired()
+            .HasColumnName("identity_id");
+        b.HasIndex(x => x.IdentityId).IsUnique();
+
+        b.Property(x => x.Name).HasMaxLength(16);
+
+        b.Property(x => x.OnboardingState)
+            .IsRequired()
+            .HasColumnName("onboarding_state")
+            .HasConversion<int>();
+
         b.Property(x => x.Revision)
             .IsRequired()
             .IsConcurrencyToken();
@@ -23,7 +34,7 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
         b.Property(x => x.Intuition).IsRequired();
         b.Property(x => x.Vitality).IsRequired();
         b.Property(x => x.UnspentPoints).IsRequired();
-        b.Property(x => x.Name).HasMaxLength(64);
+        b.Property(x => x.Created).IsRequired();
+        b.Property(x => x.Updated).IsRequired();
     }
 }
-

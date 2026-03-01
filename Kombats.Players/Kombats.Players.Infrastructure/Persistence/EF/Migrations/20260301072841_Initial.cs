@@ -20,13 +20,15 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
+                    identity_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    name = table.Column<string>(type: "character varying(16)", maxLength: 16, nullable: true),
                     strength = table.Column<int>(type: "integer", nullable: false),
                     agility = table.Column<int>(type: "integer", nullable: false),
                     intuition = table.Column<int>(type: "integer", nullable: false),
                     vitality = table.Column<int>(type: "integer", nullable: false),
                     unspent_points = table.Column<int>(type: "integer", nullable: false),
                     revision = table.Column<int>(type: "integer", nullable: false),
+                    onboarding_state = table.Column<int>(type: "integer", nullable: false),
                     created = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     updated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -47,6 +49,13 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                 {
                     table.PrimaryKey("pk_inbox_messages", x => x.message_id);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_characters_identity_id",
+                schema: "players",
+                table: "characters",
+                column: "identity_id",
+                unique: true);
         }
 
         /// <inheritdoc />

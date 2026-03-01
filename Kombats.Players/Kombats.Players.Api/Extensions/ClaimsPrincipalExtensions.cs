@@ -2,24 +2,22 @@ using System.Security.Claims;
 
 namespace Kombats.Players.Api.Extensions;
 
+/// <summary>
+/// Claim-parsing helpers only. No domain meaning.
+/// </summary>
 public static class ClaimsPrincipalExtensions
 {
     /// <summary>
-    /// Extracts the player ID from the Keycloak "sub" claim.
-    /// Throws if the claim is missing or not a valid GUID.
+    /// Parses the "sub" claim (preferred) or NameIdentifier as Guid. Returns null if missing or invalid.
     /// </summary>
-    public static Guid GetPlayerId(this ClaimsPrincipal principal)
+    public static Guid? GetSubjectId(this ClaimsPrincipal principal)
     {
-        var sub = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var sub = principal.FindFirst("sub")?.Value
+                  ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (string.IsNullOrEmpty(sub))
-            throw new InvalidOperationException("JWT claim 'sub' is missing.");
+            return null;
 
-        if (!Guid.TryParse(sub, out var playerId))
-        {
-            throw new InvalidOperationException($"JWT claim 'sub' value '{sub}' is not a valid GUID.");
-        }
-
-        return playerId;
+        return Guid.TryParse(sub, out var id) ? id : null;
     }
 }

@@ -11,6 +11,7 @@ builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configu
 builder.Services.AddOpenTelemetryObservability(builder.Configuration);
 
 builder.Services.AddJwtAuthentication(builder.Configuration);
+builder.Services.AddCurrentIdentity();
 
 builder.Services.AddValidation(Assembly.GetExecutingAssembly());
 builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());

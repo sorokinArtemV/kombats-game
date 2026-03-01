@@ -25,7 +25,7 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
 
             modelBuilder.Entity("Kombats.Players.Domain.Entities.Character", b =>
                 {
-                    b.Property<Guid>("PlayerId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
@@ -38,14 +38,22 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created");
 
+                    b.Property<Guid>("IdentityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("identity_id");
+
                     b.Property<int>("Intuition")
                         .HasColumnType("integer")
                         .HasColumnName("intuition");
 
                     b.Property<string>("Name")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
                         .HasColumnName("name");
+
+                    b.Property<int>("OnboardingState")
+                        .HasColumnType("integer")
+                        .HasColumnName("onboarding_state");
 
                     b.Property<int>("Revision")
                         .IsConcurrencyToken()
@@ -68,8 +76,12 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("vitality");
 
-                    b.HasKey("PlayerId")
+                    b.HasKey("Id")
                         .HasName("pk_characters");
+
+                    b.HasIndex("IdentityId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_characters_identity_id");
 
                     b.ToTable("characters", "players");
                 });
