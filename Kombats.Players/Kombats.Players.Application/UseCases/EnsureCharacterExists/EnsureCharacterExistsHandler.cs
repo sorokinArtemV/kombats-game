@@ -1,5 +1,6 @@
 using Kombats.Players.Application;
 using Kombats.Players.Application.Abstractions;
+using Kombats.Players.Application.Helpers;
 using Kombats.Players.Domain.Entities;
 using Kombats.Shared.Types;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,9 @@ public sealed class EnsureCharacterExistsHandler
     {
         var existing = await _characters.GetByIdentityIdAsync(cmd.IdentityId, ct);
         if (existing is not null)
+        {
             return Result.Success(CharacterStateResult.FromCharacter(existing));
+        }
 
         var character = Character.CreateDraft(cmd.IdentityId, DateTimeOffset.UtcNow);
         await _characters.AddAsync(character, ct);
@@ -32,17 +35,25 @@ public sealed class EnsureCharacterExistsHandler
             await _uow.SaveChangesAsync(ct);
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (DbConflictHelper.IsUniqueViolation(ex, DbConflictHelper.IdentityIdUniqueIndex))
         {
-            // Idempotent: another request created the character (unique on identity_id)
             var race = await _characters.GetByIdentityIdAsync(cmd.IdentityId, ct);
             if (race is not null)
+            {
                 return Result.Success(CharacterStateResult.FromCharacter(race));
+            }
 
             return Result.Failure<CharacterStateResult>(
                 Error.Conflict(
                     "EnsureCharacterExists.ConcurrentCreate",
                     "Character was created by another request. Retry the operation."));
+        }
+        catch (DbUpdateException ex)
+        {
+            return Result.Failure<CharacterStateResult>(
+                Error.Problem(
+                    "EnsureCharacterExists.SaveFailed",
+                    $"Unexpected database error: {ex.Message}"));
         }
     }
 }

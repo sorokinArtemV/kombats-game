@@ -1,5 +1,6 @@
 using Kombats.Players.Application;
 using Kombats.Players.Application.Abstractions;
+using Kombats.Players.Application.Helpers;
 using Kombats.Players.Domain.Exceptions;
 using Kombats.Shared.Types;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,7 @@ public sealed class SetCharacterNameHandler
                 Error.NotFound("SetCharacterName.NotProvisioned", "Character not provisioned. Call POST /api/me/ensure first."));
         }
 
+        // Pre-check for fast UX feedback; the DB unique index is the real safety net.
         var normalizedName = cmd.Name.Trim().ToLowerInvariant();
         var nameTaken = await _characters.IsNameTakenAsync(normalizedName, character.Id, ct);
         if (nameTaken)
@@ -68,6 +70,16 @@ public sealed class SetCharacterNameHandler
                 Error.Conflict(
                     "SetCharacterName.ConcurrentUpdate",
                     "Character was modified by another request. Reload and retry."));
+        }
+        catch (DbUpdateException ex) when (DbConflictHelper.IsUniqueViolation(ex, DbConflictHelper.NameNormalizedUniqueIndex))
+        {
+            return Result.Failure<CharacterStateResult>(
+                Error.Conflict("SetCharacterName.NameTaken", "This display name is already taken."));
+        }
+        catch (DbUpdateException ex)
+        {
+            return Result.Failure<CharacterStateResult>(
+                Error.Problem("SetCharacterName.SaveFailed", $"Unexpected database error: {ex.Message}"));
         }
     }
 }

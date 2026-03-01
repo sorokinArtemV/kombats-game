@@ -35,7 +35,7 @@ public sealed class Character
             Intuition = 3,
             Vitality = 3,
             UnspentPoints = 3,
-            Revision = 3,
+            Revision = 1,
             OnboardingState = OnboardingState.Draft,
             Created = occurredAt,
             Updated = occurredAt
@@ -45,14 +45,20 @@ public sealed class Character
     public void SetNameOnce(string displayName)
     {
         if (OnboardingState != OnboardingState.Draft)
+        {
             throw new DomainException("InvalidState", "Name can only be set when character is in Draft state.");
+        }
 
         if (Name is not null)
+        {
             throw new DomainException("NameAlreadySet", "Name has already been set.");
+        }
 
         var name = displayName.Trim();
         if (name.Length < 3 || name.Length > 16)
+        {
             throw new DomainException("InvalidName", "Name must be between 3 and 16 characters.");
+        }
 
         Name = name;
         OnboardingState = OnboardingState.Named;
@@ -63,10 +69,14 @@ public sealed class Character
     public void AllocatePoints(int str, int agi, int intuition, int vit)
     {
         if (OnboardingState != OnboardingState.Named && OnboardingState != OnboardingState.Ready)
+        {
             throw new DomainException("InvalidState", "Stats can only be allocated when character is Named or Ready.");
+        }
 
         if (str < 0 || agi < 0 || intuition < 0 || vit < 0)
+        {
             throw new DomainException("NegativePoints", "Stat point values cannot be negative.");
+        }
 
         var total = str + agi + intuition + vit;
         if (total > UnspentPoints)
@@ -80,7 +90,9 @@ public sealed class Character
         UnspentPoints -= total;
 
         if (OnboardingState == OnboardingState.Named)
+        {
             OnboardingState = OnboardingState.Ready;
+        }
 
         Revision++;
         Updated = DateTimeOffset.UtcNow;

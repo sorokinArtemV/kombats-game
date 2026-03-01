@@ -22,9 +22,27 @@ builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
-            .AllowAnyMethod()
-            .AllowAnyHeader();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.AllowAnyOrigin()
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+        }
+        else
+        {
+            var origins = builder.Configuration
+                .GetSection("Cors:AllowedOrigins")
+                .Get<string[]>();
+
+            if (origins is null || origins.Length == 0)
+                throw new InvalidOperationException(
+                    "Cors:AllowedOrigins must be configured in non-Development environments. " +
+                    "Set it to an array of allowed origin URLs in appsettings.json.");
+
+            policy.WithOrigins(origins)
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+        }
     });
 });
 

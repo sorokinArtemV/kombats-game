@@ -1,12 +1,12 @@
-using Kombats.Players.Api.Endpoints;
 using Kombats.Players.Api.Endpoints.Me;
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Api.Filters;
 using Kombats.Players.Api.Identity;
+using Kombats.Players.Application;
 using Kombats.Players.Application.UseCases.SetCharacterName;
 using Kombats.Shared.CustomResults;
 using Kombats.Shared.Types;
-using Microsoft.AspNetCore.Http;
+
 
 namespace Kombats.Players.Api.Endpoints.CharacterName;
 
@@ -17,7 +17,7 @@ internal sealed class SetCharacterNameEndpoint : IEndpoint
         app.MapPost("api/character/name", async (
                 SetCharacterNameRequest request,
                 ICurrentIdentityProvider identityProvider,
-                ICommandHandler<SetCharacterNameCommand, Kombats.Players.Application.CharacterStateResult> handler,
+                ICommandHandler<SetCharacterNameCommand, CharacterStateResult> handler,
                 CancellationToken ct) =>
             {
                 var identityResult = identityProvider.GetRequired();

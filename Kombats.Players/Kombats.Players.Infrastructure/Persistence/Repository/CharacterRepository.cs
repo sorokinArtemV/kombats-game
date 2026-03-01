@@ -30,15 +30,10 @@ public sealed class CharacterRepository : ICharacterRepository
         if (string.IsNullOrEmpty(normalizedName))
             return false;
 
-        var count = await _db.Characters
-            .FromSqlRaw(
-                @"SELECT id, identity_id, name, strength, agility, intuition, vitality, unspent_points, revision, onboarding_state, created, updated
-                  FROM players.characters
-                  WHERE name IS NOT NULL AND LOWER(TRIM(name)) = {0} AND ({1} IS NULL OR id <> {1})",
-                normalizedName,
-                (object?)excludeCharacterId ?? DBNull.Value)
-            .CountAsync(ct);
-
-        return count > 0;
+        // Npgsql translates Trim() -> BTRIM(), ToLower() -> LOWER(), matching the DB index.
+        return await _db.Characters
+            .AnyAsync(c => c.Name != null
+                           && c.Name.Trim().ToLower() == normalizedName
+                           && (excludeCharacterId == null || c.Id != excludeCharacterId), ct);
     }
 }

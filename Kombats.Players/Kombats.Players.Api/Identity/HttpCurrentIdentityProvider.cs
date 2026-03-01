@@ -17,11 +17,15 @@ internal sealed class HttpCurrentIdentityProvider : ICurrentIdentityProvider
     {
         var user = _httpContextAccessor.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated != true)
+        {
             return Result.Failure<CurrentIdentity>(Error.Failure("Identity.Unauthenticated", "Request is not authenticated."));
+        }
 
         var subject = user.GetSubjectId();
         if (subject is null)
+        {
             return Result.Failure<CurrentIdentity>(Error.Failure("Identity.MissingOrInvalid", "Missing or invalid 'sub' claim."));
+        }
 
         var identity = new CurrentIdentity(
             Subject: subject.Value,

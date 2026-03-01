@@ -23,11 +23,11 @@ The codebase demonstrates strong fundamentals: clean architecture layering, a we
 - Serilog + OpenTelemetry infrastructure already wired (just needs enabling)
 
 ### Biggest Risks
-1. **No unique index on `name`** — character name uniqueness has a real TOCTOU race condition
-2. **CORS is wide open** (`AllowAnyOrigin + AllowAnyMethod + AllowAnyHeader`) — unacceptable for production
+1. ~~**No unique index on `name`**~~ — **FIXED**: functional unique index `ix_characters_name_normalized` on `LOWER(BTRIM(name))` added via migration `20260301120000_AddUniqueNameNormalizedIndex`; `SetCharacterNameHandler` catches SQLSTATE 23505 on the index for race-safe conflict handling
+2. ~~**CORS is wide open**~~ — **FIXED**: dev allows any origin; non-dev reads `Cors:AllowedOrigins` from config, fails fast if missing/empty
 3. **Zero test coverage** — no unit, integration, or API tests exist
 4. **`Revision` starts at 3 in `CreateDraft`** — almost certainly a bug, will confuse every client developer
-5. **Application layer directly references `Microsoft.EntityFrameworkCore`** — leaky abstraction
+5. **Application layer directly references `Microsoft.EntityFrameworkCore`** — leaky abstraction (Npgsql reference is now used by `DbConflictHelper` to distinguish Postgres unique violations)
 
 ---
 

@@ -1,5 +1,6 @@
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Api.Identity;
+using Kombats.Players.Application;
 using Kombats.Players.Application.UseCases.EnsureCharacterExists;
 using Kombats.Players.Application.UseCases.GetMe;
 using Kombats.Shared.CustomResults;
@@ -14,7 +15,7 @@ internal sealed class MeEndpoint : IEndpoint
         // GET /api/me — character-centric; 404 if not provisioned
         app.MapGet("api/me", async (
                 ICurrentIdentityProvider identityProvider,
-                ICommandHandler<GetMeCommand, Kombats.Players.Application.CharacterStateResult> getMeHandler,
+                ICommandHandler<GetMeCommand, CharacterStateResult> getMeHandler,
                 CancellationToken ct) =>
             {
                 var identityResult = identityProvider.GetRequired();
@@ -45,7 +46,7 @@ internal sealed class MeEndpoint : IEndpoint
         // POST /api/me/ensure — idempotent provisioning
         app.MapPost("api/me/ensure", async (
                 ICurrentIdentityProvider identityProvider,
-                ICommandHandler<EnsureCharacterExistsCommand, Kombats.Players.Application.CharacterStateResult> ensureHandler,
+                ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult> ensureHandler,
                 CancellationToken ct) =>
             {
                 var identityResult = identityProvider.GetRequired();

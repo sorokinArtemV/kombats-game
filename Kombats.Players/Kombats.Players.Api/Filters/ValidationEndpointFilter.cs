@@ -7,8 +7,7 @@ namespace Kombats.Players.Api.Filters;
 /// Validates a single request DTO (TRequest) using FluentValidation before executing the endpoint.
 /// No reflection, no argument scanning.
 /// </summary>
-internal sealed class RequestValidationFilter<TRequest> : IEndpointFilter
-    where TRequest : notnull
+internal sealed class RequestValidationFilter<TRequest> : IEndpointFilter where TRequest : notnull
 {
     private readonly IValidator<TRequest>? _validator;
     
