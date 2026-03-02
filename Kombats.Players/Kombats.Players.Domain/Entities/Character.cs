@@ -1,4 +1,5 @@
 using Kombats.Players.Domain.Exceptions;
+using Kombats.Players.Domain.Progression;
 
 namespace Kombats.Players.Domain.Entities;
 
@@ -21,6 +22,9 @@ public sealed class Character
     public int Revision { get; private set; }
     public OnboardingState OnboardingState { get; private set; }
 
+    public long TotalXp { get; private set; }
+    public int Level { get; private set; }
+
     public DateTimeOffset Created { get; private set; }
     public DateTimeOffset Updated { get; private set; }
 
@@ -35,6 +39,8 @@ public sealed class Character
             Intuition = 3,
             Vitality = 3,
             UnspentPoints = 3,
+            TotalXp = 0,
+            Level = 0,
             Revision = 1,
             OnboardingState = OnboardingState.Draft,
             Created = occurredAt,
@@ -94,6 +100,21 @@ public sealed class Character
             OnboardingState = OnboardingState.Ready;
         }
 
+        Revision++;
+        Updated = DateTimeOffset.UtcNow;
+    }
+
+    public void AddExperience(long amount)
+    {
+        if (amount <= 0)
+            throw new DomainException("InvalidXp", "Experience amount must be greater than zero.");
+
+        checked
+        {
+            TotalXp += amount;
+        }
+
+        Level = LevelingPolicyV1.LevelForTotalXp(TotalXp);
         Revision++;
         Updated = DateTimeOffset.UtcNow;
     }

@@ -15,7 +15,9 @@ public sealed record CharacterStateResult(
     int Intuition,
     int Vitality,
     int UnspentPoints,
-    int Revision)
+    int Revision,
+    long TotalXp,
+    int Level)
 {
     public static CharacterStateResult FromCharacter(Character c) => new(
         CharacterId: c.Id,
@@ -27,5 +29,7 @@ public sealed record CharacterStateResult(
         Intuition: c.Intuition,
         Vitality: c.Vitality,
         UnspentPoints: c.UnspentPoints,
-        Revision: c.Revision);
+        Revision: c.Revision,
+        TotalXp: c.TotalXp,
+        Level: c.Level);
 }
