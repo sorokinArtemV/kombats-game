@@ -13,7 +13,7 @@ internal sealed class MeEndpoint : IEndpoint
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
         // GET /api/me — character-centric; 404 if not provisioned
-        app.MapGet("api/me", async (
+        app.MapGet("api/v1/me", async (
                 ICurrentIdentityProvider identityProvider,
                 ICommandHandler<GetMeCommand, CharacterStateResult> getMeHandler,
                 CancellationToken ct) =>
@@ -44,7 +44,7 @@ internal sealed class MeEndpoint : IEndpoint
             .ProducesProblem(StatusCodes.Status404NotFound);
 
         // POST /api/me/ensure — idempotent provisioning
-        app.MapPost("api/me/ensure", async (
+        app.MapPost("api/v1/me/ensure", async (
                 ICurrentIdentityProvider identityProvider,
                 ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult> ensureHandler,
                 CancellationToken ct) =>
@@ -75,7 +75,7 @@ internal sealed class MeEndpoint : IEndpoint
             .ProducesProblem(StatusCodes.Status409Conflict);
 
         // GET /api/me/claims — development: dump JWT claims
-        app.MapGet("api/me/claims", (HttpContext httpContext) =>
+        app.MapGet("api/v1/me/claims", (HttpContext httpContext) =>
             {
                 var user = httpContext.User;
                 var claims = user.Claims.Select(c => new ClaimDto(c.Type, c.Value)).ToArray();

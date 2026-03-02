@@ -14,7 +14,7 @@ internal sealed class SetCharacterNameEndpoint : IEndpoint
 {
     public void MapEndpoint(IEndpointRouteBuilder app)
     {
-        app.MapPost("api/character/name", async (
+        app.MapPost("api/v1/character/name", async (
                 SetCharacterNameRequest request,
                 ICurrentIdentityProvider identityProvider,
                 ICommandHandler<SetCharacterNameCommand, CharacterStateResult> handler,

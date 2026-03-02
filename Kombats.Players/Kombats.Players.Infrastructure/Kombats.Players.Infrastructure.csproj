@@ -17,7 +17,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Kombats.Shared\Kombats.Shared\Kombats.Shared.csproj"/>
         <ProjectReference Include="..\Kombats.Players.Application\Kombats.Players.Application.csproj"/>
         <ProjectReference Include="..\Kombats.Players.Domain\Kombats.Players.Domain.csproj"/>
     </ItemGroup>
