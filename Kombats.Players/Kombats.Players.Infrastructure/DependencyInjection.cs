@@ -1,4 +1,5 @@
 using Kombats.Players.Application.Abstractions;
+using Kombats.Players.Infrastructure.Configuration;
 using Kombats.Players.Infrastructure.Data;
 using Kombats.Players.Infrastructure.Persistence.EF;
 using Kombats.Players.Infrastructure.Persistence.Repository;
@@ -8,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Kombats.Players.Infrastructure;
 
-public static class DependencyInjection
+public static class gitDependencyInjection
 {
     public static IServiceCollection AddPlayersInfrastructure(
         this IServiceCollection services,
@@ -17,6 +18,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<ICharacterRepository, CharacterRepository>();
         services.AddScoped<IInboxRepository, InboxRepository>();
+        services.AddScoped<ILevelingConfigProvider, LevelingConfigProvider>();
 
         services.AddDbContext<PlayersDbContext>(options =>
         {

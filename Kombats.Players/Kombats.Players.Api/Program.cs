@@ -46,6 +46,9 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.Configure<Kombats.Players.Infrastructure.Configuration.LevelingOptions>(
+    builder.Configuration.GetSection("Leveling"));
+
 builder.Services.AddPlayersApplication();
 builder.Services.AddPlayersInfrastructure(builder.Configuration);
 

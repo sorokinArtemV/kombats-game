@@ -17,7 +17,8 @@ public sealed record CharacterStateResult(
     int UnspentPoints,
     int Revision,
     long TotalXp,
-    int Level)
+    int Level,
+    int LevelingVersion)
 {
     public static CharacterStateResult FromCharacter(Character c) => new(
         CharacterId: c.Id,
@@ -31,5 +32,6 @@ public sealed record CharacterStateResult(
         UnspentPoints: c.UnspentPoints,
         Revision: c.Revision,
         TotalXp: c.TotalXp,
-        Level: c.Level);
+        Level: c.Level,
+        LevelingVersion: c.LevelingVersion);
 }

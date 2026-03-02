@@ -36,6 +36,7 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
         b.Property(x => x.UnspentPoints).IsRequired();
         b.Property(x => x.TotalXp).IsRequired().HasColumnName("total_xp");
         b.Property(x => x.Level).IsRequired().HasColumnName("level");
+        b.Property(x => x.LevelingVersion).IsRequired().HasColumnName("leveling_version");
         b.Property(x => x.Created).IsRequired();
         b.Property(x => x.Updated).IsRequired();
     }
