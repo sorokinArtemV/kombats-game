@@ -9,8 +9,8 @@ public sealed record HandleBattleFinishedCommand(BattleFinishedEvent Event) : IC
 
 public sealed class HandleBattleFinishedHandler : ICommandHandler<HandleBattleFinishedCommand>
 {
-    private const long WinnerXp = 100;
-    private const long LoserXp = 25;
+    private const long WinnerXp = 10;
+    private const long LoserXp = 5;
 
     private readonly IInboxRepository _inbox;
     private readonly ICharacterRepository _characters;
