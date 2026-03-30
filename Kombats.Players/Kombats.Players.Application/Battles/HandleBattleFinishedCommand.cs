@@ -5,7 +5,6 @@ using MassTransit;
 
 namespace Kombats.Players.Application.Battles;
 
-// TODO: temp placeholder — inbound consumer wiring is a separate task
 internal sealed record HandleBattleFinishedCommand(BattleFinishedEvent Event) : ICommand;
 
 internal sealed class HandleBattleFinishedHandler : ICommandHandler<HandleBattleFinishedCommand>

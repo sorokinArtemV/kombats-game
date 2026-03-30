@@ -1,5 +1,6 @@
 using System.Reflection;
 using Kombats.Players.Infrastructure;
+using Kombats.Players.Infrastructure.Messaging.Consumers;
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Application;
 using Kombats.Shared.Messaging;
@@ -52,7 +53,10 @@ builder.Services.Configure<Kombats.Players.Infrastructure.Configuration.Leveling
 
 builder.Services.AddPlayersApplication();
 builder.Services.AddPlayersInfrastructure(builder.Configuration);
-builder.Services.AddMessageBus(builder.Configuration);
+builder.Services.AddMessageBus(builder.Configuration, configureConsumers: bus =>
+{
+    bus.AddConsumer<BattleFinishedEventConsumer>();
+});
 
 var app = builder.Build();
 

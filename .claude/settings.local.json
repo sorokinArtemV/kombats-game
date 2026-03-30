@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(dotnet build:*)"
+      "Bash(dotnet build:*)",
+      "Bash(find D:1tmpkombats-gameKombats.Players -name *Consumer* -o -name *consumer*)",
+      "Bash(find D:1tmpkombats-game -type f -name *.csproj)"
     ]
   }
 }
