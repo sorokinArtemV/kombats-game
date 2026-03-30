@@ -1,21 +1,28 @@
 using Kombats.Players.Application.Abstractions;
+using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain;
 using Kombats.Players.Domain.Exceptions;
 using Kombats.Shared.Types;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kombats.Players.Application.UseCases.AllocateStatPoints;
 
-public sealed class AllocateStatPointsHandler
+internal sealed class AllocateStatPointsHandler
     : ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult>
 {
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public AllocateStatPointsHandler(IUnitOfWork uow, ICharacterRepository characters)
+    public AllocateStatPointsHandler(
+        IUnitOfWork uow,
+        ICharacterRepository characters,
+        IPublishEndpoint publishEndpoint)
     {
         _uow = uow;
         _characters = characters;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<Result<AllocateStatPointsResult>> HandleAsync(AllocateStatPointsCommand cmd, CancellationToken ct)
@@ -75,6 +82,10 @@ public sealed class AllocateStatPointsHandler
                     "AllocateStatPoints.ConcurrentUpdate",
                     "Character was modified by another request. Reload and retry."));
         }
+
+        // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
+        await _publishEndpoint.Publish(
+            PlayerMatchProfileChangedIntegrationEvent.FromCharacter(character), ct);
 
         return Result.Success(new AllocateStatPointsResult(
             Strength: character.Strength,

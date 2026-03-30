@@ -2,6 +2,7 @@ using System.Reflection;
 using Kombats.Players.Infrastructure;
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Application;
+using Kombats.Shared.Messaging;
 using Kombats.Shared.Observability;
 using Serilog;
 
@@ -51,6 +52,7 @@ builder.Services.Configure<Kombats.Players.Infrastructure.Configuration.Leveling
 
 builder.Services.AddPlayersApplication();
 builder.Services.AddPlayersInfrastructure(builder.Configuration);
+builder.Services.AddMessageBus(builder.Configuration);
 
 var app = builder.Build();
 

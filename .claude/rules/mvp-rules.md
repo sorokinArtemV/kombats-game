@@ -1,0 +1,6 @@
+- Prefer minimal but solid solutions.
+- MVP must be production-viable, not throwaway.
+- Keep service boundaries correct even in MVP.
+- Avoid premature optimization.
+- Avoid enterprise-grade complexity unless clearly justified.
+- Choose implementations that can evolve without rewriting the core design.

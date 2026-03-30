@@ -11,8 +11,7 @@ public class LoggingDecorator
     public sealed class CommandHandler<TCommand, TResponse>(
         ICommandHandler<TCommand, TResponse> innerHandler,
         ILogger<CommandHandler<TCommand, TResponse>> logger)
-        : ICommandHandler<TCommand, TResponse>
-        where TCommand : ICommand<TResponse>
+        : ICommandHandler<TCommand, TResponse> where TCommand : ICommand<TResponse>
     {
         public async Task<Result<TResponse>> HandleAsync(TCommand command, CancellationToken cancellationToken)
         {

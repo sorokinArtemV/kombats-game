@@ -1,13 +1,14 @@
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Shared.Types;
+using MassTransit;
 
 namespace Kombats.Players.Application.Battles;
 
-// TODO: temp placeholder 
-public sealed record HandleBattleFinishedCommand(BattleFinishedEvent Event) : ICommand;
+// TODO: temp placeholder — inbound consumer wiring is a separate task
+internal sealed record HandleBattleFinishedCommand(BattleFinishedEvent Event) : ICommand;
 
-public sealed class HandleBattleFinishedHandler : ICommandHandler<HandleBattleFinishedCommand>
+internal sealed class HandleBattleFinishedHandler : ICommandHandler<HandleBattleFinishedCommand>
 {
     private const long WinnerXp = 10;
     private const long LoserXp = 5;
@@ -16,17 +17,20 @@ public sealed class HandleBattleFinishedHandler : ICommandHandler<HandleBattleFi
     private readonly ICharacterRepository _characters;
     private readonly ILevelingConfigProvider _levelingProvider;
     private readonly IUnitOfWork _uow;
+    private readonly IPublishEndpoint _publishEndpoint;
 
     public HandleBattleFinishedHandler(
         IInboxRepository inbox,
         ICharacterRepository characters,
         ILevelingConfigProvider levelingProvider,
-        IUnitOfWork uow)
+        IUnitOfWork uow,
+        IPublishEndpoint publishEndpoint)
     {
         _inbox = inbox;
         _characters = characters;
         _levelingProvider = levelingProvider;
         _uow = uow;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<Result> HandleAsync(HandleBattleFinishedCommand command, CancellationToken cancellationToken)
@@ -61,6 +65,12 @@ public sealed class HandleBattleFinishedHandler : ICommandHandler<HandleBattleFi
 
         await _inbox.AddProcessedAsync(evt.MessageId, DateTimeOffset.UtcNow, cancellationToken);
         await _uow.SaveChangesAsync(cancellationToken);
+
+        // MVP: direct publish after SaveChanges. Events may be lost if publish fails.
+        await _publishEndpoint.Publish(
+            PlayerMatchProfileChangedIntegrationEvent.FromCharacter(winner), cancellationToken);
+        await _publishEndpoint.Publish(
+            PlayerMatchProfileChangedIntegrationEvent.FromCharacter(loser), cancellationToken);
 
         return Result.Success();
     }
