@@ -1,0 +1,27 @@
+<Solution>
+  <Folder Name="/Battle/">
+    <Project Path="src/Kombats.Battle/Kombats.Battle.Api/Kombats.Battle.Api.csproj" />
+    <Project Path="src/Kombats.Battle/Kombats.Battle.Application/Kombats.Battle.Application.csproj" />
+    <Project Path="src/Kombats.Battle/Kombats.Battle.Contracts/Kombats.Battle.Contracts.csproj" />
+    <Project Path="src/Kombats.Battle/Kombats.Battle.Domain/Kombats.Battle.Domain.csproj" />
+    <Project Path="src/Kombats.Battle/Kombats.Battle.Infrastructure/Kombats.Battle.Infrastructure.csproj" />
+    <Project Path="src/Kombats.Battle/Kombats.Battle.Realtime.Contracts/Kombats.Battle.Realtime.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/Common/">
+    <Project Path="src/Kombats.Common/Kombats.Infrastructure.Messaging/Kombats.Infrastructure.Messaging.csproj" />
+  </Folder>
+  <Folder Name="/Matchmaking/">
+    <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Api/Kombats.Matchmaking.Api.csproj" />
+    <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Application/Kombats.Matchmaking.Application.csproj" />
+    <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Contracts/Kombats.Matchmaking.Contracts.csproj" />
+    <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Domain/Kombats.Matchmaking.Domain.csproj" />
+    <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Infrastructure/Kombats.Matchmaking.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Players/">
+    <Project Path="src/Kombats.Players/Kombats.Players.Api/Kombats.Players.Api.csproj" />
+    <Project Path="src/Kombats.Players/Kombats.Players.Application/Kombats.Players.Application.csproj" />
+    <Project Path="src/Kombats.Players/Kombats.Players.Domain/Kombats.Players.Domain.csproj" />
+    <Project Path="src/Kombats.Players/Kombats.Players.Infrastructure/Kombats.Players.Infrastructure.csproj" />
+    <Project Path="src/Kombats.Players/Kombats.Shared/Kombats.Shared.csproj" />
+  </Folder>
+</Solution>

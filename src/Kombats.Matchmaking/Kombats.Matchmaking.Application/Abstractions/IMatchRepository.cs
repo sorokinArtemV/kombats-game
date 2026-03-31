@@ -1,0 +1,54 @@
+using Kombats.Matchmaking.Domain;
+
+namespace Kombats.Matchmaking.Application.Abstractions;
+
+/// <summary>
+/// Port for match repository operations (Postgres source of truth).
+/// </summary>
+public interface IMatchRepository
+{
+    /// <summary>
+    /// Gets the latest match for a player (by PlayerAId or PlayerBId).
+    /// Returns null if no match found.
+    /// </summary>
+    Task<Match?> GetLatestForPlayerAsync(Guid playerId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a match by MatchId.
+    /// Returns null if not found.
+    /// </summary>
+    Task<Match?> GetByMatchIdAsync(Guid matchId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Inserts a new match.
+    /// </summary>
+    Task InsertAsync(Match match, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates the state of an existing match.
+    /// </summary>
+    Task UpdateStateAsync(Guid matchId, MatchState newState, DateTime updatedAtUtc, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Attempts to update match state using Compare-And-Swap (CAS) pattern.
+    /// Only updates if current state matches expected state.
+    /// Returns true if update succeeded, false if state mismatch (concurrent modification or already transitioned).
+    /// </summary>
+    Task<bool> TryUpdateStateAsync(
+        Guid matchId,
+        MatchState expectedState,
+        MatchState newState,
+        DateTime updatedAtUtc,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Conditionally times out matches that are still in BattleCreateRequested state and older than the threshold.
+    /// Uses a single SQL UPDATE with WHERE conditions to ensure race-free updates.
+    /// Returns the number of matches that were actually updated.
+    /// </summary>
+    Task<int> TimeoutMatchesConditionallyAsync(
+        DateTimeOffset timeoutThreshold,
+        DateTime updatedAtUtc,
+        CancellationToken cancellationToken = default);
+}
+

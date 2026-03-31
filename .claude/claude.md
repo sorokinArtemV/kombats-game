@@ -1,244 +1,193 @@
-# Project: Kombats (Players / Matchmaking / Battle Engine)
+# Project: Kombats
 
-## Architecture Overview
+## System Overview
 
-- Microservices architecture (NOT modular monolith)
+Kombats is a microservices-based system.
 
-Services:
-- Players → source of truth for player/character
-- Matchmaking → queue + matching + projection
-- Battle Engine → battle execution
+Primary services:
+- Players
+- Matchmaking
+- Battle
 
-Communication:
-- ONLY via integration events (RabbitMQ / MassTransit)
-- NO direct DB access between services
-- NO shared storage between services
+The codebase is organized as a monorepo, but services must remain logically isolated.
 
 ---
 
-## Core Architectural Rules
+## Architectural Principles
 
-### Service Boundaries
+- Treat each service as its own bounded context.
+- Do not couple services through internal code.
+- Do not use direct cross-service database access.
+- Do not use shared storage as an integration mechanism.
+- Cross-service communication must happen through explicit contracts only.
 
-#### Players Service
-Owns:
-- Character
-- Stats
-- Level / XP
-- Onboarding state
+Allowed integration styles:
+- integration events / messaging
+- explicit HTTP/gRPC APIs if already part of the service design
 
-MUST:
-- publish integration events
-
-MUST NOT:
-- know Matchmaking storage
-- write to Redis
-- implement matchmaking logic
+Disallowed integration styles:
+- direct reads from another service database
+- direct writes into another service storage
+- referencing another service's internal domain/application code
 
 ---
 
-#### Matchmaking Service
-Owns:
-- Queue
-- Matching logic (level bracket)
-- Player projection (DB or Redis)
+## Service Boundaries
 
-MUST NOT:
-- depend on synchronous reads from Players in hot path
+### Players
+Owns player-related progression and identity-facing player state.
 
----
+### Matchmaking
+Owns queueing, matching, matchmaking projections, and matchmaking-specific decision logic.
 
-#### Battle Engine
-Owns:
-- Battle aggregate
-- Battle snapshot
+### Battle
+Owns battle execution, battle state, and battle result production.
 
-MUST:
-- fetch players once (or receive snapshot)
-- never read Players during battle
+When implementing a change, keep logic inside the owning service unless the behavior is explicitly cross-service integration.
 
 ---
 
-## CQRS Rules (SharedKernel)
+## Monorepo Rules
 
-Use existing interfaces:
+This repository is a monorepo, but it must not behave like a hidden modular monolith.
+
+Rules:
+- Do not introduce direct project references from one service to another service's internal layers.
+- Shared code must stay minimal and explicit.
+- Prefer service-local implementation unless code is truly cross-cutting.
+
+Allowed shared code:
+- contracts
+- messaging abstractions
+- shared kernel primitives if they already exist
+- technical cross-cutting infrastructure
+
+Do not place service-specific business logic into shared projects.
+
+---
+
+## CQRS / Layering Rules
+
+Follow existing CQRS and layering conventions.
+
+Use existing abstractions where present, such as:
 - ICommand / ICommand<T>
 - IQuery<T>
 - ICommandHandler
 - IQueryHandler
 
----
-
 ### Application Layer
-- ALL classes MUST be `internal sealed`
-- Commands, Queries, Handlers — internal
-- Query responses — public
-
----
+- orchestration only
+- no infrastructure concerns
+- command/query handlers should follow existing conventions
+- default to `internal sealed` unless there is a clear reason not to
 
 ### Domain Layer
-- Entities are public
-- No infrastructure logic
-- No external dependencies
+- domain behavior and invariants belong here
+- no infrastructure code
+- no transport concerns
+- entities/value objects may be public according to existing project conventions
+
+### Infrastructure Layer
+- persistence
+- messaging wiring
+- auth wiring
+- external integrations
+
+### API / Integration Layer
+- thin transport adapters only
+- no business logic in controllers, consumers, or endpoints
 
 ---
 
-## Naming Conventions (STRICT)
+## Event and Messaging Rules
 
-| Type | Pattern |
-|------|--------|
-| Entity | `{Name}` or `{Name}Entity` |
-| Command | `{Action}Command` |
-| Command Handler | `{Action}CommandHandler` |
-| Query | `{Action}Query` |
-| Query Handler | `{Action}QueryHandler` |
-| Event | `{Name}IntegrationEvent` |
+Use integration events for asynchronous cross-service communication.
 
----
+Rules:
+- integration events must represent committed state
+- publish events only after successful persistence
+- prefer snapshot-style events over many granular cross-service events when appropriate
+- include versioning/revision data when the contract already supports it
+- consumers must be thin integration adapters
+- do not place domain logic in consumers
 
-## Event Architecture (CRITICAL)
+Consumer responsibilities:
+- receive message
+- validate basic transport-level input if needed
+- map into application command/query
+- invoke existing application flow
 
-### Integration Events
-
-- Used for ALL cross-service communication
-- Implement `IIntegrationEvent`
-- Published AFTER persistence
-
----
-
-### Rule: Snapshot-style events
-
-DO:
-- PlayerMatchProfileChangedIntegrationEvent
-
-DO NOT:
-- Multiple granular events like LevelChanged, StatsChanged separately
-
----
-
-## Matchmaking Profile Contract (MVP)
-
-Players MUST publish:
-
-PlayerMatchProfileChangedIntegrationEvent:
-- IdentityId
-- CharacterId
-- Level
-- IsReady
-- Revision
-- OccurredAt
-
----
-
-### IsReady definition
-
-MVP:
-- OnboardingState == Ready
-
----
-
-## When to Publish Events
-
-Players MUST publish AFTER:
-
-- Character creation
-- Name set (if affects state)
-- Stat allocation
-- XP / Level change (battle result)
+Consumer must not:
+- update database directly unless that is already the application flow convention
+- duplicate domain logic
+- contain cross-service orchestration logic unrelated to the owning service
 
 ---
 
 ## Persistence Rules
 
-- Use EF Core
-- Follow existing repository patterns
-- DO NOT introduce new persistence abstractions
+- use existing persistence patterns in the service
+- do not introduce large new abstraction layers without a strong reason
+- do not invent generic repositories if the codebase does not use them
+- prefer minimal, localized changes
+
+Reliability:
+- if outbox/inbox patterns already exist, reuse them
+- if they do not exist, do not introduce a large reliability subsystem unless the task explicitly requires it
 
 ---
 
-## Event Publishing Rules
+## MVP Rules
 
-CRITICAL:
-- Publish ONLY after successful SaveChanges
-- Event must reflect committed state
+MVP means minimal but production-sane.
 
----
-
-### Reliability
-
-Preferred:
-- Outbox pattern
-
-Allowed MVP:
-- Direct publish after SaveChanges
-- BUT must document risk
-
----
-
-## What NOT to do
-
-- Do NOT add Redis into Players
-- Do NOT add matchmaking logic into Players
-- Do NOT allow direct DB access between services
-- Do NOT overengineer
-- Do NOT add speculative fields (power score, etc.)
-
----
-
-## Matchmaking Expectations
-
-Matchmaking MUST:
-
-- consume PlayerMatchProfileChangedIntegrationEvent
-- maintain local projection
-
-Projection fields:
-- IdentityId
-- CharacterId
-- Level
-- IsReady
-- Revision
-- UpdatedAt
-
-Storage:
-- DB first (MVP)
-- Redis optional later
-
----
-
-## Battle Engine Rules
-
-- Fetch players ONCE before battle start
-- Create immutable battle snapshot
-- NEVER read Players during battle
+Rules:
+- prefer minimal correct solutions
+- avoid throwaway design
+- avoid speculative abstractions
+- avoid premature optimization
+- do not add complexity "for future scale" unless the current change truly needs it
+- preserve service boundaries even in MVP
 
 ---
 
 ## Coding Standards
 
-- File-scoped namespaces (REQUIRED)
-- `internal sealed` by default
-- Explicit types for primitives
-- Use `is null` instead of `== null`
-- Use `required` for DTOs
+- use file-scoped namespaces
+- use clear and consistent naming
+- follow existing project conventions before introducing new patterns
+- keep changes small, localized, and readable
+
+Naming conventions:
+- Command: `{Action}Command`
+- Command handler: `{Action}CommandHandler`
+- Query: `{Action}Query`
+- Query handler: `{Action}QueryHandler`
+- Integration event: `{Name}IntegrationEvent`
+
+Do not rename existing concepts unless necessary for correctness.
 
 ---
 
-## Development Workflow (Claude)
+## Agent Behavior
 
-ALWAYS follow:
+When given a task:
 
-1. Analyze (NO code)
-2. Plan (architecture + files)
-3. Implement (small steps)
-4. Review (critical)
+1. Analyze the current code first.
+2. Identify:
+   - what already exists
+   - what is missing
+   - what is inconsistent or clearly incorrect
+3. Reuse existing good patterns.
+4. Propose the smallest change that is architecturally correct.
+5. Refactor only when needed and keep it localized.
+6. Preserve service boundaries.
 
----
-
-## Current Task
-
-Implement outbound integration events for matchmaking profile changes in Players Service.
-
-Goal:
-- Make Players publisher of matchmaking-relevant state
-- Prepare Matchmaking for local projection
+Do not:
+- start coding before understanding the current implementation
+- blindly follow clearly bad existing code
+- overengineer
+- broaden scope without necessity
+- introduce unrelated refactors
+- add tests unless explicitly requested
