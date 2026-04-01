@@ -1,8 +1,10 @@
 using Kombats.Players.Application;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.Helpers;
+using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Exceptions;
 using Kombats.Shared.Types;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kombats.Players.Application.UseCases.SetCharacterName;
@@ -12,11 +14,13 @@ public sealed class SetCharacterNameHandler
 {
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public SetCharacterNameHandler(IUnitOfWork uow, ICharacterRepository characters)
+    public SetCharacterNameHandler(IUnitOfWork uow, ICharacterRepository characters, IPublishEndpoint publishEndpoint)
     {
         _uow = uow;
         _characters = characters;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task<Result<CharacterStateResult>> HandleAsync(SetCharacterNameCommand cmd, CancellationToken ct)
@@ -62,6 +66,11 @@ public sealed class SetCharacterNameHandler
         try
         {
             await _uow.SaveChangesAsync(ct);
+
+            // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
+            await _publishEndpoint.Publish(
+                PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
+
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }
         catch (DbUpdateConcurrencyException)

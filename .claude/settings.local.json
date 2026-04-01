@@ -3,7 +3,14 @@
     "allow": [
       "Bash(dotnet build:*)",
       "Bash(find D:1tmpkombats-gameKombats.Players -name *Consumer* -o -name *consumer*)",
-      "Bash(find D:1tmpkombats-game -type f -name *.csproj)"
+      "Bash(find D:1tmpkombats-game -type f -name *.csproj)",
+      "Bash(grep -E \"\\(\\\\.cs$|\\\\.Designer\\\\.cs$\\)\")",
+      "Bash(xargs grep:*)",
+      "Bash(find /d/1/tmp/kombats-game/src -type f -name \"*.cs\" -exec grep -l \"PlayerMatchProfileChangedIntegrationEvent\\\\|PlayerCombatProfileChanged\" {} \\\\;)",
+      "Bash(find /d/1/tmp/kombats-game/src -type f -name \"*.cs\" -exec grep -l \"IConsumer\\\\|Consume\" {} \\\\;)",
+      "Bash(dotnet ef:*)",
+      "Read(//tmp/**)",
+      "Bash(dotnet run:*)"
     ]
   }
 }

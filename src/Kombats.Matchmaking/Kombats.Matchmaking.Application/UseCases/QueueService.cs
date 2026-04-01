@@ -12,17 +12,20 @@ public class QueueService
     private readonly IMatchQueueStore _queueStore;
     private readonly IPlayerMatchStatusStore _statusStore;
     private readonly IMatchRepository _matchRepository;
+    private readonly IPlayerCombatProfileRepository _profileRepository;
     private readonly ILogger<QueueService> _logger;
 
     public QueueService(
         IMatchQueueStore queueStore,
         IPlayerMatchStatusStore statusStore,
         IMatchRepository matchRepository,
+        IPlayerCombatProfileRepository profileRepository,
         ILogger<QueueService> logger)
     {
         _queueStore = queueStore;
         _statusStore = statusStore;
         _matchRepository = matchRepository;
+        _profileRepository = profileRepository;
         _logger = logger;
     }
 
@@ -50,6 +53,24 @@ public class QueueService
                 UpdatedAtUtc = activeMatch.UpdatedAtUtc,
                 MatchState = activeMatch.State
             };
+        }
+
+        // Check local projection for character existence and readiness (ADR-012)
+        var profile = await _profileRepository.GetByIdentityIdAsync(playerId, cancellationToken);
+        if (profile == null)
+        {
+            _logger.LogWarning(
+                "Queue join rejected: no combat profile projection for PlayerId={PlayerId}",
+                playerId);
+            throw new QueueJoinRejectedException("Player combat profile not found. Character must exist before joining queue.");
+        }
+
+        if (!profile.IsReady)
+        {
+            _logger.LogWarning(
+                "Queue join rejected: character not ready for PlayerId={PlayerId}, CharacterId={CharacterId}",
+                playerId, profile.CharacterId);
+            throw new QueueJoinRejectedException("Character is not ready. Complete onboarding before joining queue.");
         }
 
         // Check Redis status for idempotency
@@ -222,5 +243,13 @@ public class MatchInfo
 {
     public required Guid MatchId { get; init; }
     public required Guid BattleId { get; init; }
+}
+
+/// <summary>
+/// Thrown when a player is not eligible to join the matchmaking queue.
+/// </summary>
+public class QueueJoinRejectedException : Exception
+{
+    public QueueJoinRejectedException(string message) : base(message) { }
 }
 

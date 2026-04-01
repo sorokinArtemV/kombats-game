@@ -13,13 +13,13 @@
   <Folder Name="/Matchmaking/">
     <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Api/Kombats.Matchmaking.Api.csproj" />
     <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Application/Kombats.Matchmaking.Application.csproj" />
-    <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Contracts/Kombats.Matchmaking.Contracts.csproj" />
     <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Domain/Kombats.Matchmaking.Domain.csproj" />
     <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Infrastructure/Kombats.Matchmaking.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/Players/">
     <Project Path="src/Kombats.Players/Kombats.Players.Api/Kombats.Players.Api.csproj" />
     <Project Path="src/Kombats.Players/Kombats.Players.Application/Kombats.Players.Application.csproj" />
+    <Project Path="src/Kombats.Players/Kombats.Players.Contracts/Kombats.Players.Contracts.csproj" />
     <Project Path="src/Kombats.Players/Kombats.Players.Domain/Kombats.Players.Domain.csproj" />
     <Project Path="src/Kombats.Players/Kombats.Players.Infrastructure/Kombats.Players.Infrastructure.csproj" />
     <Project Path="src/Kombats.Players/Kombats.Shared/Kombats.Shared.csproj" />

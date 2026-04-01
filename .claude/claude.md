@@ -1,13 +1,32 @@
 # Project: Kombats
 
+Before any architectural audit or implementation involving Players / Matchmaking / Battle:
+
+1. First read `/docs/architecture/kombats-monorepo-integration-spec.md`
+2. Treat it as the canonical integration target
+3. If code conflicts with the spec, report the conflict instead of silently choosing one side
+
+Also read these project rules:
+- `/.claude/rules/task-modes.md`
+- `/.claude/rules/scope-boundaries.md`
+- `/.claude/rules/output-format.md`
+- `/.claude/rules/event-rules.md`
+- `/.claude/rules/mvp-rules.md`
+
+---
+
 ## System Overview
 
-Kombats is a microservices-based system.
+Kombats is a game backend organized as a monorepo.
 
-Primary services:
+Primary backend services currently in active integration scope:
 - Players
 - Matchmaking
 - Battle
+
+Planned but currently out of scope for implementation unless explicitly requested:
+- BFF
+- Frontend
 
 The codebase is organized as a monorepo, but services must remain logically isolated.
 
@@ -35,13 +54,30 @@ Disallowed integration styles:
 ## Service Boundaries
 
 ### Players
-Owns player-related progression and identity-facing player state.
+Owns:
+- player-facing identity mapping
+- character existence and onboarding state
+- character name
+- character stats
+- XP / level / free stat points
+- long-lived progression state
 
 ### Matchmaking
-Owns queueing, matching, matchmaking projections, and matchmaking-specific decision logic.
+Owns:
+- queueing
+- active match state
+- matchmaking projections / combat profile snapshots
+- matchmaking-specific decision logic
+- active player-to-battle association discovery
 
 ### Battle
-Owns battle execution, battle state, and battle result production.
+Owns:
+- battle execution
+- battle state
+- battle turn resolution
+- timeout / AFK battle resolution
+- battle result production
+- battle reconnect snapshot for active battles
 
 When implementing a change, keep logic inside the owning service unless the behavior is explicitly cross-service integration.
 
@@ -59,7 +95,7 @@ Rules:
 Allowed shared code:
 - contracts
 - messaging abstractions
-- shared kernel primitives if they already exist
+- shared primitives / shared kernel if already established
 - technical cross-cutting infrastructure
 
 Do not place service-specific business logic into shared projects.
@@ -79,14 +115,13 @@ Use existing abstractions where present, such as:
 ### Application Layer
 - orchestration only
 - no infrastructure concerns
-- command/query handlers should follow existing conventions
+- handlers should follow existing conventions
 - default to `internal sealed` unless there is a clear reason not to
 
 ### Domain Layer
 - domain behavior and invariants belong here
 - no infrastructure code
 - no transport concerns
-- entities/value objects may be public according to existing project conventions
 
 ### Infrastructure Layer
 - persistence
@@ -96,7 +131,7 @@ Use existing abstractions where present, such as:
 
 ### API / Integration Layer
 - thin transport adapters only
-- no business logic in controllers, consumers, or endpoints
+- no business logic in controllers, consumers, hubs, or endpoints
 
 ---
 
@@ -119,9 +154,9 @@ Consumer responsibilities:
 - invoke existing application flow
 
 Consumer must not:
-- update database directly unless that is already the application flow convention
+- implement domain policy
 - duplicate domain logic
-- contain cross-service orchestration logic unrelated to the owning service
+- contain unrelated cross-service orchestration
 
 ---
 
@@ -147,7 +182,7 @@ Rules:
 - avoid throwaway design
 - avoid speculative abstractions
 - avoid premature optimization
-- do not add complexity "for future scale" unless the current change truly needs it
+- do not add complexity for future scale unless the current change truly needs it
 - preserve service boundaries even in MVP
 
 ---
@@ -167,6 +202,19 @@ Naming conventions:
 - Integration event: `{Name}IntegrationEvent`
 
 Do not rename existing concepts unless necessary for correctness.
+
+---
+
+## Cross-Service Rule Priority
+
+For any task involving more than one service, use this priority:
+
+1. `/.claude/claude.md`
+2. `/docs/architecture/kombats-monorepo-integration-spec.md`
+3. `/.claude/rules/*`
+4. service-local `.claude/*`
+
+If local service guidance conflicts with the root integration spec, report the conflict instead of silently following the local document.
 
 ---
 

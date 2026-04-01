@@ -43,7 +43,7 @@ internal sealed class EnsureCharacterExistsHandler
 
             // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
             await _publishEndpoint.Publish(
-                PlayerMatchProfileChangedIntegrationEvent.FromCharacter(character), ct);
+                PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }

@@ -67,9 +67,9 @@ internal sealed class HandleBattleFinishedHandler : ICommandHandler<HandleBattle
 
         // MVP: direct publish after SaveChanges. Events may be lost if publish fails.
         await _publishEndpoint.Publish(
-            PlayerMatchProfileChangedIntegrationEvent.FromCharacter(winner), cancellationToken);
+            PlayerCombatProfileChangedFactory.FromCharacter(winner), cancellationToken);
         await _publishEndpoint.Publish(
-            PlayerMatchProfileChangedIntegrationEvent.FromCharacter(loser), cancellationToken);
+            PlayerCombatProfileChangedFactory.FromCharacter(loser), cancellationToken);
 
         return Result.Success();
     }
