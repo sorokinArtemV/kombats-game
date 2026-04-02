@@ -103,8 +103,6 @@ public class MatchmakingService
             {
                 BattleId = battleId,
                 MatchId = matchId,
-                PlayerAId = playerAId,
-                PlayerBId = playerBId,
                 RequestedAt = new DateTimeOffset(nowUtc, TimeSpan.Zero),
                 PlayerA = BuildSnapshot(profileA),
                 PlayerB = BuildSnapshot(profileB)
@@ -179,11 +177,9 @@ internal sealed class CreateBattleOutboxPayload
 {
     public Guid BattleId { get; init; }
     public Guid MatchId { get; init; }
-    public Guid PlayerAId { get; init; }
-    public Guid PlayerBId { get; init; }
     public DateTimeOffset RequestedAt { get; init; }
-    public ParticipantSnapshotPayload? PlayerA { get; init; }
-    public ParticipantSnapshotPayload? PlayerB { get; init; }
+    public ParticipantSnapshotPayload PlayerA { get; init; } = null!;
+    public ParticipantSnapshotPayload PlayerB { get; init; } = null!;
 }
 
 internal sealed class ParticipantSnapshotPayload

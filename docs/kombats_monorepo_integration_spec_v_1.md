@@ -149,84 +149,38 @@ Common must not become a place for shared business logic across bounded contexts
 
 ---
 
-## 5. Current state observed from code
+## 5. Integration state (post Batch 6)
 
-This section describes the most important confirmed current-state facts.
+All six integration batches are complete. The gaps identified in the original audit (A-E) have been closed.
 
-### 5.1 Confirmed current-state facts
+### 5.1 Implemented integration facts
 
-1. **Matchmaking currently creates battles using only ids**.
-   Current `CreateBattle` command contains:
-   - `BattleId`
-   - `MatchId`
-   - `PlayerAId`
-   - `PlayerBId`
-   - `RequestedAt`
+1. **Matchmaking creates battles with explicit participant snapshots.**
+   `CreateBattle` carries `BattleId`, `MatchId`, `RequestedAt`, and required `PlayerA`/`PlayerB` `BattleParticipantSnapshot` records with full combat stats.
 
-2. **Battle currently initializes combat profiles by looking up local projected player profiles**, not from a participant snapshot carried by Matchmaking.
+2. **Battle initializes combat profiles from explicit participant snapshots** passed in the `CreateBattle` command. No local profile lookup or default-stat fallback exists.
 
-3. **Battle has a fallback to default combat stats when projected profile is missing**.
-   This is a defensive dev fallback, not acceptable as target behavior.
+3. **Players publishes `PlayerCombatProfileChanged`** carrying IdentityId, CharacterId, Name, Level, Strength, Agility, Intuition, Vitality, IsReady, Revision, OccurredAt.
 
-4. **Players publishes `PlayerMatchProfileChangedIntegrationEvent` when character is created or stats change**, and also after battle progression update.
+4. **Matchmaking consumes `PlayerCombatProfileChanged`** and maintains a local combat profile projection for queue eligibility and battle handoff.
 
-5. **The current `PlayerMatchProfileChangedIntegrationEvent` is insufficient for Battle combat initialization**, because it includes only:
-   - identity id
-   - character id
-   - level
-   - readiness
-   - revision
-   - occurredAt
+5. **Battle publishes canonical `BattleCompleted`** as the single completion event. Consumed by Players (progression), Matchmaking (match lifecycle closure), and Battle's own read-model projection.
 
-   It does **not** carry Strength / Agility / Intuition / Vitality.
+6. **Players consumes `BattleCompleted`** and applies XP, level recalculation, stat point grants, and win/loss tracking.
 
-6. **Battle publishes `BattleEnded`** when combat ends.
+7. **Matchmaking consumes `BattleCreated` and `BattleCompleted`** to advance match lifecycle state.
 
-7. **Players currently consumes `BattleFinishedEvent`, not `BattleEnded`**.
-   This is a contract mismatch.
+8. **Reconnect foundation exists**: Matchmaking exposes player status with `battleId`; Battle SignalR hub supports `JoinBattle(battleId)` with authoritative snapshot restore.
 
-8. **Matchmaking currently has no visible consumers for `BattleCreated`, `BattleEnded`, or player profile change events** in the provided code.
-   This means match state synchronization is incomplete.
+9. **Timeout / AFK resolution exists** in Battle via deadline worker, producing the same canonical `BattleCompleted` event.
 
-9. **Reconnect foundation already exists**:
-   - Matchmaking exposes player status and returns `battleId` when matched.
-   - Battle SignalR hub allows `JoinBattle(battleId)` and returns authoritative current snapshot if the authenticated player is a participant.
+### 5.2 Closed gaps
 
-10. **Timeout / AFK resolution already exists in Battle** via deadline worker and deadline-driven turn resolution flow.
-
-### 5.2 Major confirmed integration gaps
-
-#### Gap A — Battle completion contract mismatch
-
-Battle publishes `BattleEnded`.
-Players consumes `BattleFinishedEvent`.
-No adapter or bridge was visible in the provided code.
-
-**Result:** post-battle progression update is not canonically wired.
-
-#### Gap B — No canonical player snapshot projection into Matchmaking
-
-Players publishes profile-changed events, but Matchmaking does not visibly consume them.
-
-**Result:** the intended `Players -> Matchmaking snapshot` flow is not implemented.
-
-#### Gap C — Battle profile initialization depends on a local projection that is not visibly kept in sync from Players
-
-Battle reads from local `player_profiles` and falls back to defaults.
-
-**Result:** combat may start with wrong stats if projection is stale or missing.
-
-#### Gap D — Matchmaking lifecycle is not visibly advanced by battle lifecycle events
-
-No visible consumers in Matchmaking for battle creation or battle completion.
-
-**Result:** match state may remain stuck in pre-terminal states and reconnect/status semantics will drift.
-
-#### Gap E — Current player profile changed event is too thin for combat consumers
-
-It lacks combat stat payload.
-
-**Result:** even if Matchmaking consumed it, Battle still could not derive authoritative combat stats from it unless another query/projection exists.
+- **Gap A (completion contract mismatch):** Closed. One canonical `BattleCompleted` event. Legacy `BattleEnded` and `BattleFinishedEvent` removed.
+- **Gap B (no player snapshot projection):** Closed. Matchmaking projects from `PlayerCombatProfileChanged`.
+- **Gap C (Battle profile fallback):** Closed. Snapshot-driven initialization only. No default-stat fallback.
+- **Gap D (Matchmaking lifecycle not advanced):** Closed. Matchmaking consumes `BattleCreated` and `BattleCompleted`.
+- **Gap E (thin profile event):** Closed. `PlayerCombatProfileChanged` carries full combat stats.
 
 ---
 
@@ -261,9 +215,9 @@ That is the cleanest solution because:
 - it reduces duplicate projections across Matchmaking and Battle
 - reconnect after battle creation does not require Players roundtrip
 
-### 6.3 Transitional note
+### 6.3 Implementation note
 
-The current Battle local profile lookup may be retained temporarily only as a migration bridge, but it must be treated as **legacy fallback**, not target architecture.
+Battle local profile lookup and default-stat fallback have been removed. Battle is fully snapshot-driven as of Batch 6.
 
 ---
 
@@ -332,9 +286,7 @@ Consumers:
 - Matchmaking projection consumer
 - optional other read models
 
-### 8.3 Recommended battle creation command
-
-Target command:
+### 8.3 Battle creation command
 
 `CreateBattle`
 
@@ -343,16 +295,12 @@ Fields:
 - `BattleId`
 - `MatchId`
 - `RequestedAt`
-- `PlayerA` participant snapshot
-- `PlayerB` participant snapshot
-- optional `Variant`
-- optional `RulesetVersion` if ruleset becomes matchmaking-driven later
+- `PlayerA` — required `BattleParticipantSnapshot` (IdentityId, CharacterId, Name, Level, Strength, Agility, Intuition, Vitality)
+- `PlayerB` — required `BattleParticipantSnapshot`
 
-Participant snapshot should include combat-relevant values. Battle should not need to query Players at battle start.
+Battle does not query Players at battle start. All combat-relevant data is carried in the snapshots.
 
-### 8.4 Recommended battle completion event
-
-Target canonical event:
+### 8.4 Battle completion event
 
 `BattleCompleted`
 
@@ -372,8 +320,7 @@ Fields:
 Notes:
 
 - For double-forfeit or similar no-winner cases, winner/loser may be null.
-- This event is rich enough for Players and Matchmaking.
-- Current `BattleEnded` can be retired, enriched to match this shape, or wrapped by an adapter, but the system must converge to **one canonical completion contract**.
+- This is the single canonical completion contract consumed by Players, Matchmaking, and Battle's own read-model projection.
 
 ### 8.5 Optional battle created event
 
@@ -643,47 +590,16 @@ Matchmaking must advance match state on battle lifecycle events so queue status 
 
 ---
 
-## 17. Implementation roadmap
+## 17. Implementation roadmap (completed)
 
-### Batch 1 — contract normalization
+All backend integration batches are complete.
 
-- define canonical player combat snapshot contract
-- define canonical create-battle payload
-- define canonical battle-completed payload
-- document event names and routing
-
-### Batch 2 — Players -> Matchmaking projection
-
-- add Matchmaking consumer for player combat profile changes
-- add projection table/store
-- add readiness validation for queue join
-
-### Batch 3 — Matchmaking -> Battle handoff rewrite
-
-- enrich `CreateBattle`
-- update outbox writer / dispatcher
-- update Battle creation consumer and lifecycle initialization
-- keep temporary compatibility bridge only if necessary
-
-### Batch 4 — Battle completion normalization
-
-- replace mismatch between `BattleEnded` and `BattleFinishedEvent`
-- publish one canonical completion event
-- update Players consumer
-- add Matchmaking completion consumer
-
-### Batch 5 — reconnect hardening
-
-- formalize frontend/BFF reconnect flow
-- verify battle status discovery and join semantics
-- verify terminal battle resume behavior
-
-### Batch 6 — cleanup and removal of transitional code
-
-- remove default-stat fallback from target path
-- remove dead contracts
-- remove obsolete consumers or adapters
-- tighten invariants and logging
+- **Batch 1** — Contract normalization: canonical `PlayerCombatProfileChanged`, `CreateBattle` with snapshots, `BattleCompleted`
+- **Batch 2** — Players -> Matchmaking projection: consumer, projection table, readiness validation
+- **Batch 3** — Matchmaking -> Battle handoff: enriched `CreateBattle` with participant snapshots
+- **Batch 4** — Battle completion lifecycle wiring: canonical `BattleCompleted`, Players and Matchmaking consumers
+- **Batch 5** — Progression completeness: XP, level, stat point grants, win/loss tracking, no-winner handling
+- **Batch 6** — Cleanup: removed `BattleEnded` legacy event, default-stat fallback, transitional contract fields, dead code and stale docs
 
 ---
 
@@ -725,12 +641,12 @@ Claude output format should be:
 - One canonical battle completion contract must exist.
 - Reconnect is mandatory and must be driven by Matchmaking status discovery plus Battle snapshot restore.
 
-### Most important current blockers
+### Previous blockers (all resolved)
 
-1. battle completion contract mismatch
-2. missing Players -> Matchmaking projection flow
-3. battle initialization still depends on local projected profiles / default fallback
-4. missing Matchmaking consumers for battle lifecycle synchronization
+1. ~~battle completion contract mismatch~~ — resolved in Batch 4
+2. ~~missing Players -> Matchmaking projection flow~~ — resolved in Batch 2
+3. ~~battle initialization depends on local projected profiles / default fallback~~ — resolved in Batch 3/6
+4. ~~missing Matchmaking consumers for battle lifecycle synchronization~~ — resolved in Batch 4
 
 ---
 

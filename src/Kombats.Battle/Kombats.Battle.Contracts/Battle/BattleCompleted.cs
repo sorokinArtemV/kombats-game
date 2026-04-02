@@ -2,9 +2,8 @@ namespace Kombats.Battle.Contracts.Battle;
 
 /// <summary>
 /// Canonical integration event published by Battle when a battle reaches terminal state.
-/// Consumers: Players (progression update), Matchmaking (match lifecycle closure).
-/// Replaces the combination of BattleEnded (Battle) and BattleFinishedEvent (Players)
-/// as the single canonical completion contract.
+/// Consumers: Players (progression), Matchmaking (match lifecycle closure),
+/// Battle (read-model projection).
 /// </summary>
 public record BattleCompleted
 {

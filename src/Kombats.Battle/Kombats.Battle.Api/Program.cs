@@ -11,7 +11,6 @@ using Kombats.Battle.Infrastructure.Data.DbContext;
 using Kombats.Battle.Infrastructure.Messaging.Consumers;
 using Kombats.Battle.Infrastructure.Messaging.Projections;
 using Kombats.Battle.Infrastructure.Messaging.Publisher;
-using Kombats.Battle.Infrastructure.Profiles;
 using Kombats.Battle.Infrastructure.Rules;
 using Kombats.Battle.Infrastructure.State.Redis;
 using Kombats.Battle.Infrastructure.Time;
@@ -112,8 +111,6 @@ builder.Services.AddScoped<IBattleStateStore, RedisBattleStateStore>();
 builder.Services.AddScoped<IBattleRealtimeNotifier, SignalRBattleRealtimeNotifier>();
 builder.Services.AddScoped<IBattleEventPublisher, MassTransitBattleEventPublisher>();
 builder.Services.AddSingleton<IClock, SystemClock>();
-builder.Services.AddScoped<ICombatProfileProvider, DatabaseCombatProfileProvider>();
-
 // Register ruleset and seed providers
 builder.Services.AddScoped<IRulesetProvider, RulesetProvider>();
 builder.Services.AddSingleton<ISeedGenerator, SeedGenerator>();
@@ -134,13 +131,12 @@ builder.Services.AddMessaging<BattleDbContext>(
     x =>
     {
         x.AddConsumer<CreateBattleConsumer>();
-        x.AddConsumer<BattleEndedProjectionConsumer>();
+        x.AddConsumer<BattleCompletedProjectionConsumer>();
     },
     messagingBuilder =>
     {
         // Register entity name mappings (logical keys -> resolved from configuration)
         messagingBuilder.Map<CreateBattle>("CreateBattle");
-        messagingBuilder.Map<BattleEnded>("BattleEnded");
         messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
 
@@ -195,7 +191,7 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<BattleDbContext>();
 
-    // Apply migrations for BattleDbContext (includes battles, player_profiles, and inbox/outbox tables)
+    // Apply migrations for BattleDbContext (includes battles and inbox/outbox tables)
     await dbContext.Database.MigrateAsync();
 }
 

@@ -207,16 +207,12 @@ The audit confirmed that Matchmaking currently does not consume the relevant bat
 ## ADR-011: Default combat stat fallback is temporary only
 
 ### Status
-Accepted
+Resolved (Batch 6)
 
 ### Decision
 Silent fallback to default combat stats is not allowed as the target production path.
 
-If transitional fallback remains temporarily during migration, it must be:
-- explicit
-- documented
-- treated as legacy
-- removed in cleanup after snapshot-based battle creation is in place
+The transitional fallback and its infrastructure (ICombatProfileProvider, DefaultCombatProfileProvider, DatabaseCombatProfileProvider, player_profiles projection) have been removed. Battle now requires explicit participant snapshots in CreateBattle.
 
 ### Why
 The audit confirmed that Battle currently falls back to default stats because local profile projection is not populated. This hides integration failures and produces incorrect battle behavior.

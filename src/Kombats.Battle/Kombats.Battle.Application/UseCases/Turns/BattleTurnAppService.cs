@@ -145,7 +145,7 @@ public class BattleTurnAppService
     /// 
     /// After successful commit:
     /// - Notifies clients via IBattleRealtimeNotifier
-    /// - Publishes BattleEnded integration event (if battle ended)
+    /// - Publishes BattleCompleted integration event (if battle ended)
     /// </summary>
     public async Task<bool> ResolveTurnAsync(Guid battleId, CancellationToken cancellationToken = default)
     {
@@ -260,16 +260,7 @@ public class BattleTurnAppService
                             battleEnded.OccurredAt,
                             cancellationToken);
 
-                        // Publish legacy BattleEnded (kept for Battle-internal projection consumer)
-                        await _eventPublisher.PublishBattleEndedAsync(
-                            battleId,
-                            state.MatchId,
-                            battleEnded.Reason,
-                            battleEnded.WinnerPlayerId,
-                            battleEnded.OccurredAt,
-                            cancellationToken);
-
-                        // Publish canonical BattleCompleted (consumed by Players and Matchmaking)
+                        // Publish canonical BattleCompleted (consumed by Players, Matchmaking, and Battle projection)
                         await _eventPublisher.PublishBattleCompletedAsync(
                             battleId,
                             state.MatchId,

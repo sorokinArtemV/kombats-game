@@ -8,17 +8,10 @@ namespace Kombats.Battle.Application.Abstractions;
 /// </summary>
 public interface IBattleEventPublisher
 {
-    Task PublishBattleEndedAsync(
-        Guid battleId,
-        Guid matchId,
-        EndBattleReason reason,
-        Guid? winnerPlayerId,
-        DateTimeOffset endedAt,
-        CancellationToken cancellationToken = default);
-
     /// <summary>
     /// Publishes the canonical BattleCompleted integration event.
-    /// Consumed by Players (progression) and Matchmaking (match lifecycle closure).
+    /// Consumed by Players (progression), Matchmaking (match lifecycle closure),
+    /// and Battle's own read-model projection.
     /// </summary>
     Task PublishBattleCompletedAsync(
         Guid battleId,
@@ -30,8 +23,3 @@ public interface IBattleEventPublisher
         DateTimeOffset occurredAt,
         CancellationToken cancellationToken = default);
 }
-
-
-
-
-

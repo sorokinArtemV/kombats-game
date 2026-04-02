@@ -14,7 +14,6 @@ public class BattleLifecycleAppService
 {
     private readonly IBattleStateStore _stateStore;
     private readonly IBattleRealtimeNotifier _notifier;
-    private readonly ICombatProfileProvider _profileProvider;
     private readonly IRulesetProvider _rulesetProvider;
     private readonly ISeedGenerator _seedGenerator;
     private readonly IClock _clock;
@@ -23,7 +22,6 @@ public class BattleLifecycleAppService
     public BattleLifecycleAppService(
         IBattleStateStore stateStore,
         IBattleRealtimeNotifier notifier,
-        ICombatProfileProvider profileProvider,
         IRulesetProvider rulesetProvider,
         ISeedGenerator seedGenerator,
         IClock clock,
@@ -31,7 +29,6 @@ public class BattleLifecycleAppService
     {
         _stateStore = stateStore;
         _notifier = notifier;
-        _profileProvider = profileProvider;
         _rulesetProvider = rulesetProvider;
         _seedGenerator = seedGenerator;
         _clock = clock;
@@ -42,12 +39,12 @@ public class BattleLifecycleAppService
     /// Handles battle creation: initializes battle state and opens turn 1.
     /// Convergent and idempotent: re-processing the same event always converges to correct state.
     /// Never leaves battle in ArenaOpen without an active turn.
-    /// 
+    ///
     /// Uses a blind, convergent sequence:
     /// 1. TryInitializeBattleAsync (idempotent SETNX - ignore return value for flow decisions)
-    /// 2. TryOpenTurnAsync(turnIndex=1) (idempotent Lua script - only succeeds if state exists, 
+    /// 2. TryOpenTurnAsync(turnIndex=1) (idempotent Lua script - only succeeds if state exists,
     ///    not ended, LastResolvedTurnIndex==0, and Phase is ArenaOpen or Resolving)
-    /// 
+    ///
     /// The TryOpenTurnScript is the convergence gate: it will return 0 if Turn 1 is already open
     /// (because Phase==TurnOpen and/or LastResolvedTurnIndex mismatch), so we only notify when
     /// it returns true (actual transition occurred).
@@ -58,49 +55,21 @@ public class BattleLifecycleAppService
         Guid matchId,
         Guid playerAId,
         Guid playerBId,
-        BattleParticipantSnapshot? snapshotA,
-        BattleParticipantSnapshot? snapshotB,
+        BattleParticipantSnapshot snapshotA,
+        BattleParticipantSnapshot snapshotB,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Handling battle creation for BattleId: {BattleId}", battleId);
 
-        CombatProfile profileA;
-        CombatProfile profileB;
+        // Build combat profiles from explicit participant snapshots.
+        // Vitality (integration term) maps to Stamina (Battle-internal domain term).
+        var profileA = new CombatProfile(snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition);
+        var profileB = new CombatProfile(snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
 
-        if (snapshotA != null && snapshotB != null)
-        {
-            // Primary path: use explicit participant snapshots from Matchmaking.
-            // Vitality (integration term) maps to Stamina (Battle-internal domain term).
-            profileA = new CombatProfile(snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition);
-            profileB = new CombatProfile(snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
-
-            _logger.LogInformation(
-                "Using participant snapshots for BattleId: {BattleId}. PlayerA={PlayerAId} (Str={StrA}, Vit={VitA}, Agi={AgiA}, Int={IntA}), PlayerB={PlayerBId} (Str={StrB}, Vit={VitB}, Agi={AgiB}, Int={IntB})",
-                battleId, snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition,
-                snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
-        }
-        else
-        {
-            // Transitional fallback: snapshots not present (legacy messages in outbox, dev tooling).
-            // This path must be removed once all outbox messages carry snapshots.
-            _logger.LogWarning(
-                "Participant snapshots missing for BattleId: {BattleId}. Falling back to local profile lookup (transitional).",
-                battleId);
-
-            var fallbackA = await _profileProvider.GetProfileAsync(playerAId, cancellationToken);
-            var fallbackB = await _profileProvider.GetProfileAsync(playerBId, cancellationToken);
-
-            if (fallbackA == null || fallbackB == null)
-            {
-                _logger.LogError(
-                    "Player profile not found for BattleId: {BattleId}, PlayerAId: {PlayerAId}, PlayerBId: {PlayerBId}. " +
-                    "ACKing message to avoid infinite retries.", battleId, playerAId, playerBId);
-                return null;
-            }
-
-            profileA = fallbackA;
-            profileB = fallbackB;
-        }
+        _logger.LogInformation(
+            "Using participant snapshots for BattleId: {BattleId}. PlayerA={PlayerAId} (Str={StrA}, Vit={VitA}, Agi={AgiA}, Int={IntA}), PlayerB={PlayerBId} (Str={StrB}, Vit={VitB}, Agi={AgiB}, Int={IntB})",
+            battleId, snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition,
+            snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
 
         RulesetWithoutSeed rulesetWithoutSeed;
         try

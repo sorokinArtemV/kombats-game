@@ -11,7 +11,6 @@ public class BattleDbContext : Microsoft.EntityFrameworkCore.DbContext
     }
 
     public DbSet<BattleEntity> Battles { get; set; } = null!;
-    public DbSet<PlayerProfileEntity> PlayerProfiles { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,17 +30,6 @@ public class BattleDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.EndReason).HasMaxLength(50).IsRequired(false);
             entity.Property(e => e.WinnerPlayerId).IsRequired(false);
             entity.HasIndex(e => e.MatchId);
-        });
-
-        modelBuilder.Entity<PlayerProfileEntity>(entity =>
-        {
-            entity.ToTable("player_profiles");
-            entity.HasKey(e => e.PlayerId);
-            entity.Property(e => e.PlayerId).ValueGeneratedNever();
-            entity.Property(e => e.Strength).IsRequired();
-            entity.Property(e => e.Stamina).IsRequired();
-            entity.Property(e => e.UpdatedAt).IsRequired();
-            entity.Property(e => e.Version).IsRequired();
         });
 
         modelBuilder.AddInboxStateEntity(); 

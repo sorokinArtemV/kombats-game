@@ -24,34 +24,6 @@ public class MassTransitBattleEventPublisher : IBattleEventPublisher
         _logger = logger;
     }
 
-    public async Task PublishBattleEndedAsync(
-        Guid battleId,
-        Guid matchId,
-        EndBattleReason reason,
-        Guid? winnerPlayerId,
-        DateTimeOffset endedAt,
-        CancellationToken cancellationToken = default)
-    {
-        // Map domain EndBattleReason to Contracts BattleEndReason
-        var contractReason = MapReason(reason);
-
-        var battleEnded = new BattleEnded
-        {
-            BattleId = battleId,
-            MatchId = matchId,
-            Reason = contractReason,
-            WinnerPlayerId = winnerPlayerId,
-            EndedAt = endedAt,
-            Version = 1
-        };
-
-        await _publishEndpoint.Publish(battleEnded, cancellationToken);
-
-        _logger.LogInformation(
-            "Published BattleEnded event for BattleId: {BattleId}, Reason: {Reason}, Winner: {WinnerPlayerId}",
-            battleId, contractReason, winnerPlayerId);
-    }
-
     public async Task PublishBattleCompletedAsync(
         Guid battleId,
         Guid matchId,

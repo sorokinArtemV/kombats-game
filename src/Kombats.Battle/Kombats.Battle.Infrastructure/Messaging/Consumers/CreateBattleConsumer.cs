@@ -31,6 +31,9 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
     public async Task Consume(ConsumeContext<CreateBattle> context)
     {
         var command = context.Message;
+        var playerAId = command.PlayerA.IdentityId;
+        var playerBId = command.PlayerB.IdentityId;
+
         _logger.LogInformation("Processing CreateBattle command for BattleId: {BattleId}, MatchId: {MatchId}",
             command.BattleId, command.MatchId);
 
@@ -38,8 +41,8 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
         {
             BattleId = command.BattleId,
             MatchId = command.MatchId,
-            PlayerAId = command.PlayerAId,
-            PlayerBId = command.PlayerBId,
+            PlayerAId = playerAId,
+            PlayerBId = playerBId,
             State = "ArenaOpen",
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -53,8 +56,8 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
             var initResult = await _lifecycleService.HandleBattleCreatedAsync(
                 battle.BattleId,
                 battle.MatchId,
-                battle.PlayerAId,
-                battle.PlayerBId,
+                playerAId,
+                playerBId,
                 command.PlayerA,
                 command.PlayerB,
                 context.CancellationToken);
@@ -71,8 +74,8 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
             {
                 BattleId = battle.BattleId,
                 MatchId = battle.MatchId,
-                PlayerAId = battle.PlayerAId,
-                PlayerBId = battle.PlayerBId,
+                PlayerAId = playerAId,
+                PlayerBId = playerBId,
                 OccurredAt = battle.CreatedAt
             }, context.CancellationToken);
 
