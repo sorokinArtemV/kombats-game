@@ -5,9 +5,12 @@ using Kombats.Matchmaking.Application.UseCases;
 using Kombats.Matchmaking.Infrastructure;
 using Kombats.Matchmaking.Infrastructure.Data;
 using Kombats.Matchmaking.Infrastructure.Messaging;
+using Kombats.Matchmaking.Infrastructure.Messaging.Consumers;
 using Kombats.Matchmaking.Infrastructure.Options;
 using Kombats.Matchmaking.Infrastructure.Redis;
 using Kombats.Matchmaking.Infrastructure.Repositories;
+using Kombats.Battle.Contracts.Battle;
+using Kombats.Players.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
@@ -55,6 +58,7 @@ builder.Services.AddScoped<IMatchQueueStore, RedisMatchQueueStore>();
 builder.Services.AddScoped<IPlayerMatchStatusStore, RedisPlayerMatchStatusStore>();
 builder.Services.AddScoped<IMatchRepository, MatchRepository>();
 builder.Services.AddScoped<IOutboxWriter, OutboxWriter>();
+builder.Services.AddScoped<IPlayerCombatProfileRepository, PlayerCombatProfileRepository>();
 builder.Services.AddScoped<ITransactionManager, TransactionManager>();
 
 // Register singleton instance ID service
@@ -68,8 +72,18 @@ builder.Services.AddScoped<MatchmakingService>();
 builder.Services.AddMessaging<MatchmakingDbContext>(
     builder.Configuration,
     "matchmaking",
-    _ => { },
-    _ => { });
+    x =>
+    {
+        x.AddConsumer<PlayerCombatProfileChangedConsumer>();
+        x.AddConsumer<BattleCreatedConsumer>();
+        x.AddConsumer<BattleCompletedConsumer>();
+    },
+    messagingBuilder =>
+    {
+        messagingBuilder.Map<PlayerCombatProfileChanged>("PlayerCombatProfileChanged");
+        messagingBuilder.Map<BattleCreated>("BattleCreated");
+        messagingBuilder.Map<BattleCompleted>("BattleCompleted");
+    });
 
 // Register background workers
 builder.Services.AddHostedService<MatchmakingWorker>();

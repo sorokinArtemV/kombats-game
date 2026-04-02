@@ -33,9 +33,16 @@ public class QueueController : ControllerBase
         }
 
         var variant = request.Variant ?? "default";
-        var status = await _queueService.JoinQueueAsync(request.PlayerId, variant, cancellationToken);
 
-        return Ok(QueueStatusResponse.FromStatus(status));
+        try
+        {
+            var status = await _queueService.JoinQueueAsync(request.PlayerId, variant, cancellationToken);
+            return Ok(QueueStatusResponse.FromStatus(status));
+        }
+        catch (QueueJoinRejectedException ex)
+        {
+            return UnprocessableEntity(new { Error = ex.Message });
+        }
     }
 
     /// <summary>

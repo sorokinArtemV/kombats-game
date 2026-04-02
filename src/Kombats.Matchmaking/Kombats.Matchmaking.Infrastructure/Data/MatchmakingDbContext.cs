@@ -16,6 +16,7 @@ public class MatchmakingDbContext : DbContext
 
     public DbSet<MatchEntity> Matches => Set<MatchEntity>();
     public DbSet<OutboxMessageEntity> OutboxMessages => Set<OutboxMessageEntity>();
+    public DbSet<PlayerCombatProfileEntity> PlayerCombatProfiles => Set<PlayerCombatProfileEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -98,6 +99,52 @@ public class MatchmakingDbContext : DbContext
             // Index for querying pending messages
             entity.HasIndex(e => new { e.Status, e.OccurredAtUtc })
                 .HasDatabaseName("IX_OutboxMessages_Status_OccurredAtUtc");
+        });
+
+        // Configure PlayerCombatProfileEntity
+        modelBuilder.Entity<PlayerCombatProfileEntity>(entity =>
+        {
+            entity.ToTable("player_combat_profiles");
+
+            entity.HasKey(e => e.IdentityId);
+
+            entity.Property(e => e.IdentityId)
+                .IsRequired();
+
+            entity.Property(e => e.CharacterId)
+                .IsRequired();
+
+            entity.Property(e => e.Name)
+                .HasMaxLength(64);
+
+            entity.Property(e => e.Level)
+                .IsRequired();
+
+            entity.Property(e => e.Strength)
+                .IsRequired();
+
+            entity.Property(e => e.Agility)
+                .IsRequired();
+
+            entity.Property(e => e.Intuition)
+                .IsRequired();
+
+            entity.Property(e => e.Vitality)
+                .IsRequired();
+
+            entity.Property(e => e.IsReady)
+                .IsRequired();
+
+            entity.Property(e => e.Revision)
+                .IsRequired();
+
+            entity.Property(e => e.OccurredAt)
+                .IsRequired();
+
+            entity.Property(e => e.UpdatedAtUtc)
+                .IsRequired();
+
+            entity.HasIndex(e => e.CharacterId);
         });
 
         // Configure MassTransit EF Core integration entities (Inbox/Outbox)

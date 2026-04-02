@@ -1,6 +1,8 @@
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Domain.Rules;
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
+using Kombats.Battle.Application.ReadModels;
 using Microsoft.Extensions.Logging;
 
 namespace Kombats.Battle.Application.UseCases.Lifecycle;
@@ -13,7 +15,6 @@ public class BattleLifecycleAppService
 {
     private readonly IBattleStateStore _stateStore;
     private readonly IBattleRealtimeNotifier _notifier;
-    private readonly ICombatProfileProvider _profileProvider;
     private readonly IRulesetProvider _rulesetProvider;
     private readonly ISeedGenerator _seedGenerator;
     private readonly IClock _clock;
@@ -22,7 +23,6 @@ public class BattleLifecycleAppService
     public BattleLifecycleAppService(
         IBattleStateStore stateStore,
         IBattleRealtimeNotifier notifier,
-        ICombatProfileProvider profileProvider,
         IRulesetProvider rulesetProvider,
         ISeedGenerator seedGenerator,
         IClock clock,
@@ -30,7 +30,6 @@ public class BattleLifecycleAppService
     {
         _stateStore = stateStore;
         _notifier = notifier;
-        _profileProvider = profileProvider;
         _rulesetProvider = rulesetProvider;
         _seedGenerator = seedGenerator;
         _clock = clock;
@@ -41,12 +40,12 @@ public class BattleLifecycleAppService
     /// Handles battle creation: initializes battle state and opens turn 1.
     /// Convergent and idempotent: re-processing the same event always converges to correct state.
     /// Never leaves battle in ArenaOpen without an active turn.
-    /// 
+    ///
     /// Uses a blind, convergent sequence:
     /// 1. TryInitializeBattleAsync (idempotent SETNX - ignore return value for flow decisions)
-    /// 2. TryOpenTurnAsync(turnIndex=1) (idempotent Lua script - only succeeds if state exists, 
+    /// 2. TryOpenTurnAsync(turnIndex=1) (idempotent Lua script - only succeeds if state exists,
     ///    not ended, LastResolvedTurnIndex==0, and Phase is ArenaOpen or Resolving)
-    /// 
+    ///
     /// The TryOpenTurnScript is the convergence gate: it will return 0 if Turn 1 is already open
     /// (because Phase==TurnOpen and/or LastResolvedTurnIndex mismatch), so we only notify when
     /// it returns true (actual transition occurred).
@@ -57,20 +56,16 @@ public class BattleLifecycleAppService
         Guid matchId,
         Guid playerAId,
         Guid playerBId,
+        CombatProfile profileA,
+        CombatProfile profileB,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Handling battle creation for BattleId: {BattleId}", battleId);
 
-        var profileA = await _profileProvider.GetProfileAsync(playerAId, cancellationToken);
-        var profileB = await _profileProvider.GetProfileAsync(playerBId, cancellationToken);
-
-        if (profileA == null || profileB == null)
-        {
-            _logger.LogError(
-                "Player profile not found for BattleId: {BattleId}, PlayerAId: {PlayerAId}, PlayerBId: {PlayerBId}. " +
-                "ACKing message to avoid infinite retries.", battleId, playerAId, playerBId);
-            return null;
-        }
+        _logger.LogInformation(
+            "Using combat profiles for BattleId: {BattleId}. PlayerA={PlayerAId} (Str={StrA}, Sta={StaA}, Agi={AgiA}, Int={IntA}), PlayerB={PlayerBId} (Str={StrB}, Sta={StaB}, Agi={AgiB}, Int={IntB})",
+            battleId, profileA.PlayerId, profileA.Strength, profileA.Stamina, profileA.Agility, profileA.Intuition,
+            profileB.PlayerId, profileB.Strength, profileB.Stamina, profileB.Agility, profileB.Intuition);
 
         RulesetWithoutSeed rulesetWithoutSeed;
         try
@@ -180,6 +175,33 @@ public class BattleLifecycleAppService
     }
 
     /// <summary>
+    /// Gets the current battle snapshot for a specific player.
+    /// Validates that the player is a participant.
+    /// Used by the hub for JoinBattle (reconnect/initial load).
+    /// </summary>
+    /// <returns>The snapshot, or null if battle not found. Throws if player is not a participant.</returns>
+    public async Task<BattleSnapshot?> GetBattleSnapshotForPlayerAsync(
+        Guid battleId,
+        Guid playerId,
+        CancellationToken cancellationToken = default)
+    {
+        var state = await _stateStore.GetStateAsync(battleId, cancellationToken);
+        if (state is null)
+        {
+            _logger.LogWarning("Battle {BattleId} not found for user {UserId}", battleId, playerId);
+            return null;
+        }
+
+        if (state.PlayerAId != playerId && state.PlayerBId != playerId)
+        {
+            _logger.LogWarning("User {UserId} is not a participant in battle {BattleId}", playerId, battleId);
+            throw new InvalidOperationException("User is not a participant in this battle");
+        }
+
+        return state;
+    }
+
+    /// <summary>
     /// Builds the deadline for Turn 1 based on ruleset and current time.
     /// Pure function - no I/O.
     /// </summary>
@@ -187,13 +209,4 @@ public class BattleLifecycleAppService
     {
         return _clock.UtcNow.AddSeconds(ruleset.TurnSeconds);
     }
-}
-
-/// <summary>
-/// Result of battle initialization, containing ruleset version and seed used.
-/// </summary>
-public class BattleInitializationResult
-{
-    public int RulesetVersion { get; set; }
-    public int Seed { get; set; }
 }

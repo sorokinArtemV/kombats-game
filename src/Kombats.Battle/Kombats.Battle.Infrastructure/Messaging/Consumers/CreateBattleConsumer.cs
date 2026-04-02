@@ -1,3 +1,4 @@
+using Kombats.Battle.Application.Models;
 using Kombats.Battle.Application.UseCases.Lifecycle;
 using Kombats.Battle.Infrastructure.Data.DbContext;
 using Kombats.Battle.Infrastructure.Data.Entities;
@@ -31,6 +32,9 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
     public async Task Consume(ConsumeContext<CreateBattle> context)
     {
         var command = context.Message;
+        var playerAId = command.PlayerA.IdentityId;
+        var playerBId = command.PlayerB.IdentityId;
+
         _logger.LogInformation("Processing CreateBattle command for BattleId: {BattleId}, MatchId: {MatchId}",
             command.BattleId, command.MatchId);
 
@@ -38,8 +42,8 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
         {
             BattleId = command.BattleId,
             MatchId = command.MatchId,
-            PlayerAId = command.PlayerAId,
-            PlayerBId = command.PlayerBId,
+            PlayerAId = playerAId,
+            PlayerBId = playerBId,
             State = "ArenaOpen",
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -50,11 +54,29 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
         {
             await _dbContext.SaveChangesAsync(context.CancellationToken);
 
+            // Map contract types to application-owned types at the consumer boundary.
+            // Vitality (integration term) maps to Stamina (Battle-internal domain term).
+            var profileA = new CombatProfile(
+                command.PlayerA.IdentityId,
+                command.PlayerA.Strength,
+                command.PlayerA.Vitality,
+                command.PlayerA.Agility,
+                command.PlayerA.Intuition);
+
+            var profileB = new CombatProfile(
+                command.PlayerB.IdentityId,
+                command.PlayerB.Strength,
+                command.PlayerB.Vitality,
+                command.PlayerB.Agility,
+                command.PlayerB.Intuition);
+
             var initResult = await _lifecycleService.HandleBattleCreatedAsync(
                 battle.BattleId,
                 battle.MatchId,
-                battle.PlayerAId,
-                battle.PlayerBId,
+                playerAId,
+                playerBId,
+                profileA,
+                profileB,
                 context.CancellationToken);
 
             if (initResult == null)
@@ -64,6 +86,15 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
                     command.BattleId);
                 return;
             }
+
+            await context.Publish(new BattleCreated
+            {
+                BattleId = battle.BattleId,
+                MatchId = battle.MatchId,
+                PlayerAId = playerAId,
+                PlayerBId = playerBId,
+                OccurredAt = battle.CreatedAt
+            }, context.CancellationToken);
 
             _logger.LogInformation(
                 "Successfully created battle {BattleId}, published BattleCreated event, and initialized Redis state",

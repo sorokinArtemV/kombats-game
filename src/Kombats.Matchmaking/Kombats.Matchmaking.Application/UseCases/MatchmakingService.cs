@@ -14,6 +14,7 @@ public class MatchmakingService
     private readonly IMatchRepository _matchRepository;
     private readonly IOutboxWriter _outboxWriter;
     private readonly ITransactionManager _transactionManager;
+    private readonly IPlayerCombatProfileRepository _profileRepository;
     private readonly ILogger<MatchmakingService> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -26,12 +27,14 @@ public class MatchmakingService
         IMatchRepository matchRepository,
         IOutboxWriter outboxWriter,
         ITransactionManager transactionManager,
+        IPlayerCombatProfileRepository profileRepository,
         ILogger<MatchmakingService> logger)
     {
         _queueStore = queueStore;
         _matchRepository = matchRepository;
         _outboxWriter = outboxWriter;
         _transactionManager = transactionManager;
+        _profileRepository = profileRepository;
         _logger = logger;
     }
 
@@ -52,6 +55,20 @@ public class MatchmakingService
 
         var (playerAId, playerBId) = pair.Value;
 
+        // Fetch combat profiles from local projection (populated by Batch 2)
+        var profileA = await _profileRepository.GetByIdentityIdAsync(playerAId, cancellationToken);
+        var profileB = await _profileRepository.GetByIdentityIdAsync(playerBId, cancellationToken);
+
+        if (profileA == null || profileB == null)
+        {
+            _logger.LogError(
+                "Combat profile projection missing for matched players. PlayerA={PlayerAId} (found={ProfileAFound}), PlayerB={PlayerBId} (found={ProfileBFound}). " +
+                "Cannot create battle without participant snapshots. Players returned to queue.",
+                playerAId, profileA != null, playerBId, profileB != null);
+            // TODO: Consider returning players to queue. For now, fail the tick.
+            return MatchCreatedResult.NoMatch;
+        }
+
         // Generate match and battle IDs
         var matchId = Guid.NewGuid();
         var battleId = Guid.NewGuid();
@@ -60,7 +77,7 @@ public class MatchmakingService
 
         // Use transactional outbox: in ONE DB transaction:
         // 1) Insert Match with state = BattleCreateRequested (or Created, then CAS update)
-        // 2) Add outbox message for CreateBattle command
+        // 2) Add outbox message for CreateBattle command with participant snapshots
         // 3) Commit transaction
         // Publication will happen later by OutboxDispatcher worker
         await using var transaction = await _transactionManager.BeginTransactionAsync(cancellationToken);
@@ -81,14 +98,14 @@ public class MatchmakingService
 
             await _matchRepository.InsertAsync(match, cancellationToken);
 
-            // 2) Add outbox message for CreateBattle command
-            var createBattleCommand = new
+            // 2) Build typed CreateBattle command with participant snapshots from local projection
+            var createBattleCommand = new CreateBattleOutboxPayload
             {
                 BattleId = battleId,
                 MatchId = matchId,
-                PlayerAId = playerAId,
-                PlayerBId = playerBId,
-                RequestedAt = new DateTimeOffset(nowUtc, TimeSpan.Zero)
+                RequestedAt = new DateTimeOffset(nowUtc, TimeSpan.Zero),
+                PlayerA = BuildSnapshot(profileA),
+                PlayerB = BuildSnapshot(profileB)
             };
 
             var messagePayload = JsonSerializer.Serialize(createBattleCommand, JsonOptions);
@@ -134,6 +151,47 @@ public class MatchmakingService
             throw;
         }
     }
+
+    /// <summary>
+    /// Maps a Matchmaking-owned combat profile projection to a BattleParticipantSnapshot for the outbox payload.
+    /// </summary>
+    private static ParticipantSnapshotPayload BuildSnapshot(PlayerCombatProfile profile) => new()
+    {
+        IdentityId = profile.IdentityId,
+        CharacterId = profile.CharacterId,
+        Name = profile.Name,
+        Level = profile.Level,
+        Strength = profile.Strength,
+        Agility = profile.Agility,
+        Intuition = profile.Intuition,
+        Vitality = profile.Vitality
+    };
+}
+
+/// <summary>
+/// Outbox-serializable payload matching the Battle.Contracts.CreateBattle shape.
+/// Matchmaking does not reference Battle.Contracts directly at the application layer;
+/// the outbox dispatcher deserializes this to the typed contract before sending.
+/// </summary>
+internal sealed class CreateBattleOutboxPayload
+{
+    public Guid BattleId { get; init; }
+    public Guid MatchId { get; init; }
+    public DateTimeOffset RequestedAt { get; init; }
+    public ParticipantSnapshotPayload PlayerA { get; init; } = null!;
+    public ParticipantSnapshotPayload PlayerB { get; init; } = null!;
+}
+
+internal sealed class ParticipantSnapshotPayload
+{
+    public Guid IdentityId { get; init; }
+    public Guid CharacterId { get; init; }
+    public string? Name { get; init; }
+    public int Level { get; init; }
+    public int Strength { get; init; }
+    public int Agility { get; init; }
+    public int Intuition { get; init; }
+    public int Vitality { get; init; }
 }
 
 public enum MatchCreatedResultType

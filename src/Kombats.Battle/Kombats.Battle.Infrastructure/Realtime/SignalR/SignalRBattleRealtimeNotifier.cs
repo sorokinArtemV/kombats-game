@@ -1,4 +1,4 @@
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Domain.Rules;
 using Combats.Battle.Realtime.Contracts;

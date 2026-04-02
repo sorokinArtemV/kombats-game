@@ -44,21 +44,39 @@ public class DevBattlesController : ControllerBase
         var battleId = Guid.NewGuid();
         var matchId = Guid.NewGuid(); // Dev: generate fake MatchId
 
-        // Battle service selects ruleset from configuration - no ruleset in command
-        var command = new CreateBattle
+        var command = new Contracts.Battle.CreateBattle
         {
             BattleId = battleId,
             MatchId = matchId,
-            PlayerAId = request.PlayerAId,
-            PlayerBId = request.PlayerBId,
-            RequestedAt = DateTimeOffset.UtcNow
+            RequestedAt = DateTimeOffset.UtcNow,
+            PlayerA = new BattleParticipantSnapshot
+            {
+                IdentityId = request.PlayerAId,
+                CharacterId = Guid.NewGuid(),
+                Name = "DevPlayerA",
+                Level = 1,
+                Strength = request.Strength ?? 3,
+                Agility = request.Agility ?? 3,
+                Intuition = request.Intuition ?? 3,
+                Vitality = request.Vitality ?? 3
+            },
+            PlayerB = new BattleParticipantSnapshot
+            {
+                IdentityId = request.PlayerBId,
+                CharacterId = Guid.NewGuid(),
+                Name = "DevPlayerB",
+                Level = 1,
+                Strength = request.Strength ?? 3,
+                Agility = request.Agility ?? 3,
+                Intuition = request.Intuition ?? 3,
+                Vitality = request.Vitality ?? 3
+            }
         };
 
         _logger.LogInformation(
             "DEV: Creating battle via CreateBattle command. BattleId: {BattleId}, PlayerA: {PlayerAId}, PlayerB: {PlayerBId}",
             battleId, request.PlayerAId, request.PlayerBId);
 
-        // Send command via MassTransit Send (point-to-point, same flow as Matchmaking would use)
         var sendEndpoint = await _sendEndpointProvider.GetSendEndpoint(new Uri("queue:battle.create-battle"));
         await sendEndpoint.Send(command);
 
@@ -69,25 +87,3 @@ public class DevBattlesController : ControllerBase
         });
     }
 }
-
-public record CreateBattleRequest
-{
-    public Guid PlayerAId { get; init; }
-    public Guid PlayerBId { get; init; }
-    // Ruleset parameters removed - Battle service selects from configuration
-}
-
-public record CreateBattleResponse
-{
-    public Guid BattleId { get; init; }
-    public Guid MatchId { get; init; }
-}
-
-
-
-
-
-
-
-
-

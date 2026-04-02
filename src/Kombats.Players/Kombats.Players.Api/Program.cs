@@ -55,7 +55,7 @@ builder.Services.AddPlayersApplication();
 builder.Services.AddPlayersInfrastructure(builder.Configuration);
 builder.Services.AddMessageBus(builder.Configuration, configureConsumers: bus =>
 {
-    bus.AddConsumer<BattleFinishedEventConsumer>();
+    bus.AddConsumer<BattleCompletedConsumer>();
 });
 
 var app = builder.Build();

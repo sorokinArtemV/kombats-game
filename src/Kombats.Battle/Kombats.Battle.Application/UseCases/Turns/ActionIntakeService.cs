@@ -1,5 +1,6 @@
 using System.Text.Json;
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Application.ReadModels;
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Domain.Rules;

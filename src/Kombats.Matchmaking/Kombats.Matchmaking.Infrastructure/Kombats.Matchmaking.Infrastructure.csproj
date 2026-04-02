@@ -10,6 +10,8 @@
     <ItemGroup>
         <ProjectReference Include="..\Kombats.Matchmaking.Application\Kombats.Matchmaking.Application.csproj"/>
         <ProjectReference Include="..\Kombats.Matchmaking.Domain\Kombats.Matchmaking.Domain.csproj"/>
+        <ProjectReference Include="..\..\Kombats.Players\Kombats.Players.Contracts\Kombats.Players.Contracts.csproj"/>
+        <ProjectReference Include="..\..\Kombats.Battle\Kombats.Battle.Contracts\Kombats.Battle.Contracts.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

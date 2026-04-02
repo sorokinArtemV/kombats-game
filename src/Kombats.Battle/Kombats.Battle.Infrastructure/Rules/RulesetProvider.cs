@@ -1,6 +1,7 @@
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Domain.Rules;
-using Kombats.Battle.Infrastructure.Profiles;
+using Kombats.Battle.Infrastructure.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

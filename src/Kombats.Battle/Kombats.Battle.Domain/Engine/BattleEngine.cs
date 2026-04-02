@@ -123,8 +123,6 @@ public sealed class BattleEngine : IBattleEngine
                 playerA,
                 playerB);
 
-            newState.EndBattle();
-
             events.Add(new BattleEndedDomainEvent(
                 state.BattleId,
                 winnerId,
@@ -147,8 +145,6 @@ public sealed class BattleEngine : IBattleEngine
                 state.LastResolvedTurnIndex,
                 playerA,
                 playerB);
-
-            newState.UpdateNoActionStreak(resetStreak);
 
             events.Add(new TurnResolvedDomainEvent(
                 state.BattleId,
@@ -209,8 +205,6 @@ public sealed class BattleEngine : IBattleEngine
                 playerA,
                 playerB);
 
-            endedState.EndBattle();
-
             return new BattleResolutionResult
             {
                 NewState = endedState,
@@ -239,8 +233,6 @@ public sealed class BattleEngine : IBattleEngine
             state.LastResolvedTurnIndex,
             playerA,
             playerB);
-
-        continuingState.UpdateNoActionStreak(newStreak);
 
         // Create turn resolution log for DoubleForfeit (both NoAction)
         var doubleForfeitLog = new TurnResolutionLog

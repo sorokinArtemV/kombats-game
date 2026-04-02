@@ -1,6 +1,5 @@
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
-using Kombats.Players.Domain;
 using Kombats.Players.Domain.Exceptions;
 using Kombats.Shared.Types;
 using MassTransit;
@@ -85,7 +84,7 @@ internal sealed class AllocateStatPointsHandler
 
         // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
         await _publishEndpoint.Publish(
-            PlayerMatchProfileChangedIntegrationEvent.FromCharacter(character), ct);
+            PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
         return Result.Success(new AllocateStatPointsResult(
             Strength: character.Strength,

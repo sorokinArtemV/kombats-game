@@ -1,4 +1,4 @@
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Ports;
 
 namespace Kombats.Battle.Infrastructure.Time;
 

@@ -4,7 +4,8 @@ namespace Kombats.Battle.Domain.Model;
 
 /// <summary>
 /// Domain representation of battle state.
-/// This is a pure domain model, independent of infrastructure (Redis, JSON serialization, etc.).
+/// Immutable after construction — new state is created by the engine for each turn resolution.
+/// Independent of infrastructure (Redis, JSON serialization, etc.).
 /// </summary>
 public sealed class BattleDomainState
 {
@@ -13,12 +14,12 @@ public sealed class BattleDomainState
     public Guid PlayerAId { get; init; }
     public Guid PlayerBId { get; init; }
     public Ruleset Ruleset { get; init; }
-    public BattlePhase Phase { get; private set; }
-    public int TurnIndex { get; private set; }
-    public int NoActionStreakBoth { get; private set; }
-    public int LastResolvedTurnIndex { get; private set; }
-    public PlayerState PlayerA { get; private set; }
-    public PlayerState PlayerB { get; private set; }
+    public BattlePhase Phase { get; init; }
+    public int TurnIndex { get; init; }
+    public int NoActionStreakBoth { get; init; }
+    public int LastResolvedTurnIndex { get; init; }
+    public PlayerState PlayerA { get; init; }
+    public PlayerState PlayerB { get; init; }
 
     public BattleDomainState(
         Guid battleId,
@@ -44,15 +45,5 @@ public sealed class BattleDomainState
         LastResolvedTurnIndex = lastResolvedTurnIndex;
         PlayerA = playerA;
         PlayerB = playerB;
-    }
-    
-    public void EndBattle()
-    {
-        Phase = BattlePhase.Ended;
-    }
-
-    public void UpdateNoActionStreak(int streak)
-    {
-        NoActionStreakBoth = streak;
     }
 }

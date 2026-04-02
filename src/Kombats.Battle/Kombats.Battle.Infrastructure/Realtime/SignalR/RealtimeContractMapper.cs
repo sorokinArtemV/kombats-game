@@ -1,3 +1,4 @@
+using Kombats.Battle.Application.ReadModels;
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Domain.Rules;
@@ -154,6 +155,51 @@ internal static class RealtimeContractMapper
             TurnIndex = log.TurnIndex,
             AtoB = ToRealtimeAttackResolution(log.AtoB),
             BtoA = ToRealtimeAttackResolution(log.BtoA)
+        };
+    }
+
+    /// <summary>
+    /// Maps Application BattleSnapshot to BattleSnapshotRealtime for hub JoinBattle response.
+    /// Includes end-reason inference for ended battles.
+    /// </summary>
+    public static BattleSnapshotRealtime ToRealtimeSnapshot(BattleSnapshot state)
+    {
+        BattleEndReasonRealtime? endedReason = null;
+        if (state.Phase == BattlePhase.Ended)
+        {
+            endedReason = state.NoActionStreakBoth >= state.Ruleset.NoActionLimit
+                ? BattleEndReasonRealtime.DoubleForfeit
+                : BattleEndReasonRealtime.Unknown;
+        }
+
+        var phaseRealtime = state.Phase switch
+        {
+            BattlePhase.ArenaOpen => BattlePhaseRealtime.ArenaOpen,
+            BattlePhase.TurnOpen => BattlePhaseRealtime.TurnOpen,
+            BattlePhase.Resolving => BattlePhaseRealtime.Resolving,
+            BattlePhase.Ended => BattlePhaseRealtime.Ended,
+            _ => throw new InvalidOperationException($"Unknown BattlePhase: {state.Phase}")
+        };
+
+        return new BattleSnapshotRealtime
+        {
+            BattleId = state.BattleId,
+            PlayerAId = state.PlayerAId,
+            PlayerBId = state.PlayerBId,
+            Ruleset = new BattleRulesetRealtime
+            {
+                TurnSeconds = state.Ruleset.TurnSeconds,
+                NoActionLimit = state.Ruleset.NoActionLimit
+            },
+            Phase = phaseRealtime,
+            TurnIndex = state.TurnIndex,
+            DeadlineUtc = state.DeadlineUtc,
+            NoActionStreakBoth = state.NoActionStreakBoth,
+            LastResolvedTurnIndex = state.LastResolvedTurnIndex,
+            EndedReason = endedReason,
+            Version = state.Version,
+            PlayerAHp = state.PlayerAHp,
+            PlayerBHp = state.PlayerBHp
         };
     }
 }

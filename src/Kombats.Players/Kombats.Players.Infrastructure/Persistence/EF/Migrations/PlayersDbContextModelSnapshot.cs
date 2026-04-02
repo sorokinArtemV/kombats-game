@@ -54,6 +54,10 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("leveling_version");
 
+                    b.Property<int>("Losses")
+                        .HasColumnType("integer")
+                        .HasColumnName("losses");
+
                     b.Property<string>("Name")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -87,6 +91,10 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                     b.Property<int>("Vitality")
                         .HasColumnType("integer")
                         .HasColumnName("vitality");
+
+                    b.Property<int>("Wins")
+                        .HasColumnType("integer")
+                        .HasColumnName("wins");
 
                     b.HasKey("Id")
                         .HasName("pk_characters");

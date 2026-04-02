@@ -22,7 +22,7 @@ namespace Kombats.Matchmaking.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Kombats.Matchmaking.Infrastructure.Data.Entities.MatchEntity", b =>
+            modelBuilder.Entity("Kombats.Matchmaking.Infrastructure.Entities.MatchEntity", b =>
                 {
                     b.Property<Guid>("MatchId")
                         .ValueGeneratedOnAdd()
@@ -67,7 +67,7 @@ namespace Kombats.Matchmaking.Infrastructure.Migrations
                     b.ToTable("matches", (string)null);
                 });
 
-            modelBuilder.Entity("Kombats.Matchmaking.Infrastructure.Data.Entities.OutboxMessageEntity", b =>
+            modelBuilder.Entity("Kombats.Matchmaking.Infrastructure.Entities.OutboxMessageEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -108,6 +108,53 @@ namespace Kombats.Matchmaking.Infrastructure.Migrations
                         .HasDatabaseName("IX_OutboxMessages_Status_OccurredAtUtc");
 
                     b.ToTable("matchmaking_outbox_messages", (string)null);
+                });
+
+            modelBuilder.Entity("Kombats.Matchmaking.Infrastructure.Entities.PlayerCombatProfileEntity", b =>
+                {
+                    b.Property<Guid>("IdentityId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Agility")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Intuition")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsReady")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Revision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Strength")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Vitality")
+                        .HasColumnType("integer");
+
+                    b.HasKey("IdentityId");
+
+                    b.HasIndex("CharacterId");
+
+                    b.ToTable("player_combat_profiles", (string)null);
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>

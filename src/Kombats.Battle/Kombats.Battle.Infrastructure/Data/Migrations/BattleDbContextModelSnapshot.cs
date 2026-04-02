@@ -61,34 +61,6 @@ namespace Kombats.Battle.Infrastructure.Persistence.EF.Migrations
                     b.ToTable("battles", (string)null);
                 });
 
-            modelBuilder.Entity("Kombats.Battle.Infrastructure.Persistence.EF.Entities.PlayerProfileEntity", b =>
-                {
-                    b.Property<Guid>("PlayerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Agility")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Intuition")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Stamina")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Strength")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("integer");
-
-                    b.HasKey("PlayerId");
-
-                    b.ToTable("player_profiles", (string)null);
-                });
-
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>
                 {
                     b.Property<long>("Id")

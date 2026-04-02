@@ -1,4 +1,4 @@
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Contracts.Battle;
 using MassTransit;
@@ -24,32 +24,42 @@ public class MassTransitBattleEventPublisher : IBattleEventPublisher
         _logger = logger;
     }
 
-    public async Task PublishBattleEndedAsync(
+    public async Task PublishBattleCompletedAsync(
         Guid battleId,
         Guid matchId,
+        Guid playerAId,
+        Guid playerBId,
         EndBattleReason reason,
         Guid? winnerPlayerId,
-        DateTimeOffset endedAt,
+        DateTimeOffset occurredAt,
         CancellationToken cancellationToken = default)
     {
-        // Map domain EndBattleReason to Contracts BattleEndReason
         var contractReason = MapReason(reason);
 
-        var battleEnded = new BattleEnded
+        // Derive loser: the participant who is not the winner. Null when no winner.
+        Guid? loserPlayerId = winnerPlayerId.HasValue
+            ? (winnerPlayerId.Value == playerAId ? playerBId : playerAId)
+            : null;
+
+        var battleCompleted = new BattleCompleted
         {
+            MessageId = Guid.NewGuid(),
             BattleId = battleId,
             MatchId = matchId,
+            PlayerAIdentityId = playerAId,
+            PlayerBIdentityId = playerBId,
+            WinnerIdentityId = winnerPlayerId,
+            LoserIdentityId = loserPlayerId,
             Reason = contractReason,
-            WinnerPlayerId = winnerPlayerId,
-            EndedAt = endedAt,
+            OccurredAt = occurredAt,
             Version = 1
         };
 
-        await _publishEndpoint.Publish(battleEnded, cancellationToken);
+        await _publishEndpoint.Publish(battleCompleted, cancellationToken);
 
         _logger.LogInformation(
-            "Published BattleEnded event for BattleId: {BattleId}, Reason: {Reason}, Winner: {WinnerPlayerId}",
-            battleId, contractReason, winnerPlayerId);
+            "Published BattleCompleted event for BattleId: {BattleId}, Reason: {Reason}, Winner: {WinnerPlayerId}, Loser: {LoserPlayerId}",
+            battleId, contractReason, winnerPlayerId, loserPlayerId);
     }
 
     private static BattleEndReason MapReason(EndBattleReason domainReason)

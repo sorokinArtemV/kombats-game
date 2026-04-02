@@ -1,8 +1,11 @@
 using Kombats.Battle.Domain.Engine;
 using Kombats.Battle.Domain.Events;
 using Kombats.Battle.Domain.Model;
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Domain.Results;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Application.Mapping;
+using Kombats.Battle.Application.ReadModels;
 using Microsoft.Extensions.Logging;
 
 namespace Kombats.Battle.Application.UseCases.Turns;
@@ -137,24 +140,54 @@ public class BattleTurnAppService
     /// <summary>
     /// Resolves a turn for a battle.
     /// Idempotent: safe to call multiple times (CAS ensures only one resolution succeeds).
-    /// 
-    /// State machine enforcement:
-    /// - Must be in TurnOpen phase
-    /// - TurnIndex must match current state
-    /// - Uses CAS (TryMarkTurnResolvingAsync) to ensure atomic transition
-    /// 
-    /// After successful commit:
-    /// - Notifies clients via IBattleRealtimeNotifier
-    /// - Publishes BattleEnded integration event (if battle ended)
+    ///
+    /// Flow:
+    /// 1. Load and validate state (phase, turn index, idempotency)
+    /// 2. CAS transition to Resolving phase
+    /// 3. Load actions, convert to domain, run engine
+    /// 4. Dispatch result (battle ended or turn continues)
     /// </summary>
     public async Task<bool> ResolveTurnAsync(Guid battleId, CancellationToken cancellationToken = default)
     {
-        // Load state
+        // Phase 1: Load and validate state
+        var state = await LoadAndValidateStateForResolution(battleId, cancellationToken);
+        if (state == null)
+            return false;
+
+        var turnIndex = state.TurnIndex;
+
+        // Phase 2: Atomic CAS transition to Resolving
+        var markedResolving = await _stateStore.TryMarkTurnResolvingAsync(battleId, turnIndex, cancellationToken);
+        if (!markedResolving)
+        {
+            _logger.LogWarning(
+                "Failed to mark turn {TurnIndex} as Resolving for BattleId: {BattleId}. May be duplicate or invalid state.",
+                turnIndex, battleId);
+            return false;
+        }
+
+        // Phase 3: Load actions and run domain engine
+        var resolutionResult = await LoadActionsAndResolve(battleId, turnIndex, state, cancellationToken);
+        if (resolutionResult == null)
+            return false;
+
+        // Phase 4: Dispatch result based on domain events
+        return await DispatchResolutionResult(battleId, turnIndex, state, resolutionResult, cancellationToken);
+    }
+
+    /// <summary>
+    /// Loads battle state and validates preconditions for turn resolution.
+    /// Returns null if resolution should not proceed (idempotent/invalid state).
+    /// </summary>
+    private async Task<BattleSnapshot?> LoadAndValidateStateForResolution(
+        Guid battleId,
+        CancellationToken cancellationToken)
+    {
         var state = await _stateStore.GetStateAsync(battleId, cancellationToken);
         if (state == null)
         {
             _logger.LogWarning("Battle state not found for BattleId: {BattleId}", battleId);
-            return false;
+            return null;
         }
 
         var turnIndex = state.TurnIndex;
@@ -165,7 +198,7 @@ public class BattleTurnAppService
             _logger.LogInformation(
                 "Turn {TurnIndex} already resolved (LastResolvedTurnIndex: {LastResolvedTurnIndex}) for BattleId: {BattleId}",
                 turnIndex, state.LastResolvedTurnIndex, battleId);
-            return false;
+            return null;
         }
 
         // State machine validation: must be TurnOpen and turnIndex must match
@@ -176,7 +209,7 @@ public class BattleTurnAppService
                 _logger.LogInformation(
                     "Battle {BattleId} already ended, ignoring ResolveTurn for TurnIndex: {TurnIndex}",
                     battleId, turnIndex);
-                return false;
+                return null;
             }
 
             if (state.Phase == BattlePhase.Resolving && state.TurnIndex == turnIndex)
@@ -184,31 +217,34 @@ public class BattleTurnAppService
                 _logger.LogInformation(
                     "Turn {TurnIndex} already being resolved for BattleId: {BattleId}",
                     turnIndex, battleId);
-                return false;
+                return null;
             }
 
             _logger.LogError(
                 "Invalid state for ResolveTurn: BattleId: {BattleId}, TurnIndex: {TurnIndex}, State.Phase: {Phase}, State.TurnIndex: {StateTurnIndex}",
                 battleId, turnIndex, state.Phase, state.TurnIndex);
-            return false;
+            return null;
         }
 
-        // Atomic CAS: transition to Resolving phase
-        var markedResolving = await _stateStore.TryMarkTurnResolvingAsync(battleId, turnIndex, cancellationToken);
-        if (!markedResolving)
-        {
-            _logger.LogWarning(
-                "Failed to mark turn {TurnIndex} as Resolving for BattleId: {BattleId}. May be duplicate or invalid state.",
-                turnIndex, battleId);
-            return false;
-        }
+        return state;
+    }
 
+    /// <summary>
+    /// Reloads state after CAS, loads player actions, converts to domain, and runs engine resolution.
+    /// Returns null if state disappeared after CAS (should not happen in practice).
+    /// </summary>
+    private async Task<BattleResolutionResult?> LoadActionsAndResolve(
+        Guid battleId,
+        int turnIndex,
+        BattleSnapshot preResolvingState,
+        CancellationToken cancellationToken)
+    {
         // Reload state to get latest version after CAS
-        state = await _stateStore.GetStateAsync(battleId, cancellationToken);
+        var state = await _stateStore.GetStateAsync(battleId, cancellationToken);
         if (state == null)
         {
             _logger.LogError("Battle state disappeared after marking as Resolving for BattleId: {BattleId}", battleId);
-            return false;
+            return null;
         }
 
         // Read canonical actions for both players
@@ -224,157 +260,202 @@ public class BattleTurnAppService
         var playerAAction = playerAActionCommand != null
             ? PlayerActionConverter.ToDomainAction(playerAActionCommand)
             : PlayerAction.NoAction(state.PlayerAId, turnIndex);
-        
+
         var playerBAction = playerBActionCommand != null
             ? PlayerActionConverter.ToDomainAction(playerBActionCommand)
             : PlayerAction.NoAction(state.PlayerBId, turnIndex);
 
-        // Convert to domain state
+        // Convert to domain state and resolve turn using domain engine (pure logic)
         var domainState = BattleStateToDomainMapper.ToDomainState(state);
+        return _battleEngine.ResolveTurn(domainState, playerAAction, playerBAction);
+    }
 
-        // Resolve turn using domain engine (pure logic)
-        var resolutionResult = _battleEngine.ResolveTurn(domainState, playerAAction, playerBAction);
-
-        // Process domain events and commit to Redis
+    /// <summary>
+    /// Dispatches the resolution result by processing domain events.
+    /// Handles battle-ended and turn-continues branches.
+    /// </summary>
+    private async Task<bool> DispatchResolutionResult(
+        Guid battleId,
+        int turnIndex,
+        BattleSnapshot state,
+        BattleResolutionResult resolutionResult,
+        CancellationToken cancellationToken)
+    {
         foreach (var domainEvent in resolutionResult.Events)
         {
             switch (domainEvent)
             {
                 case BattleEndedDomainEvent battleEnded:
-                    // Commit battle end atomically (includes HP update)
-                    var endResult = await _stateStore.EndBattleAndMarkResolvedAsync(
-                        battleId,
-                        turnIndex,
-                        resolutionResult.NewState.NoActionStreakBoth,
-                        resolutionResult.NewState.PlayerA.CurrentHp,
-                        resolutionResult.NewState.PlayerB.CurrentHp,
-                        cancellationToken);
-
-                    if (endResult == EndBattleCommitResult.EndedNow)
-                    {
-                        // Only notify/publish if battle ended in this call
-                        await _notifier.NotifyBattleEndedAsync(
-                            battleId,
-                            battleEnded.Reason.ToString(),
-                            battleEnded.WinnerPlayerId,
-                            battleEnded.OccurredAt,
-                            cancellationToken);
-
-                        // Publish integration event via port
-                        await _eventPublisher.PublishBattleEndedAsync(
-                            battleId,
-                            state.MatchId,
-                            battleEnded.Reason,
-                            battleEnded.WinnerPlayerId,
-                            battleEnded.OccurredAt,
-                            cancellationToken);
-
-                        _logger.LogInformation(
-                            "Battle {BattleId} ended. Reason: {Reason}, Winner: {WinnerPlayerId}",
-                            battleId, battleEnded.Reason, battleEnded.WinnerPlayerId);
-                    }
-                    else if (endResult == EndBattleCommitResult.AlreadyEnded)
-                    {
-                        _logger.LogInformation(
-                            "Battle {BattleId} already ended (duplicate ResolveTurn), skipping notifications",
-                            battleId);
-                    }
-                    else
-                    {
-                        _logger.LogWarning(
-                            "Battle {BattleId} could not be ended (NotCommitted). TurnIndex: {TurnIndex}",
-                            battleId, turnIndex);
-                    }
-                    return true; // Battle ended (or already ended)
+                    return await CommitAndNotifyBattleEnded(
+                        battleId, turnIndex, state, resolutionResult, battleEnded, cancellationToken);
 
                 case TurnResolvedDomainEvent turnResolved:
-                    // Battle continues - open next turn
-                    var nextTurnIndex = turnIndex + 1;
-                    var turnSeconds = state.Ruleset.TurnSeconds;
-                    var nextDeadline = _clock.UtcNow.AddSeconds(turnSeconds);
-
-                    // Commit turn resolution + next turn opening atomically (includes HP update)
-                    var nextTurnOpened = await _stateStore.MarkTurnResolvedAndOpenNextAsync(
-                        battleId,
-                        turnIndex,
-                        nextTurnIndex,
-                        nextDeadline,
-                        resolutionResult.NewState.NoActionStreakBoth,
-                        resolutionResult.NewState.PlayerA.CurrentHp,
-                        resolutionResult.NewState.PlayerB.CurrentHp,
-                        cancellationToken);
-
-                    if (!nextTurnOpened)
-                    {
-                        _logger.LogError(
-                            "Failed to open next turn {NextTurnIndex} for BattleId: {BattleId}",
-                            nextTurnIndex, battleId);
-                        return false;
-                    }
-
-                    // Reload state to get authoritative deadline
-                    var stateAfterTurnOpen = await _stateStore.GetStateAsync(battleId, cancellationToken);
-                    if (stateAfterTurnOpen == null)
-                    {
-                        _logger.LogError("Battle state disappeared after opening next turn for BattleId: {BattleId}", battleId);
-                        return false;
-                    }
-
-                    var authoritativeNextDeadline = stateAfterTurnOpen.DeadlineUtc;
-
-                    // Notify clients (only after successful commit) - pass domain-oriented parameters
-                    var damageEvents = resolutionResult.Events.OfType<PlayerDamagedDomainEvent>().ToList();
-                    foreach (var damageEvent in damageEvents)
-                    {
-                        await _notifier.NotifyPlayerDamagedAsync(
-                            battleId,
-                            damageEvent.PlayerId,
-                            damageEvent.Damage,
-                            damageEvent.RemainingHp,
-                            damageEvent.TurnIndex,
-                            cancellationToken);
-                    }
-
-                    await _notifier.NotifyTurnResolvedAsync(
-                        battleId,
-                        turnIndex,
-                        FormatAction(turnResolved.PlayerAAction),
-                        FormatAction(turnResolved.PlayerBAction),
-                        turnResolved.Log,
-                        cancellationToken);
-
-                    await _notifier.NotifyTurnOpenedAsync(
-                        battleId,
-                        nextTurnIndex,
-                        authoritativeNextDeadline,
-                        cancellationToken);
-
-                    await _notifier.NotifyBattleStateUpdatedAsync(
-                        battleId,
-                        stateAfterTurnOpen.PlayerAId,
-                        stateAfterTurnOpen.PlayerBId,
-                        stateAfterTurnOpen.Ruleset,
-                        stateAfterTurnOpen.Phase.ToString(),
-                        nextTurnIndex,
-                        authoritativeNextDeadline,
-                        resolutionResult.NewState.NoActionStreakBoth,
-                        turnIndex,
-                        null, // endedReason
-                        stateAfterTurnOpen.Version,
-                        resolutionResult.NewState.PlayerA.CurrentHp,
-                        resolutionResult.NewState.PlayerB.CurrentHp,
-                        cancellationToken);
-
-                    _logger.LogInformation(
-                        "Turn {TurnIndex} resolved and Turn {NextTurnIndex} opened for BattleId: {BattleId}. Next deadline: {DeadlineUtc}",
-                        turnIndex, nextTurnIndex, battleId, authoritativeNextDeadline);
-                    break;
+                    return await CommitAndNotifyTurnContinued(
+                        battleId, turnIndex, state, resolutionResult, turnResolved, cancellationToken);
 
                 case PlayerDamagedDomainEvent:
-                    // Already handled in TurnResolved case
+                    // Handled within CommitAndNotifyTurnContinued
                     break;
             }
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Commits battle end to Redis and sends notifications/events if this call ended the battle.
+    /// Exact sequence: commit → notify clients → publish integration event → log.
+    /// </summary>
+    private async Task<bool> CommitAndNotifyBattleEnded(
+        Guid battleId,
+        int turnIndex,
+        BattleSnapshot state,
+        BattleResolutionResult resolutionResult,
+        BattleEndedDomainEvent battleEnded,
+        CancellationToken cancellationToken)
+    {
+        // Commit battle end atomically (includes HP update)
+        var endResult = await _stateStore.EndBattleAndMarkResolvedAsync(
+            battleId,
+            turnIndex,
+            resolutionResult.NewState.NoActionStreakBoth,
+            resolutionResult.NewState.PlayerA.CurrentHp,
+            resolutionResult.NewState.PlayerB.CurrentHp,
+            cancellationToken);
+
+        if (endResult == EndBattleCommitResult.EndedNow)
+        {
+            // Only notify/publish if battle ended in this call
+            await _notifier.NotifyBattleEndedAsync(
+                battleId,
+                battleEnded.Reason.ToString(),
+                battleEnded.WinnerPlayerId,
+                battleEnded.OccurredAt,
+                cancellationToken);
+
+            // Publish canonical BattleCompleted (consumed by Players, Matchmaking, and Battle projection)
+            await _eventPublisher.PublishBattleCompletedAsync(
+                battleId,
+                state.MatchId,
+                state.PlayerAId,
+                state.PlayerBId,
+                battleEnded.Reason,
+                battleEnded.WinnerPlayerId,
+                battleEnded.OccurredAt,
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Battle {BattleId} ended. Reason: {Reason}, Winner: {WinnerPlayerId}",
+                battleId, battleEnded.Reason, battleEnded.WinnerPlayerId);
+        }
+        else if (endResult == EndBattleCommitResult.AlreadyEnded)
+        {
+            _logger.LogInformation(
+                "Battle {BattleId} already ended (duplicate ResolveTurn), skipping notifications",
+                battleId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "Battle {BattleId} could not be ended (NotCommitted). TurnIndex: {TurnIndex}",
+                battleId, turnIndex);
+        }
+
+        return true; // Battle ended (or already ended)
+    }
+
+    /// <summary>
+    /// Commits turn resolution + next turn opening, then sends all notifications.
+    /// Exact sequence: commit → reload state → damage notifications → turn resolved → turn opened → state updated → log.
+    /// </summary>
+    private async Task<bool> CommitAndNotifyTurnContinued(
+        Guid battleId,
+        int turnIndex,
+        BattleSnapshot state,
+        BattleResolutionResult resolutionResult,
+        TurnResolvedDomainEvent turnResolved,
+        CancellationToken cancellationToken)
+    {
+        var nextTurnIndex = turnIndex + 1;
+        var turnSeconds = state.Ruleset.TurnSeconds;
+        var nextDeadline = _clock.UtcNow.AddSeconds(turnSeconds);
+
+        // Commit turn resolution + next turn opening atomically (includes HP update)
+        var nextTurnOpened = await _stateStore.MarkTurnResolvedAndOpenNextAsync(
+            battleId,
+            turnIndex,
+            nextTurnIndex,
+            nextDeadline,
+            resolutionResult.NewState.NoActionStreakBoth,
+            resolutionResult.NewState.PlayerA.CurrentHp,
+            resolutionResult.NewState.PlayerB.CurrentHp,
+            cancellationToken);
+
+        if (!nextTurnOpened)
+        {
+            _logger.LogError(
+                "Failed to open next turn {NextTurnIndex} for BattleId: {BattleId}",
+                nextTurnIndex, battleId);
+            return false;
+        }
+
+        // Reload state to get authoritative deadline
+        var stateAfterTurnOpen = await _stateStore.GetStateAsync(battleId, cancellationToken);
+        if (stateAfterTurnOpen == null)
+        {
+            _logger.LogError("Battle state disappeared after opening next turn for BattleId: {BattleId}", battleId);
+            return false;
+        }
+
+        var authoritativeNextDeadline = stateAfterTurnOpen.DeadlineUtc;
+
+        // Notify clients (only after successful commit)
+        // Exact ordering: damage → turn resolved → turn opened → state updated
+        var damageEvents = resolutionResult.Events.OfType<PlayerDamagedDomainEvent>().ToList();
+        foreach (var damageEvent in damageEvents)
+        {
+            await _notifier.NotifyPlayerDamagedAsync(
+                battleId,
+                damageEvent.PlayerId,
+                damageEvent.Damage,
+                damageEvent.RemainingHp,
+                damageEvent.TurnIndex,
+                cancellationToken);
+        }
+
+        await _notifier.NotifyTurnResolvedAsync(
+            battleId,
+            turnIndex,
+            FormatAction(turnResolved.PlayerAAction),
+            FormatAction(turnResolved.PlayerBAction),
+            turnResolved.Log,
+            cancellationToken);
+
+        await _notifier.NotifyTurnOpenedAsync(
+            battleId,
+            nextTurnIndex,
+            authoritativeNextDeadline,
+            cancellationToken);
+
+        await _notifier.NotifyBattleStateUpdatedAsync(
+            battleId,
+            stateAfterTurnOpen.PlayerAId,
+            stateAfterTurnOpen.PlayerBId,
+            stateAfterTurnOpen.Ruleset,
+            stateAfterTurnOpen.Phase.ToString(),
+            nextTurnIndex,
+            authoritativeNextDeadline,
+            resolutionResult.NewState.NoActionStreakBoth,
+            turnIndex,
+            null, // endedReason
+            stateAfterTurnOpen.Version,
+            resolutionResult.NewState.PlayerA.CurrentHp,
+            resolutionResult.NewState.PlayerB.CurrentHp,
+            cancellationToken);
+
+        _logger.LogInformation(
+            "Turn {TurnIndex} resolved and Turn {NextTurnIndex} opened for BattleId: {BattleId}. Next deadline: {DeadlineUtc}",
+            turnIndex, nextTurnIndex, battleId, authoritativeNextDeadline);
 
         return true;
     }
@@ -392,7 +473,3 @@ public class BattleTurnAppService
         return $"Attack: {attackZone}";
     }
 }
-
-
-
-

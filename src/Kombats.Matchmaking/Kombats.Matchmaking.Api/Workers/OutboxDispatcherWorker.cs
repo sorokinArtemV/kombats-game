@@ -1,3 +1,4 @@
+using Kombats.Battle.Contracts.Battle;
 using Kombats.Matchmaking.Infrastructure.Data;
 using Kombats.Matchmaking.Infrastructure.Options;
 using MassTransit;
@@ -133,41 +134,22 @@ public sealed class OutboxDispatcherWorker : BackgroundService
             throw new InvalidOperationException($"Unknown message type: {message.Type}");
         }
 
-        // Get endpoint
         var endpoint = await sendEndpointProvider.GetSendEndpoint(endpointUri);
-        
-        // Deserialize payload JSON to object and send
-        // MassTransit will serialize it when sending to RabbitMQ
-        // We use JsonElement to handle dynamic deserialization
-        var payloadElement = JsonSerializer.Deserialize<JsonElement>(message.Payload, JsonOptions);
-        
-        // Convert JsonElement to object for MassTransit
-        // MassTransit can send anonymous objects, but we need to ensure proper type information
-        // For CreateBattle command, we reconstruct the object structure
-        object? commandObj = null;
+
         if (message.Type.Contains("CreateBattle", StringComparison.OrdinalIgnoreCase))
         {
-            // Deserialize to anonymous type matching CreateBattle structure
-            commandObj = new
-            {
-                BattleId = payloadElement.GetProperty("battleId").GetGuid(),
-                MatchId = payloadElement.GetProperty("matchId").GetGuid(),
-                PlayerAId = payloadElement.GetProperty("playerAId").GetGuid(),
-                PlayerBId = payloadElement.GetProperty("playerBId").GetGuid(),
-                RequestedAt = payloadElement.GetProperty("requestedAt").GetDateTimeOffset()
-            };
+            // Deserialize to the typed CreateBattle contract so MassTransit sends
+            // the correct message type envelope for the Battle consumer
+            var command = JsonSerializer.Deserialize<CreateBattle>(message.Payload, JsonOptions);
+            if (command == null)
+                throw new InvalidOperationException($"Failed to deserialize CreateBattle payload for message {message.Id}");
+
+            await endpoint.Send(command, cancellationToken);
         }
         else
         {
-            throw new InvalidOperationException($"Unsupported message type for dynamic deserialization: {message.Type}");
+            throw new InvalidOperationException($"Unsupported message type for dispatch: {message.Type}");
         }
-        
-        if (commandObj == null)
-        {
-            throw new InvalidOperationException($"Failed to deserialize message payload: {message.Type}");
-        }
-        
-        await endpoint.Send(commandObj, cancellationToken);
 
         // Mark as Published
         message.Status = OutboxMessageStatus.Published;

@@ -1,4 +1,4 @@
-using Kombats.Battle.Infrastructure.Profiles;
+using Kombats.Battle.Infrastructure.Configuration;
 
 namespace Kombats.Battle.Infrastructure.Rules;
 
