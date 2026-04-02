@@ -260,10 +260,21 @@ public class BattleTurnAppService
                             battleEnded.OccurredAt,
                             cancellationToken);
 
-                        // Publish integration event via port
+                        // Publish legacy BattleEnded (kept for Battle-internal projection consumer)
                         await _eventPublisher.PublishBattleEndedAsync(
                             battleId,
                             state.MatchId,
+                            battleEnded.Reason,
+                            battleEnded.WinnerPlayerId,
+                            battleEnded.OccurredAt,
+                            cancellationToken);
+
+                        // Publish canonical BattleCompleted (consumed by Players and Matchmaking)
+                        await _eventPublisher.PublishBattleCompletedAsync(
+                            battleId,
+                            state.MatchId,
+                            state.PlayerAId,
+                            state.PlayerBId,
                             battleEnded.Reason,
                             battleEnded.WinnerPlayerId,
                             battleEnded.OccurredAt,

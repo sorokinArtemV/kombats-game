@@ -11,7 +11,8 @@
       "Bash(dotnet ef:*)",
       "Read(//tmp/**)",
       "Bash(dotnet run:*)",
-      "Bash(grep -v \"\\\\.claude\\\\|docs/\\\\|PROJECT_REVIEW\\\\|\\\\.slnx\\\\|\\\\.json$\")"
+      "Bash(grep -v \"\\\\.claude\\\\|docs/\\\\|PROJECT_REVIEW\\\\|\\\\.slnx\\\\|\\\\.json$\")",
+      "Bash(xargs -I {} find {} -name \"*.cs\" -path \"*/Kombats.Players/*\")"
     ]
   }
 }

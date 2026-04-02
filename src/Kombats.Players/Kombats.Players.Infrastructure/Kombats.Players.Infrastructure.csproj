@@ -20,6 +20,7 @@
         <ProjectReference Include="..\Kombats.Players.Application\Kombats.Players.Application.csproj"/>
         <ProjectReference Include="..\Kombats.Players.Domain\Kombats.Players.Domain.csproj"/>
         <ProjectReference Include="..\Kombats.Shared\Kombats.Shared.csproj"/>
+        <ProjectReference Include="..\..\Kombats.Battle\Kombats.Battle.Contracts\Kombats.Battle.Contracts.csproj"/>
     </ItemGroup>
 
     <ItemGroup>

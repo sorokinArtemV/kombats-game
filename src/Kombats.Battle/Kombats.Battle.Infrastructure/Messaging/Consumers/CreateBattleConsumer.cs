@@ -67,6 +67,15 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
                 return;
             }
 
+            await context.Publish(new BattleCreated
+            {
+                BattleId = battle.BattleId,
+                MatchId = battle.MatchId,
+                PlayerAId = battle.PlayerAId,
+                PlayerBId = battle.PlayerBId,
+                OccurredAt = battle.CreatedAt
+            }, context.CancellationToken);
+
             _logger.LogInformation(
                 "Successfully created battle {BattleId}, published BattleCreated event, and initialized Redis state",
                 command.BattleId);

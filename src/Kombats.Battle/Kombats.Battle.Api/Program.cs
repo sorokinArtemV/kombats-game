@@ -141,6 +141,7 @@ builder.Services.AddMessaging<BattleDbContext>(
         // Register entity name mappings (logical keys -> resolved from configuration)
         messagingBuilder.Map<CreateBattle>("CreateBattle");
         messagingBuilder.Map<BattleEnded>("BattleEnded");
+        messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
 
 // Register turn deadline worker (background service for deadline-driven turn resolution)

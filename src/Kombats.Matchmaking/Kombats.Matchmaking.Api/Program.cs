@@ -9,6 +9,7 @@ using Kombats.Matchmaking.Infrastructure.Messaging.Consumers;
 using Kombats.Matchmaking.Infrastructure.Options;
 using Kombats.Matchmaking.Infrastructure.Redis;
 using Kombats.Matchmaking.Infrastructure.Repositories;
+using Kombats.Battle.Contracts.Battle;
 using Kombats.Players.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -74,10 +75,14 @@ builder.Services.AddMessaging<MatchmakingDbContext>(
     x =>
     {
         x.AddConsumer<PlayerCombatProfileChangedConsumer>();
+        x.AddConsumer<BattleCreatedConsumer>();
+        x.AddConsumer<BattleCompletedConsumer>();
     },
     messagingBuilder =>
     {
         messagingBuilder.Map<PlayerCombatProfileChanged>("PlayerCombatProfileChanged");
+        messagingBuilder.Map<BattleCreated>("BattleCreated");
+        messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
 
 // Register background workers
