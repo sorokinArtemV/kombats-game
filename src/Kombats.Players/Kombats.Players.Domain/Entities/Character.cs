@@ -26,6 +26,9 @@ public sealed class Character
     public int Level { get; private set; }
     public int LevelingVersion { get; private set; }
 
+    public int Wins { get; private set; }
+    public int Losses { get; private set; }
+
     public DateTimeOffset Created { get; private set; }
     public DateTimeOffset Updated { get; private set; }
 
@@ -43,6 +46,8 @@ public sealed class Character
             TotalXp = 0,
             Level = 0,
             LevelingVersion = 1,
+            Wins = 0,
+            Losses = 0,
             Revision = 1,
             OnboardingState = OnboardingState.Draft,
             Created = occurredAt,
@@ -111,12 +116,35 @@ public sealed class Character
         if (amount <= 0)
             throw new DomainException("InvalidXp", "Experience amount must be greater than zero.");
 
+        var oldLevel = Level;
+
         checked
         {
             TotalXp += amount;
         }
 
         Level = LevelingPolicyV1.LevelForTotalXp(TotalXp, config, LevelingVersion);
+
+        var levelsGained = Level - oldLevel;
+        if (levelsGained > 0)
+        {
+            UnspentPoints += levelsGained;
+        }
+
+        Revision++;
+        Updated = DateTimeOffset.UtcNow;
+    }
+
+    public void RecordWin()
+    {
+        Wins++;
+        Revision++;
+        Updated = DateTimeOffset.UtcNow;
+    }
+
+    public void RecordLoss()
+    {
+        Losses++;
         Revision++;
         Updated = DateTimeOffset.UtcNow;
     }

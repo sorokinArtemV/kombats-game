@@ -72,7 +72,10 @@ internal sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattl
             }
 
             winner.AddExperience(WinnerXp, config);
+            winner.RecordWin();
+
             loser.AddExperience(LoserXp, config);
+            loser.RecordLoss();
         }
 
         await _inbox.AddProcessedAsync(command.MessageId, DateTimeOffset.UtcNow, cancellationToken);
