@@ -1,4 +1,6 @@
-namespace Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+
+namespace Kombats.Battle.Application.Ports;
 
 /// <summary>
 /// Port interface for providing battle rulesets from configuration.
@@ -21,5 +23,3 @@ public interface IRulesetProvider
     /// <exception cref="ArgumentException">If version is not found in configuration.</exception>
     RulesetWithoutSeed GetRulesetByVersion(int version);
 }
-
-

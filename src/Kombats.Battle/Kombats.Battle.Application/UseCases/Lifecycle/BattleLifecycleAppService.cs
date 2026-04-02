@@ -1,7 +1,8 @@
-using Kombats.Battle.Contracts.Battle;
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Domain.Rules;
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
+using Kombats.Battle.Application.ReadModels;
 using Microsoft.Extensions.Logging;
 
 namespace Kombats.Battle.Application.UseCases.Lifecycle;
@@ -55,21 +56,16 @@ public class BattleLifecycleAppService
         Guid matchId,
         Guid playerAId,
         Guid playerBId,
-        BattleParticipantSnapshot snapshotA,
-        BattleParticipantSnapshot snapshotB,
+        CombatProfile profileA,
+        CombatProfile profileB,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Handling battle creation for BattleId: {BattleId}", battleId);
 
-        // Build combat profiles from explicit participant snapshots.
-        // Vitality (integration term) maps to Stamina (Battle-internal domain term).
-        var profileA = new CombatProfile(snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition);
-        var profileB = new CombatProfile(snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
-
         _logger.LogInformation(
-            "Using participant snapshots for BattleId: {BattleId}. PlayerA={PlayerAId} (Str={StrA}, Vit={VitA}, Agi={AgiA}, Int={IntA}), PlayerB={PlayerBId} (Str={StrB}, Vit={VitB}, Agi={AgiB}, Int={IntB})",
-            battleId, snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition,
-            snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
+            "Using combat profiles for BattleId: {BattleId}. PlayerA={PlayerAId} (Str={StrA}, Sta={StaA}, Agi={AgiA}, Int={IntA}), PlayerB={PlayerBId} (Str={StrB}, Sta={StaB}, Agi={AgiB}, Int={IntB})",
+            battleId, profileA.PlayerId, profileA.Strength, profileA.Stamina, profileA.Agility, profileA.Intuition,
+            profileB.PlayerId, profileB.Strength, profileB.Stamina, profileB.Agility, profileB.Intuition);
 
         RulesetWithoutSeed rulesetWithoutSeed;
         try
@@ -179,6 +175,33 @@ public class BattleLifecycleAppService
     }
 
     /// <summary>
+    /// Gets the current battle snapshot for a specific player.
+    /// Validates that the player is a participant.
+    /// Used by the hub for JoinBattle (reconnect/initial load).
+    /// </summary>
+    /// <returns>The snapshot, or null if battle not found. Throws if player is not a participant.</returns>
+    public async Task<BattleSnapshot?> GetBattleSnapshotForPlayerAsync(
+        Guid battleId,
+        Guid playerId,
+        CancellationToken cancellationToken = default)
+    {
+        var state = await _stateStore.GetStateAsync(battleId, cancellationToken);
+        if (state is null)
+        {
+            _logger.LogWarning("Battle {BattleId} not found for user {UserId}", battleId, playerId);
+            return null;
+        }
+
+        if (state.PlayerAId != playerId && state.PlayerBId != playerId)
+        {
+            _logger.LogWarning("User {UserId} is not a participant in battle {BattleId}", playerId, battleId);
+            throw new InvalidOperationException("User is not a participant in this battle");
+        }
+
+        return state;
+    }
+
+    /// <summary>
     /// Builds the deadline for Turn 1 based on ruleset and current time.
     /// Pure function - no I/O.
     /// </summary>
@@ -186,13 +209,4 @@ public class BattleLifecycleAppService
     {
         return _clock.UtcNow.AddSeconds(ruleset.TurnSeconds);
     }
-}
-
-/// <summary>
-/// Result of battle initialization, containing ruleset version and seed used.
-/// </summary>
-public class BattleInitializationResult
-{
-    public int RulesetVersion { get; set; }
-    public int Seed { get; set; }
 }

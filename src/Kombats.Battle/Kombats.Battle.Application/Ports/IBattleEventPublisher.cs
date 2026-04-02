@@ -1,6 +1,6 @@
 using Kombats.Battle.Domain.Results;
 
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Ports;
 
 /// <summary>
 /// Port interface for publishing integration events.

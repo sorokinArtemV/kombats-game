@@ -1,7 +1,8 @@
 using Kombats.Battle.Domain.Engine;
 using Kombats.Battle.Domain.Events;
 using Kombats.Battle.Domain.Model;
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Application.Mapping;
 using Microsoft.Extensions.Logging;
 

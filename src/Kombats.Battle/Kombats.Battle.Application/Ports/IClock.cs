@@ -1,4 +1,4 @@
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Ports;
 
 /// <summary>
 /// Port interface for time abstraction.

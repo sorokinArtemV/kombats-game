@@ -1,3 +1,4 @@
+using Kombats.Battle.Application.Models;
 using Kombats.Battle.Domain.Model;
 
 namespace Kombats.Battle.Application.UseCases.Turns;

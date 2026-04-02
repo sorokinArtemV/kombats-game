@@ -1,4 +1,4 @@
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Models;
 
 /// <summary>
 /// Result of attempting to end a battle and mark it resolved.
@@ -21,5 +21,3 @@ public enum EndBattleCommitResult
     /// </summary>
     NotCommitted = 0
 }
-
-

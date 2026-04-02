@@ -1,4 +1,5 @@
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Application.UseCases.Turns;
 using Microsoft.Extensions.Options;
 

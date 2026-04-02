@@ -1,4 +1,4 @@
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Models;
 
 /// <summary>
 /// Player combat profile (stats snapshot) used during battle initialization.

@@ -1,8 +1,8 @@
 using System;
 using System.Text.Json;
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Models;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Application.ReadModels;
-using Kombats.Battle.Application.UseCases.Turns;
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Infrastructure.State.Redis.Mapping;
 using Microsoft.Extensions.Logging;
@@ -303,51 +303,6 @@ public class RedisBattleStateStore : IBattleStateStore
                 "Error claiming due battles from Redis. NowUtc: {NowUtc}, Limit: {Limit}, LeaseTtl: {LeaseTtl}",
                 nowUtc, limit, leaseTtl);
             throw;
-        }
-    }
-
-    public async Task<List<Guid>> GetActiveBattlesAsync(CancellationToken cancellationToken = default)
-    {
-        var db = _redis.GetDatabase();
-        var members = await db.SetMembersAsync(ActiveBattlesSetKey);
-        
-        var battleIds = new List<Guid>();
-        foreach (var member in members)
-        {
-            if (Guid.TryParse(member.ToString(), out var battleId))
-            {
-                battleIds.Add(battleId);
-            }
-        }
-
-        return battleIds;
-    }
-
-    public async Task<ActionStoreResult> StoreActionAsync(Guid battleId, int turnIndex, Guid playerId, PlayerActionCommand actionCommand, CancellationToken cancellationToken = default)
-    {
-        var db = _redis.GetDatabase();
-        var key = GetActionKey(battleId, turnIndex, playerId);
-
-        // Serialize canonical action to JSON using centralized options
-        var serializedAction = JsonSerializer.Serialize(actionCommand, PlayerActionCommandJsonOptions);
-
-        // Store action with configurable expiration (cleanup after battle ends)
-        // Use SET NX (When.NotExists) to ensure first-write-wins
-        var wasSet = await db.StringSetAsync(key, serializedAction, _options.ActionTtl, When.NotExists);
-
-        if (wasSet)
-        {
-            _logger.LogDebug(
-                "Stored action for BattleId: {BattleId}, TurnIndex: {TurnIndex}, PlayerId: {PlayerId}, Quality: {Quality}",
-                battleId, turnIndex, playerId, actionCommand.Quality);
-            return ActionStoreResult.Accepted;
-        }
-        else
-        {
-            _logger.LogDebug(
-                "Action already submitted for BattleId: {BattleId}, TurnIndex: {TurnIndex}, PlayerId: {PlayerId}",
-                battleId, turnIndex, playerId);
-            return ActionStoreResult.AlreadySubmitted;
         }
     }
 

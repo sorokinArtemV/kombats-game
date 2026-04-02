@@ -1,3 +1,4 @@
+using Kombats.Battle.Application.Models;
 using Kombats.Battle.Application.UseCases.Lifecycle;
 using Kombats.Battle.Infrastructure.Data.DbContext;
 using Kombats.Battle.Infrastructure.Data.Entities;
@@ -53,13 +54,29 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
         {
             await _dbContext.SaveChangesAsync(context.CancellationToken);
 
+            // Map contract types to application-owned types at the consumer boundary.
+            // Vitality (integration term) maps to Stamina (Battle-internal domain term).
+            var profileA = new CombatProfile(
+                command.PlayerA.IdentityId,
+                command.PlayerA.Strength,
+                command.PlayerA.Vitality,
+                command.PlayerA.Agility,
+                command.PlayerA.Intuition);
+
+            var profileB = new CombatProfile(
+                command.PlayerB.IdentityId,
+                command.PlayerB.Strength,
+                command.PlayerB.Vitality,
+                command.PlayerB.Agility,
+                command.PlayerB.Intuition);
+
             var initResult = await _lifecycleService.HandleBattleCreatedAsync(
                 battle.BattleId,
                 battle.MatchId,
                 playerAId,
                 playerBId,
-                command.PlayerA,
-                command.PlayerB,
+                profileA,
+                profileB,
                 context.CancellationToken);
 
             if (initResult == null)

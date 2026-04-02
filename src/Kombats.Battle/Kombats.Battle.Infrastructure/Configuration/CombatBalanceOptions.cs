@@ -1,21 +1,9 @@
-namespace Kombats.Battle.Infrastructure.Profiles;
+namespace Kombats.Battle.Infrastructure.Configuration;
 
 /// <summary>
-/// Infrastructure options class for CombatBalance configuration.
-/// Mirrors the Domain CombatBalance structure for appsettings binding.
+/// Sub-option types for combat balance configuration binding.
+/// Used by CombatBalanceVersionOptions in versioned ruleset configuration.
 /// </summary>
-public class CombatBalanceOptions
-{
-    public const string SectionName = "CombatBalance";
-
-    public HpBalanceOptions Hp { get; set; } = null!;
-    public DamageBalanceOptions Damage { get; set; } = null!;
-    public MfBalanceOptions Mf { get; set; } = null!;
-    public ChanceBalanceOptions DodgeChance { get; set; } = null!;
-    public ChanceBalanceOptions CritChance { get; set; } = null!;
-    public CritEffectBalanceOptions CritEffect { get; set; } = null!;
-}
-
 public class HpBalanceOptions
 {
     public int BaseHp { get; set; }
@@ -53,5 +41,3 @@ public class CritEffectBalanceOptions
     public decimal Multiplier { get; set; }
     public decimal HybridBlockMultiplier { get; set; }
 }
-
-

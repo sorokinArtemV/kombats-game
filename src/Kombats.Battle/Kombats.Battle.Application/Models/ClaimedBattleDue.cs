@@ -1,4 +1,4 @@
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Models;
 
 /// <summary>
 /// Represents a battle turn that has been claimed by a worker for deadline resolution.
@@ -9,5 +9,3 @@ public sealed class ClaimedBattleDue
     public Guid BattleId { get; init; }
     public int TurnIndex { get; init; }
 }
-
-

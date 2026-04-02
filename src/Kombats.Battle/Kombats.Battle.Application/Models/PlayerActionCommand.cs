@@ -1,6 +1,6 @@
 using Kombats.Battle.Domain.Rules;
 
-namespace Kombats.Battle.Application.UseCases.Turns;
+namespace Kombats.Battle.Application.Models;
 
 /// <summary>
 /// Canonical representation of a player action after intake processing.
@@ -12,32 +12,32 @@ public sealed record PlayerActionCommand
     public Guid BattleId { get; init; }
     public Guid PlayerId { get; init; }
     public int TurnIndex { get; init; }
-    
+
     /// <summary>
     /// Attack zone (nullable if NoAction).
     /// </summary>
     public BattleZone? AttackZone { get; init; }
-    
+
     /// <summary>
     /// Primary block zone (first of two adjacent zones).
     /// </summary>
     public BattleZone? BlockZonePrimary { get; init; }
-    
+
     /// <summary>
     /// Secondary block zone (second of two adjacent zones).
     /// </summary>
     public BattleZone? BlockZoneSecondary { get; init; }
-    
+
     /// <summary>
     /// Quality of the action (Valid, NoAction, Invalid, Late, ProtocolViolation).
     /// </summary>
     public ActionQuality Quality { get; init; }
-    
+
     /// <summary>
     /// Optional reason for rejection (for logging/telemetry only).
     /// </summary>
     public ActionRejectReason? RejectReason { get; init; }
-    
+
     /// <summary>
     /// True if this is a NoAction (no valid action submitted).
     /// </summary>
@@ -67,22 +67,22 @@ public enum ActionQuality
     /// Valid action with proper zones.
     /// </summary>
     Valid,
-    
+
     /// <summary>
     /// No action submitted (empty payload or explicit NoAction).
     /// </summary>
     NoAction,
-    
+
     /// <summary>
     /// Invalid payload (malformed JSON, invalid zones, invalid block pattern).
     /// </summary>
     Invalid,
-    
+
     /// <summary>
     /// Action submitted after deadline.
     /// </summary>
     Late,
-    
+
     /// <summary>
     /// Protocol violation (wrong phase, wrong turn index, etc.).
     /// </summary>
@@ -106,4 +106,3 @@ public enum ActionRejectReason
     MissingAttackZone,
     InvariantViolation
 }
-

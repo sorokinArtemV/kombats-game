@@ -1,4 +1,4 @@
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Models;
 
 /// <summary>
 /// Result of atomically storing an action and checking if both players have submitted.
@@ -20,4 +20,3 @@ public sealed record ActionStoreAndCheckResult
     /// </summary>
     public bool WasStored { get; init; }
 }
-

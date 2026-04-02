@@ -1,4 +1,4 @@
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Ports;
 
 /// <summary>
 /// Port interface for generating battle seeds.
@@ -9,11 +9,5 @@ public interface ISeedGenerator
     /// <summary>
     /// Generates a cryptographically safe random seed for a battle.
     /// </summary>
-    /// <returns>A random integer seed.</returns>
     int GenerateSeed();
 }
-
-
-
-
-

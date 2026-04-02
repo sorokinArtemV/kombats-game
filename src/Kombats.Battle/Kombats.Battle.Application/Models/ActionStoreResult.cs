@@ -1,4 +1,4 @@
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Models;
 
 /// <summary>
 /// Result of attempting to store a player action.
@@ -15,5 +15,3 @@ public enum ActionStoreResult
     /// </summary>
     AlreadySubmitted = 1
 }
-
-

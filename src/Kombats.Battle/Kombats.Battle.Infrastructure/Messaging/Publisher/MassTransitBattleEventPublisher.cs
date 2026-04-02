@@ -1,4 +1,4 @@
-using Kombats.Battle.Application.Abstractions;
+using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Contracts.Battle;
 using MassTransit;

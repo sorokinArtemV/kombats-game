@@ -1,6 +1,6 @@
-﻿using Kombats.Battle.Domain.Rules;
+using Kombats.Battle.Domain.Rules;
 
-namespace Kombats.Battle.Application.Abstractions;
+namespace Kombats.Battle.Application.Models;
 
 /// <summary>
 /// Ruleset configuration without seed (seed is generated per battle).
