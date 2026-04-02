@@ -55,6 +55,8 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
                 battle.MatchId,
                 battle.PlayerAId,
                 battle.PlayerBId,
+                command.PlayerA,
+                command.PlayerB,
                 context.CancellationToken);
 
             if (initResult == null)

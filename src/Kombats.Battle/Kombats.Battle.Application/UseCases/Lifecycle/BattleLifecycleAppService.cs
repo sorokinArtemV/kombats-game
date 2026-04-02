@@ -1,3 +1,4 @@
+using Kombats.Battle.Contracts.Battle;
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Domain.Rules;
 using Kombats.Battle.Application.Abstractions;
@@ -57,19 +58,48 @@ public class BattleLifecycleAppService
         Guid matchId,
         Guid playerAId,
         Guid playerBId,
+        BattleParticipantSnapshot? snapshotA,
+        BattleParticipantSnapshot? snapshotB,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Handling battle creation for BattleId: {BattleId}", battleId);
 
-        var profileA = await _profileProvider.GetProfileAsync(playerAId, cancellationToken);
-        var profileB = await _profileProvider.GetProfileAsync(playerBId, cancellationToken);
+        CombatProfile profileA;
+        CombatProfile profileB;
 
-        if (profileA == null || profileB == null)
+        if (snapshotA != null && snapshotB != null)
         {
-            _logger.LogError(
-                "Player profile not found for BattleId: {BattleId}, PlayerAId: {PlayerAId}, PlayerBId: {PlayerBId}. " +
-                "ACKing message to avoid infinite retries.", battleId, playerAId, playerBId);
-            return null;
+            // Primary path: use explicit participant snapshots from Matchmaking.
+            // Vitality (integration term) maps to Stamina (Battle-internal domain term).
+            profileA = new CombatProfile(snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition);
+            profileB = new CombatProfile(snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
+
+            _logger.LogInformation(
+                "Using participant snapshots for BattleId: {BattleId}. PlayerA={PlayerAId} (Str={StrA}, Vit={VitA}, Agi={AgiA}, Int={IntA}), PlayerB={PlayerBId} (Str={StrB}, Vit={VitB}, Agi={AgiB}, Int={IntB})",
+                battleId, snapshotA.IdentityId, snapshotA.Strength, snapshotA.Vitality, snapshotA.Agility, snapshotA.Intuition,
+                snapshotB.IdentityId, snapshotB.Strength, snapshotB.Vitality, snapshotB.Agility, snapshotB.Intuition);
+        }
+        else
+        {
+            // Transitional fallback: snapshots not present (legacy messages in outbox, dev tooling).
+            // This path must be removed once all outbox messages carry snapshots.
+            _logger.LogWarning(
+                "Participant snapshots missing for BattleId: {BattleId}. Falling back to local profile lookup (transitional).",
+                battleId);
+
+            var fallbackA = await _profileProvider.GetProfileAsync(playerAId, cancellationToken);
+            var fallbackB = await _profileProvider.GetProfileAsync(playerBId, cancellationToken);
+
+            if (fallbackA == null || fallbackB == null)
+            {
+                _logger.LogError(
+                    "Player profile not found for BattleId: {BattleId}, PlayerAId: {PlayerAId}, PlayerBId: {PlayerBId}. " +
+                    "ACKing message to avoid infinite retries.", battleId, playerAId, playerBId);
+                return null;
+            }
+
+            profileA = fallbackA;
+            profileB = fallbackB;
         }
 
         RulesetWithoutSeed rulesetWithoutSeed;
