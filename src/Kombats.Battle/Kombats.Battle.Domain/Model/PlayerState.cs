@@ -8,7 +8,7 @@ public sealed class PlayerState
 {
     public Guid PlayerId { get; init; }
     public int MaxHp { get; init; }
-    public int CurrentHp { get; set; } // Public set for mapper and engine
+    public int CurrentHp { get; private set; }
     public PlayerStats Stats { get; init; }
 
     public PlayerState(Guid playerId, int maxHp, PlayerStats stats)
