@@ -68,6 +68,9 @@ builder.Services.AddScoped<ITransactionManager, TransactionManager>();
 // Register singleton instance ID service
 builder.Services.AddSingleton<InstanceIdService>();
 
+// Register Infrastructure services
+builder.Services.AddScoped<OutboxDispatcherService>();
+
 // Register Application services
 builder.Services.AddScoped<QueueService>();
 builder.Services.AddScoped<MatchmakingService>();
