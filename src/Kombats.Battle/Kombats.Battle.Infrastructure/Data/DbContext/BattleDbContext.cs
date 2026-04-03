@@ -6,6 +6,8 @@ namespace Kombats.Battle.Infrastructure.Data.DbContext;
 
 public class BattleDbContext : Microsoft.EntityFrameworkCore.DbContext
 {
+    public const string Schema = "battle";
+
     public BattleDbContext(DbContextOptions<BattleDbContext> options) : base(options)
     {
     }
@@ -15,6 +17,8 @@ public class BattleDbContext : Microsoft.EntityFrameworkCore.DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.HasDefaultSchema(Schema);
 
         modelBuilder.Entity<BattleEntity>(entity =>
         {

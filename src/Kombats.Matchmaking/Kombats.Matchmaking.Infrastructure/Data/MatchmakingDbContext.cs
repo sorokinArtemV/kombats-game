@@ -9,6 +9,8 @@ namespace Kombats.Matchmaking.Infrastructure.Data;
 /// </summary>
 public class MatchmakingDbContext : DbContext
 {
+    public const string Schema = "matchmaking";
+
     public MatchmakingDbContext(DbContextOptions<MatchmakingDbContext> options)
         : base(options)
     {
@@ -21,6 +23,8 @@ public class MatchmakingDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.HasDefaultSchema(Schema);
 
         // Configure MatchEntity
         modelBuilder.Entity<MatchEntity>(entity =>

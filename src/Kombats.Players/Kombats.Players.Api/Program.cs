@@ -5,6 +5,7 @@ using Kombats.Players.Api.Extensions;
 using Kombats.Players.Application;
 using Kombats.Shared.Messaging;
 using Kombats.Shared.Observability;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -59,6 +60,13 @@ builder.Services.AddMessageBus(builder.Configuration, configureConsumers: bus =>
 });
 
 var app = builder.Build();
+
+// Ensure database is created/migrated
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<Kombats.Players.Infrastructure.Data.PlayersDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 app.UseSwaggerDocumentation();
 

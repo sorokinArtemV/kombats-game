@@ -8,6 +8,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kombats
     ports:
       - "5432:5432"
     volumes:
@@ -74,17 +75,20 @@ services:
 #    container_name: kombats_players
 #    restart: unless-stopped
 #    depends_on:
-#      - postgres
-#      - rabbitmq
-#      - keycloak
+#      postgres:
+#        condition: service_healthy
+#      rabbitmq:
+#        condition: service_started
+#      keycloak:
+#        condition: service_started
 #    environment:
 #      ASPNETCORE_ENVIRONMENT: Development
-#      ConnectionStrings__Database: Host=postgres;Port=5432;Database=kombats_players;Username=postgres;Password=postgres
-#      RabbitMq__Host: rabbitmq
-#      Keycloak__Authority: http://keycloak:8080/realms/kombats
+#      ConnectionStrings__PostgresConnection: Host=postgres;Port=5432;Database=kombats;Username=postgres;Password=postgres
+#      MessageBus__Host: rabbitmq
+#      Auth__Authority: http://keycloak:8080/realms/kombats
 #    ports:
 #      - "5001:8080"
-
+#
 #  matchmaking:
 #    build:
 #      context: .
@@ -92,15 +96,20 @@ services:
 #    container_name: kombats_matchmaking
 #    restart: unless-stopped
 #    depends_on:
-#      - postgres
-#      - rabbitmq
+#      postgres:
+#        condition: service_healthy
+#      rabbitmq:
+#        condition: service_started
+#      redis:
+#        condition: service_healthy
 #    environment:
 #      ASPNETCORE_ENVIRONMENT: Development
-#      ConnectionStrings__Database: Host=postgres;Port=5432;Database=kombats_matchmaking;Username=postgres;Password=postgres
-#      RabbitMq__Host: rabbitmq
+#      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=kombats;Username=postgres;Password=postgres
+#      ConnectionStrings__Redis: redis:6379
+#      Messaging__RabbitMq__Host: rabbitmq
 #    ports:
 #      - "5002:8080"
-
+#
 #  battle:
 #    build:
 #      context: .
@@ -108,14 +117,17 @@ services:
 #    container_name: kombats_battle
 #    restart: unless-stopped
 #    depends_on:
-#      - postgres
-#      - rabbitmq
-#      - redis
+#      postgres:
+#        condition: service_healthy
+#      rabbitmq:
+#        condition: service_started
+#      redis:
+#        condition: service_healthy
 #    environment:
 #      ASPNETCORE_ENVIRONMENT: Development
-#      ConnectionStrings__Database: Host=postgres;Port=5432;Database=kombats_battle;Username=postgres;Password=postgres
-#      RabbitMq__Host: rabbitmq
-#      Redis__ConnectionString: redis:6379
+#      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=kombats;Username=postgres;Password=postgres
+#      ConnectionStrings__Redis: redis:6379
+#      Messaging__RabbitMq__Host: rabbitmq
 #    ports:
 #      - "5003:8080"
 

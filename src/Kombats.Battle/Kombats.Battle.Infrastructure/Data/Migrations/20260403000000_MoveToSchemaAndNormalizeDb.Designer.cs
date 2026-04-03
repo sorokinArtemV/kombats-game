@@ -3,6 +3,7 @@ using System;
 using Kombats.Battle.Infrastructure.Data.DbContext;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Kombats.Battle.Infrastructure.Persistence.EF.Migrations
 {
     [DbContext(typeof(BattleDbContext))]
-    partial class BattleDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260403000000_MoveToSchemaAndNormalizeDb")]
+    partial class MoveToSchemaAndNormalizeDb
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
