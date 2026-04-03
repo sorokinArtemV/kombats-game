@@ -12,6 +12,7 @@ using Kombats.Matchmaking.Infrastructure.Repositories;
 using Kombats.Battle.Contracts.Battle;
 using Kombats.Players.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Serilog;
 using StackExchange.Redis;
 
@@ -69,6 +70,14 @@ builder.Services.AddScoped<ITransactionManager, TransactionManager>();
 builder.Services.AddSingleton<InstanceIdService>();
 
 // Register Infrastructure services
+builder.Services.AddSingleton<RedisLeaseLock>(sp =>
+{
+    var redis = sp.GetRequiredService<IConnectionMultiplexer>();
+    var logger = sp.GetRequiredService<ILogger<RedisLeaseLock>>();
+    var redisOptions = sp.GetRequiredService<IOptions<MatchmakingRedisOptions>>();
+    return new RedisLeaseLock(redis, logger, redisOptions.Value.DatabaseIndex);
+});
+builder.Services.AddSingleton<MatchmakingLeaseService>();
 builder.Services.AddScoped<OutboxDispatcherService>();
 
 // Register Application services
