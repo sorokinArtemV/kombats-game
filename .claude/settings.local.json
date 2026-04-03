@@ -15,7 +15,12 @@
       "Bash(xargs -I {} find {} -name \"*.cs\" -path \"*/Kombats.Players/*\")",
       "Bash(find:*)",
       "Bash(xargs wc:*)",
-      "Bash(git ls-tree:*)"
+      "Bash(git ls-tree:*)",
+      "Bash(grep -v \"\\\\\\\\\\\\\\\\obj\\\\\\\\\\\\\\\\\")",
+      "Bash(grep -v \"\\\\\\\\\\\\\\\\bin\\\\\\\\\\\\\\\\\")",
+      "Bash(wc -l \"D:\\\\1\\\\tmp\\\\kombats-game\\\\src\\\\Kombats.Matchmaking\"/**/*.cs)",
+      "Bash(xargs -I{} git show \"main:{}\")",
+      "Bash(read f:*)"
     ]
   }
 }

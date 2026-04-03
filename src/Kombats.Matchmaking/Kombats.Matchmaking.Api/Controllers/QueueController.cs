@@ -1,6 +1,6 @@
+using Kombats.Matchmaking.Api.Models;
 using Kombats.Matchmaking.Application.Abstractions;
 using Kombats.Matchmaking.Application.UseCases;
-using Kombats.Matchmaking.Domain;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Kombats.Matchmaking.Api.Controllers;
@@ -95,43 +95,3 @@ public class QueueController : ControllerBase
         return Ok(QueueStatusResponse.FromStatus(status));
     }
 }
-
-public class JoinQueueRequest
-{
-    public required Guid PlayerId { get; init; }
-    public string? Variant { get; init; }
-}
-
-public class LeaveQueueRequest
-{
-    public required Guid PlayerId { get; init; }
-    public string? Variant { get; init; }
-}
-
-public class QueueStatusResponse
-{
-    public required string Status { get; init; }
-    public Guid? MatchId { get; init; }
-    public Guid? BattleId { get; init; }
-    public string? MatchState { get; init; }
-
-    public static QueueStatusResponse FromStatus(PlayerMatchStatus status)
-    {
-        return status.State switch
-        {
-            PlayerMatchState.Searching => new QueueStatusResponse
-            {
-                Status = "Searching"
-            },
-            PlayerMatchState.Matched => new QueueStatusResponse
-            {
-                Status = "Matched",
-                MatchId = status.MatchId,
-                BattleId = status.BattleId,
-                MatchState = status.MatchState?.ToString()
-            },
-            _ => throw new InvalidOperationException($"Unknown player match state: {status.State}")
-        };
-    }
-}
-

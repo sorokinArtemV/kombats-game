@@ -15,3 +15,9 @@ public class MatchCreatedResult
         MatchInfo = matchInfo
     };
 }
+
+public enum MatchCreatedResultType
+{
+    NoMatch,
+    MatchCreated
+}

@@ -2,13 +2,29 @@
 
 ## Current Focus
 
-Current active focus is **service-level refactoring and structural quality improvement**, starting with **Kombats.Battle** as the pilot service.
+“current focus = service-level refactoring workflow, currently applied to Kombats.Matchmaking”
+Battle is a completed pilot, not current target
+lessons from Battle are process lessons, not structure template
 
-The codebase is already integrated and working.
-The current goal is **not** to rebuild the system or redesign cross-service architecture.
-The goal is to improve **internal service structure, maintainability, readability, separation of concerns, and code hygiene** to the level expected from a strong engineering team.
-
+Battle refactoring workflow is completed or established as pilot
+current active target is Kombats.Matchmaking
+reuse the same process discipline and quality bar
+do not force Battle-specific structural decisions onto Matchmaking
+treat Battle lessons as workflow guidance, not service template
 ---
+
+## Current Refactoring Target
+
+Current active service refactoring target: `Kombats.Matchmaking`.
+
+Use the same disciplined workflow previously used for `Kombats.Battle`:
+- audit
+- constrained execution spec
+- isolated implementation batches
+- separate review per batch
+
+Do not assume Battle structure must be copied into Matchmaking.
+Reuse the process discipline, not the service shape.
 
 ## Active Baseline
 

@@ -193,9 +193,3 @@ internal sealed class ParticipantSnapshotPayload
     public int Intuition { get; init; }
     public int Vitality { get; init; }
 }
-
-public enum MatchCreatedResultType
-{
-    NoMatch,
-    MatchCreated
-}

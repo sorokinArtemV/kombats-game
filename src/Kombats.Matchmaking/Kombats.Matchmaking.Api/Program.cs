@@ -41,6 +41,10 @@ builder.Services.AddDbContext<MatchmakingDbContext>(options =>
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnectionString));
 
+// Configure Matchmaking Redis options
+builder.Services.Configure<MatchmakingRedisOptions>(
+    builder.Configuration.GetSection(MatchmakingRedisOptions.SectionName));
+
 // Configure Matchmaking Worker options
 builder.Services.Configure<MatchmakingWorkerOptions>(
     builder.Configuration.GetSection(MatchmakingWorkerOptions.SectionName));
