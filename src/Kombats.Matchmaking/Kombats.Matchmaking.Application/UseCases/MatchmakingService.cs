@@ -16,6 +16,7 @@ public class MatchmakingService
     private readonly ITransactionManager _transactionManager;
     private readonly IPlayerCombatProfileRepository _profileRepository;
     private readonly ILogger<MatchmakingService> _logger;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -42,11 +43,12 @@ public class MatchmakingService
     /// Performs a single matchmaking tick: tries to pop a pair and create a match.
     /// Uses transactional outbox pattern: all operations happen in one DB transaction.
     /// </summary>
-    public async Task<MatchCreatedResult> MatchmakingTickAsync(string variant, CancellationToken cancellationToken = default)
+    public async Task<MatchCreatedResult> MatchmakingTickAsync(string variant,
+        CancellationToken cancellationToken = default)
     {
         // Try to pop a pair atomically
         var pair = await _queueStore.TryPopPairAsync(variant, cancellationToken);
-        
+
         if (pair == null)
         {
             // No pair available
@@ -166,30 +168,4 @@ public class MatchmakingService
         Intuition = profile.Intuition,
         Vitality = profile.Vitality
     };
-}
-
-/// <summary>
-/// Outbox-serializable payload matching the Battle.Contracts.CreateBattle shape.
-/// Matchmaking does not reference Battle.Contracts directly at the application layer;
-/// the outbox dispatcher deserializes this to the typed contract before sending.
-/// </summary>
-internal sealed class CreateBattleOutboxPayload
-{
-    public Guid BattleId { get; init; }
-    public Guid MatchId { get; init; }
-    public DateTimeOffset RequestedAt { get; init; }
-    public ParticipantSnapshotPayload PlayerA { get; init; } = null!;
-    public ParticipantSnapshotPayload PlayerB { get; init; } = null!;
-}
-
-internal sealed class ParticipantSnapshotPayload
-{
-    public Guid IdentityId { get; init; }
-    public Guid CharacterId { get; init; }
-    public string? Name { get; init; }
-    public int Level { get; init; }
-    public int Strength { get; init; }
-    public int Agility { get; init; }
-    public int Intuition { get; init; }
-    public int Vitality { get; init; }
 }
