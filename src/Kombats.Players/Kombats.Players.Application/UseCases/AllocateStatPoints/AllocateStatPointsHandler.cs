@@ -3,7 +3,6 @@ using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Exceptions;
 using Kombats.Shared.Types;
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
 
 namespace Kombats.Players.Application.UseCases.AllocateStatPoints;
 
@@ -74,7 +73,7 @@ internal sealed class AllocateStatPointsHandler
         {
             await _uow.SaveChangesAsync(ct);
         }
-        catch (DbUpdateConcurrencyException)
+        catch (ConcurrencyConflictException)
         {
             return Result.Failure<AllocateStatPointsResult>(
                 Error.Conflict(

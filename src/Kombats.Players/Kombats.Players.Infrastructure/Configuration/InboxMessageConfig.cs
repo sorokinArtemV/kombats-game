@@ -1,6 +1,4 @@
-﻿using Kombats.Players.Infrastructure.Data;
-using Kombats.Players.Domain.Entities;
-using Kombats.Players.Infrastructure.Messaging.Inbox;
+﻿using Kombats.Players.Infrastructure.Messaging.Inbox;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

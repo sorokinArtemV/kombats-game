@@ -4,12 +4,13 @@ using Kombats.Players.Infrastructure.Data;
 using Kombats.Players.Infrastructure.Persistence.EF;
 using Kombats.Players.Infrastructure.Persistence.Repository;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Kombats.Players.Infrastructure;
 
-public static class gitDependencyInjection
+public static class DependencyInjection
 {
     public static IServiceCollection AddPlayersInfrastructure(
         this IServiceCollection services,
@@ -23,8 +24,10 @@ public static class gitDependencyInjection
         services.AddDbContext<PlayersDbContext>(options =>
         {
             options
-                .UseNpgsql(configuration.GetConnectionString("PostgresConnection"))
-                .UseSnakeCaseNamingConvention();
+                .UseNpgsql(configuration.GetConnectionString("PostgresConnection"), npgsql =>
+                    npgsql.MigrationsHistoryTable("__ef_migrations_history", PlayersDbContext.Schema))
+                .UseSnakeCaseNamingConvention()
+                .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
         });
 
         return services;

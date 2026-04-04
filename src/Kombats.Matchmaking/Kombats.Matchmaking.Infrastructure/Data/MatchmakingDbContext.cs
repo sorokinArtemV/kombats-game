@@ -101,8 +101,7 @@ public class MatchmakingDbContext : DbContext
                 .HasDefaultValue(0);
 
             // Index for querying pending messages
-            entity.HasIndex(e => new { e.Status, e.OccurredAtUtc })
-                .HasDatabaseName("IX_OutboxMessages_Status_OccurredAtUtc");
+            entity.HasIndex(e => new { e.Status, e.OccurredAtUtc });
         });
 
         // Configure PlayerCombatProfileEntity

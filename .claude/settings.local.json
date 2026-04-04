@@ -21,7 +21,10 @@
       "Bash(wc -l \"D:\\\\1\\\\tmp\\\\kombats-game\\\\src\\\\Kombats.Matchmaking\"/**/*.cs)",
       "Bash(xargs -I{} git show \"main:{}\")",
       "Bash(read f:*)",
-      "Bash(xxd)"
+      "Bash(xxd)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(grep -E \"\\\\.cs$|\\\\.Designer\")",
+      "Bash(dotnet restore:*)"
     ]
   }
 }

@@ -12,6 +12,7 @@ using Kombats.Matchmaking.Infrastructure.Repositories;
 using Kombats.Battle.Contracts.Battle;
 using Kombats.Players.Contracts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Options;
 using Serilog;
 using StackExchange.Redis;
@@ -35,7 +36,10 @@ builder.Services.AddDbContext<MatchmakingDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
                            ?? throw new InvalidOperationException("DefaultConnection connection string is required");
-    options.UseNpgsql(connectionString);
+    options.UseNpgsql(connectionString, npgsql =>
+            npgsql.MigrationsHistoryTable("__ef_migrations_history", MatchmakingDbContext.Schema))
+        .UseSnakeCaseNamingConvention()
+        .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
 });
 
 // Configure Redis

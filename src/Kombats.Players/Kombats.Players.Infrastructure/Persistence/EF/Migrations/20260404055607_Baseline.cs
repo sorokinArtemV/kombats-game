@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class Baseline : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -29,6 +29,11 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                     unspent_points = table.Column<int>(type: "integer", nullable: false),
                     revision = table.Column<int>(type: "integer", nullable: false),
                     onboarding_state = table.Column<int>(type: "integer", nullable: false),
+                    total_xp = table.Column<long>(type: "bigint", nullable: false),
+                    level = table.Column<int>(type: "integer", nullable: false),
+                    leveling_version = table.Column<int>(type: "integer", nullable: false),
+                    wins = table.Column<int>(type: "integer", nullable: false),
+                    losses = table.Column<int>(type: "integer", nullable: false),
                     created = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     updated = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -56,11 +61,19 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                 table: "characters",
                 column: "identity_id",
                 unique: true);
+
+            migrationBuilder.Sql("""
+                CREATE UNIQUE INDEX ix_characters_name_normalized
+                ON players.characters (LOWER(BTRIM(name)))
+                WHERE name IS NOT NULL;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.Sql("DROP INDEX IF EXISTS players.ix_characters_name_normalized;");
+
             migrationBuilder.DropTable(
                 name: "characters",
                 schema: "players");

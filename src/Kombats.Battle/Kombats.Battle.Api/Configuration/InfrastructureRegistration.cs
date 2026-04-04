@@ -3,6 +3,7 @@ using Combats.Infrastructure.Messaging.DependencyInjection;
 using Kombats.Battle.Api.Workers;
 using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Contracts.Battle;
+using Kombats.Battle.Infrastructure.Data;
 using Kombats.Battle.Infrastructure.Data.DbContext;
 using Kombats.Battle.Infrastructure.Messaging.Consumers;
 using Kombats.Battle.Infrastructure.Messaging.Projections;
@@ -12,6 +13,7 @@ using Kombats.Battle.Infrastructure.Rules;
 using Kombats.Battle.Infrastructure.State.Redis;
 using Kombats.Battle.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using StackExchange.Redis;
 
 namespace Kombats.Battle.Api.Configuration;
@@ -43,7 +45,10 @@ internal static class InfrastructureRegistration
         {
             var connectionString = configuration.GetConnectionString("DefaultConnection")
                                    ?? throw new InvalidOperationException("DefaultConnection connection string is required");
-            options.UseNpgsql(connectionString);
+            options.UseNpgsql(connectionString, npgsql =>
+                    npgsql.MigrationsHistoryTable("__ef_migrations_history", BattleDbContext.Schema))
+                .UseSnakeCaseNamingConvention()
+                .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
         });
     }
 

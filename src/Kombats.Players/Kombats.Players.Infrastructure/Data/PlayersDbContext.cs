@@ -1,5 +1,4 @@
-﻿using Kombats.Players.Infrastructure.Configuration;
-using Kombats.Players.Domain.Entities;
+﻿using Kombats.Players.Domain.Entities;
 using Kombats.Players.Infrastructure.Messaging.Inbox;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,6 +6,8 @@ namespace Kombats.Players.Infrastructure.Data;
 
 public sealed class PlayersDbContext : DbContext
 {
+    public const string Schema = "players";
+
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
@@ -14,7 +15,7 @@ public sealed class PlayersDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.HasDefaultSchema(Schemas.Players);
+        modelBuilder.HasDefaultSchema(Schema);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlayersDbContext).Assembly);
     }

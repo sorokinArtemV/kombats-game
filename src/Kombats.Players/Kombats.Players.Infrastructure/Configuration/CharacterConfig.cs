@@ -11,18 +11,14 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
         b.ToTable("characters");
 
         b.HasKey(x => x.Id);
-        b.Property(x => x.Id).HasColumnName("id");
 
-        b.Property(x => x.IdentityId)
-            .IsRequired()
-            .HasColumnName("identity_id");
+        b.Property(x => x.IdentityId).IsRequired();
         b.HasIndex(x => x.IdentityId).IsUnique();
 
         b.Property(x => x.Name).HasMaxLength(16);
 
         b.Property(x => x.OnboardingState)
             .IsRequired()
-            .HasColumnName("onboarding_state")
             .HasConversion<int>();
 
         b.Property(x => x.Revision)
@@ -34,11 +30,11 @@ public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
         b.Property(x => x.Intuition).IsRequired();
         b.Property(x => x.Vitality).IsRequired();
         b.Property(x => x.UnspentPoints).IsRequired();
-        b.Property(x => x.TotalXp).IsRequired().HasColumnName("total_xp");
-        b.Property(x => x.Level).IsRequired().HasColumnName("level");
-        b.Property(x => x.LevelingVersion).IsRequired().HasColumnName("leveling_version");
-        b.Property(x => x.Wins).IsRequired().HasColumnName("wins");
-        b.Property(x => x.Losses).IsRequired().HasColumnName("losses");
+        b.Property(x => x.TotalXp).IsRequired();
+        b.Property(x => x.Level).IsRequired();
+        b.Property(x => x.LevelingVersion).IsRequired();
+        b.Property(x => x.Wins).IsRequired();
+        b.Property(x => x.Losses).IsRequired();
         b.Property(x => x.Created).IsRequired();
         b.Property(x => x.Updated).IsRequired();
     }

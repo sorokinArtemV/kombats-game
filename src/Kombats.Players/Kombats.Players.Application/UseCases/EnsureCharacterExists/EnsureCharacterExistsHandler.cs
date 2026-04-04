@@ -1,11 +1,9 @@
 using Kombats.Players.Application;
 using Kombats.Players.Application.Abstractions;
-using Kombats.Players.Application.Helpers;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Entities;
 using Kombats.Shared.Types;
 using MassTransit;
-using Microsoft.EntityFrameworkCore;
 
 namespace Kombats.Players.Application.UseCases.EnsureCharacterExists;
 
@@ -47,7 +45,7 @@ internal sealed class EnsureCharacterExistsHandler
 
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }
-        catch (DbUpdateException ex) when (DbConflictHelper.IsUniqueViolation(ex, DbConflictHelper.IdentityIdUniqueIndex))
+        catch (UniqueConstraintConflictException ex) when (ex.ConflictKind == UniqueConflictKind.IdentityId)
         {
             // Concurrent create — character already persisted by another request.
             // That request is responsible for publishing the event.
@@ -61,13 +59,6 @@ internal sealed class EnsureCharacterExistsHandler
                 Error.Conflict(
                     "EnsureCharacterExists.ConcurrentCreate",
                     "Character was created by another request. Retry the operation."));
-        }
-        catch (DbUpdateException ex)
-        {
-            return Result.Failure<CharacterStateResult>(
-                Error.Problem(
-                    "EnsureCharacterExists.SaveFailed",
-                    $"Unexpected database error: {ex.Message}"));
         }
     }
 }
