@@ -19,7 +19,7 @@ builder.Services.AddCurrentIdentity();
 builder.Services.AddValidation(Assembly.GetExecutingAssembly());
 builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
 
-builder.Services.AddSwaggerDocumentation();
+builder.Services.AddApiDocumentation();
 
 builder.Services.AddCors(options =>
 {
@@ -68,7 +68,7 @@ using (var scope = app.Services.CreateScope())
     await dbContext.Database.MigrateAsync();
 }
 
-app.UseSwaggerDocumentation();
+app.UseApiDocumentation();
 
 app.UseHttpsRedirection();
 

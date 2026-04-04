@@ -14,6 +14,8 @@ using Kombats.Players.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Options;
+using Microsoft.OpenApi;
+using Scalar.AspNetCore;
 using Serilog;
 using StackExchange.Redis;
 
@@ -29,7 +31,41 @@ builder.Host.UseSerilog((context, services, loggerConfiguration) =>
 
 // Add services to the container
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.AddDocumentTransformer((document, context, ct) =>
+    {
+        document.Info = new OpenApiInfo
+        {
+            Title = "Kombats Matchmaking Service",
+            Version = "v1",
+            Description = "Kombats Matchmaking Service"
+        };
+
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "Bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Enter the JWT access token"
+        };
+
+        document.Security ??= [];
+        document.Security.Add(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecuritySchemeReference("Bearer", document),
+                []
+            }
+        });
+
+        return Task.CompletedTask;
+    });
+});
 
 // Configure PostgreSQL DbContext for Matchmaking service
 builder.Services.AddDbContext<MatchmakingDbContext>(options =>
@@ -114,11 +150,14 @@ var app = builder.Build();
 
 app.UseSerilogRequestLogging();
 
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
+// API documentation
+app.MapOpenApi();
+app.MapScalarApiReference(options =>
 {
-    app.MapOpenApi();
-}
+    options
+        .WithTitle("Kombats Matchmaking API")
+        .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
+});
 
 app.UseHttpsRedirection();
 app.UseRouting();

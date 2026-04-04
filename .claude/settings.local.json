@@ -24,7 +24,16 @@
       "Bash(xxd)",
       "Bash(echo \"exit: $?\")",
       "Bash(grep -E \"\\\\.cs$|\\\\.Designer\")",
-      "Bash(dotnet restore:*)"
+      "Bash(dotnet restore:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet remove:*)",
+      "Bash(dotnet list:*)",
+      "Bash(dotnet-dump)",
+      "Read(//c/Users/asoro/.nuget/packages/microsoft.openapi/2.0.0/lib/**)",
+      "Bash(python3 -c \" import subprocess, re result = subprocess.run\\(['dotnet', 'build', '--no-restore', '-v', 'q'], capture_output=True, text=True, cwd='D:/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Players/Kombats.Players.Api'\\) \")",
+      "Bash(python3 -c \" import subprocess result = subprocess.run\\( ['dotnet', 'tool', 'run', 'ildasm', '--help'], capture_output=True, text=True \\) print\\(result.stdout[:500]\\) print\\(result.stderr[:500]\\) \")",
+      "Bash(powershell:*)",
+      "Bash(grep -E \"Reference$|ReferenceType\")"
     ]
   }
 }
