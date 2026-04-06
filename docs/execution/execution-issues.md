@@ -75,3 +75,11 @@ The `Testcontainers.RabbitMq` `RabbitMqBuilder` creates containers with default 
 **Status:** Resolved
 
 The pre-existing `Kombats.Messaging` library configured `AddEntityFrameworkOutbox<TDbContext>` and `UseEntityFrameworkOutbox<TDbContext>` on endpoint configurators, but did NOT call `UseBusOutbox()`. Without `UseBusOutbox()`, the `IPublishEndpoint` and `ISendEndpointProvider` injected via DI publish directly to RabbitMQ, bypassing the transactional outbox. Only messages published from within a consumer context would use the outbox. This violated AD-01 (all event publication must go through the outbox). Added `o.UseBusOutbox()` inside the `AddEntityFrameworkOutbox<TDbContext>` configuration. All three services benefit from this fix when they adopt `Kombats.Messaging`.
+
+## Batch 0F
+
+### EI-011: Players startup fails on empty migration history with existing tables
+**Severity:** Low
+**Status:** Pre-existing — resolves during Players replacement
+
+Players service crashes on startup when `players.__ef_migrations_history` table exists but is empty while the `players.characters` table already exists. `Database.MigrateAsync()` (called in `Program.cs:68`) attempts to apply the baseline migration which tries to `CREATE TABLE players.characters`, hitting `42P07: relation "characters" already exists`. This is a database state issue from a prior run that created tables without recording migrations. Workaround: manually insert the baseline migration record. This pattern (`MigrateAsync` on startup) is forbidden by AD-13 and will be eliminated when Players moves to target Bootstrap architecture. Not caused by foundation changes.

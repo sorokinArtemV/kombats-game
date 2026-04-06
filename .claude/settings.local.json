@@ -59,7 +59,11 @@
       "Bash(dotnet:*)",
       "Bash(git checkout:*)",
       "Bash(git mv:*)",
-      "Bash(docker version:*)"
+      "Bash(docker version:*)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(PGPASSWORD=postgres psql -h localhost -U postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'kombats'\")",
+      "Bash(docker exec:*)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

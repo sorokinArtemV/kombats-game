@@ -321,3 +321,101 @@ Total: 25 tests (24 unit + 1 integration).
 | All 24 projects in `Kombats.sln` | Pass (19 source + 5 test) |
 | Existing service consumers unchanged | Pass (Battle and Matchmaking `AddMessaging<T>` calls unaffected) |
 | No changes outside Batch 0D scope | Pass |
+
+---
+
+## Batch 0E — Legacy Solution File Removal
+
+**Date:** 2026-04-06
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Tickets Executed
+
+#### F-10: Legacy Solution File Removal
+**Status:** Done
+
+Deleted:
+- `src/Kombats.Battle/Kombats.Battle.sln` — per-service legacy solution
+- `src/Kombats.Matchmaking/Kombats.Matchmaking.sln` — per-service legacy solution
+- `Kombats.slnx` — legacy XML solution format (coexisted since F-02)
+
+Retained:
+- `Kombats.sln` — unified solution file (sole solution file going forward)
+
+Verification:
+- No `.sln` files remain except `Kombats.sln`
+- No `.slnx` files remain
+- `dotnet build Kombats.sln` — 0 errors (MSB3277 warnings only — EI-007, pre-existing)
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors) |
+| No per-service `.sln` files remain | Pass |
+| No `.slnx` files remain | Pass |
+| `Kombats.sln` is the sole solution file | Pass |
+| No changes outside Batch 0E scope | Pass |
+
+---
+
+## Batch 0F — Verify Existing Services Build and Run
+
+**Date:** 2026-04-06
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Tickets Executed
+
+#### F-12: Verify Existing Services Build and Run
+**Status:** Done
+
+**Build verification:**
+- `dotnet build Kombats.sln` — 0 errors, MSB3277 warnings only (EI-007, pre-existing)
+- All 24 projects build successfully (19 source + 5 test)
+
+**Test verification:**
+- `dotnet test Kombats.sln` — 25 tests passed (all in Kombats.Messaging.Tests)
+- Placeholder test projects (Players Domain/Application/Infrastructure/Api) have no tests yet — expected, these are created by F-05 for use during Phase 2
+
+**Docker Compose verification:**
+- `docker compose config --quiet` — exit code 0
+- `docker compose up` — Postgres, RabbitMQ, Redis all started and healthy
+- Keycloak/Keycloak-DB: port 5433 conflict on local machine (pre-existing, environment-specific, not a foundation issue)
+
+**Startup verification:**
+
+| Service | Started | Listening | MassTransit | Consumers | Workers | Notes |
+|---|---|---|---|---|---|---|
+| Matchmaking | Yes | http://localhost:5118 | Bus started | 3 (PlayerCombatProfileChanged, BattleCreated, BattleCompleted) | MatchmakingWorker, MatchTimeoutWorker, OutboxDispatcherWorker | EF migration history query failed (no prior migrations in schema), but service started |
+| Battle | Yes | http://localhost:5000 | Bus started | 2 (CreateBattle, BattleCompletedProjection) | TurnDeadlineWorker | EF migration history query failed (no prior migrations in schema), but service started |
+| Players | Yes (after fix) | Yes | Bus started | 1 (BattleCompleted) | None | See EI-011 |
+
+**Players startup issue (EI-011):** Players crashed on first attempt due to `Database.MigrateAsync()` — the `players.__ef_migrations_history` table existed but was empty, while `players.characters` already existed from a prior run. EF tried to re-create the table and hit `42P07: relation "characters" already exists`. After manually inserting the baseline migration record, Players started successfully. This is a **pre-existing database state issue** (not caused by foundation changes) and is also an instance of the forbidden `Database.MigrateAsync()` on startup pattern (AD-13). Will be eliminated when Players is replaced with target Bootstrap architecture.
+
+**Foundation changes verified as safe:**
+- F-01 (central package management): all three services build and start with centrally-managed versions
+- F-02 (unified solution): `Kombats.sln` correctly includes all projects
+- F-03 (docker-compose): infrastructure containers start and services connect
+- F-06 (messaging rename): Matchmaking and Battle use renamed `Kombats.Messaging` — both start and connect to RabbitMQ
+- F-07 (messaging alignment): MassTransit bus starts, outbox configured, consumers registered on all services using `Kombats.Messaging`
+- F-08 (abstractions): no startup impact (not yet consumed by legacy services)
+- F-09 (contracts): no startup impact (additive fields only)
+- F-10 (legacy solution removal): no impact, `Kombats.sln` is sole solution
+- F-11 (auth helper): no startup impact (not yet consumed by legacy services)
+- Players uses its own `Kombats.Shared.Messaging` (legacy, not yet migrated) — still works correctly
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors) |
+| `dotnet test Kombats.sln` | Pass (25 tests) |
+| `docker compose config` | Pass |
+| Infrastructure containers healthy | Pass (Postgres, RabbitMQ, Redis) |
+| Matchmaking startup | Pass |
+| Battle startup | Pass |
+| Players startup | Pass (after migration history fix — EI-011, pre-existing) |
+| No foundation-caused regressions | Pass |
+| Foundation phase complete | **Yes — Phase 2 (Players) may begin** |
