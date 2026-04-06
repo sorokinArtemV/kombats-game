@@ -24,6 +24,18 @@ All version normalizations verified via successful build. No runtime verificatio
 
 `Directory.Build.props` now provides `TargetFramework`, `LangVersion`, `Nullable`, `ImplicitUsings`. These are still present in individual `.csproj` files (redundant but harmless). The F-01 ticket scope explicitly covered removing `PackageReference Version` attributes only. Removing redundant PropertyGroup entries can be done as part of per-service replacement tickets.
 
+### EI-004: Kombats.slnx overwritten during Kombats.sln creation
+**Severity:** Low
+**Status:** Resolved
+
+`.NET 10 SDK `dotnet new sln` defaults to `.slnx` format. The first `--force` invocation overwrote `Kombats.slnx` content. Restored from git. Second invocation used `--format sln` to create the classic `.sln` file. Both coexist until F-10.
+
+### EI-005: IQueryHandler method name alignment
+**Severity:** Info
+**Status:** Resolved by design
+
+Legacy `IQueryHandler.Handle` (in `Kombats.Shared.Types`) was inconsistent with `ICommandHandler.HandleAsync`. The new `Kombats.Abstractions.IQueryHandler` uses `HandleAsync` for consistency. Legacy code is unaffected — migration happens per-service.
+
 ### EI-003: Test framework package versions are unvalidated
 **Severity:** Info
 **Status:** Expected — validated in F-05

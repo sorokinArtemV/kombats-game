@@ -75,3 +75,60 @@ Validation: `dotnet build Kombats.slnx` — 0 new warnings introduced.
 | No inline `Version=` in any `.csproj` | Pass (grep confirmed) |
 | `docker compose config --quiet` | Pass |
 | No changes outside Batch 0A scope | Pass |
+
+---
+
+## Batch 0B — Unified Solution & Abstractions
+
+**Date:** 2026-04-06
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Tickets Executed
+
+#### F-02: Unified Solution File
+**Status:** Done
+
+Created:
+- `Kombats.sln` — classic `.sln` format (not `.slnx`) with all 19 projects organized into solution folders:
+  - `src/Battle` — 6 projects (Api, Application, Contracts, Domain, Infrastructure, Realtime.Contracts)
+  - `src/Matchmaking` — 5 projects (Api, Application, Contracts, Domain, Infrastructure)
+  - `src/Players` — 6 projects (Api, Application, Contracts, Domain, Infrastructure, Shared)
+  - `src/Common` — 2 projects (Infrastructure.Messaging, Abstractions)
+
+Notes:
+- `Matchmaking.Contracts` was missing from `Kombats.slnx` — now included in `Kombats.sln`.
+- `Kombats.slnx` restored from git after accidental overwrite by `dotnet new sln --force`. Both coexist until F-10.
+- Used `--format sln` flag because .NET 10 SDK defaults to `.slnx` format.
+
+Validation: `dotnet build Kombats.sln` — 0 warnings, 0 errors. `dotnet test Kombats.sln` — runs (zero tests).
+
+#### F-08: Create Kombats.Abstractions Project
+**Status:** Done
+
+Created:
+- `src/Kombats.Common/Kombats.Abstractions/Kombats.Abstractions.csproj` — `Microsoft.NET.Sdk`, zero NuGet dependencies
+- `ErrorType.cs` — enum: Failure, Validation, Problem, NotFound, Conflict
+- `Error.cs` — record with factory methods per ErrorType
+- `ValidationError.cs` — sealed record extending Error with aggregated errors
+- `Result.cs` — `Result` and `Result<TValue>` with success/failure pattern
+- `ICommand.cs` — `ICommand` (void) and `ICommand<TResponse>` marker interfaces
+- `IQuery.cs` — `IQuery<TResponse>` marker interface
+- `ICommandHandler.cs` — `ICommandHandler<TCommand>` and `ICommandHandler<TCommand, TResponse>`
+- `IQueryHandler.cs` — `IQueryHandler<TQuery, TResponse>`
+
+All types use `Kombats.Abstractions` namespace. Patterns match existing `Kombats.Shared.Types` but under the target namespace. `IQueryHandler.HandleAsync` method name aligned with `ICommandHandler` (was `Handle` in legacy).
+
+Validation: `dotnet build Kombats.sln` — 0 warnings, 0 errors. Project included in solution under `src/Common` folder.
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 warnings, 0 errors) |
+| `dotnet build Kombats.slnx` | Pass (legacy still works) |
+| `dotnet test Kombats.sln` | Pass (zero tests) |
+| All 19 projects in `Kombats.sln` | Pass |
+| Solution folders match target structure | Pass |
+| `Kombats.Abstractions` has zero NuGet deps | Pass |
+| No changes outside Batch 0B scope | Pass |

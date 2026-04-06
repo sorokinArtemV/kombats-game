@@ -52,7 +52,12 @@
       "Bash(grep -E '\\\\.\\(json|props|editorconfig|yml|yaml\\)$')",
       "Bash(git rm:*)",
       "Bash(docker compose:*)",
-      "Bash(echo \"Exit code: $?\")"
+      "Bash(echo \"Exit code: $?\")",
+      "Bash(dotnet new sln:*)",
+      "Bash(dotnet sln:*)",
+      "Bash(ls:*)",
+      "Bash(dotnet:*)",
+      "Bash(git checkout:*)"
     ]
   }
 }
