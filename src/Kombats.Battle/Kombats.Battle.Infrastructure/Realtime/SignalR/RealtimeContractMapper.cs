@@ -2,7 +2,7 @@ using Kombats.Battle.Application.ReadModels;
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Domain.Rules;
-using Combats.Battle.Realtime.Contracts;
+using Kombats.Battle.Realtime.Contracts;
 using Microsoft.Extensions.Logging;
 
 namespace Kombats.Battle.Infrastructure.Realtime.SignalR;

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Combats.Infrastructure.Messaging.Naming;
+namespace Kombats.Messaging.Naming;
 
 public static class EntityNameFormatter
 {

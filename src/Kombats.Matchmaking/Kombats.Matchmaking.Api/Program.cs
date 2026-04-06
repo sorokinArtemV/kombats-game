@@ -1,4 +1,4 @@
-using Combats.Infrastructure.Messaging.DependencyInjection;
+using Kombats.Messaging.DependencyInjection;
 using Kombats.Matchmaking.Api.Workers;
 using Kombats.Matchmaking.Application.Abstractions;
 using Kombats.Matchmaking.Application.UseCases;

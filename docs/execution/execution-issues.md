@@ -38,6 +38,20 @@ Legacy `IQueryHandler.Handle` (in `Kombats.Shared.Types`) was inconsistent with 
 
 ### EI-003: Test framework package versions are unvalidated
 **Severity:** Info
-**Status:** Expected — validated in F-05
+**Status:** Resolved in F-05
 
-Test framework packages (`xunit`, `FluentAssertions`, `NSubstitute`, `Testcontainers.*`, `MassTransit.Testing`) are declared in `Directory.Packages.props` but no test projects currently reference them. Their versions will be validated when test projects are created in F-05. If a version is unavailable, F-05 will need to update `Directory.Packages.props`.
+Test framework packages validated during F-05. All packages restore and build correctly except `MassTransit.Testing` — see EI-006.
+
+## Batch 0C
+
+### EI-006: MassTransit.Testing package does not exist in 8.3.0
+**Severity:** Low
+**Status:** Resolved
+
+`MassTransit.Testing` is declared in `Directory.Packages.props` but does not exist as a separate NuGet package for MassTransit 8.3.0. In MassTransit v8+, testing utilities are included in the main `MassTransit` package. The `Kombats.Messaging.Tests` project references `MassTransit` directly instead. The `MassTransit.Testing` entry in `Directory.Packages.props` is harmless (unreferenced) and can be cleaned up in a future batch.
+
+### EI-007: MSB3277 assembly version conflict warnings in test projects
+**Severity:** Info
+**Status:** Expected — resolves during service replacement
+
+`Kombats.Players.Infrastructure.Tests` and `Kombats.Players.Api.Tests` emit MSB3277 warnings about `Microsoft.EntityFrameworkCore.Relational` version conflicts (10.0.1 vs 10.0.3). This is caused by `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.0 shipping with `EFCore.Relational` 10.0.1 while central management declares 10.0.3. The transitive reference from the legacy Infrastructure project pulls in the older version. This resolves naturally when the service is replaced with target-architecture code. No action needed now.

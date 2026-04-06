@@ -19,4 +19,5 @@ public record PlayerCombatProfileChanged
     public bool IsReady { get; init; }
     public int Revision { get; init; }
     public DateTimeOffset OccurredAt { get; init; }
+    public int Version { get; init; } = 1;
 }

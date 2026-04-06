@@ -9,7 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Kombats.Common\Kombats.Infrastructure.Messaging\Kombats.Infrastructure.Messaging.csproj" />
+        <ProjectReference Include="..\..\Kombats.Common\Kombats.Messaging\Kombats.Messaging.csproj" />
         <ProjectReference Include="..\Kombats.Matchmaking.Application\Kombats.Matchmaking.Application.csproj" />
         <ProjectReference Include="..\Kombats.Matchmaking.Infrastructure\Kombats.Matchmaking.Infrastructure.csproj" />
     </ItemGroup>

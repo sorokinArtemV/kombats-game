@@ -1,6 +1,6 @@
 using Kombats.Battle.Application.UseCases.Lifecycle;
 using Kombats.Battle.Application.UseCases.Turns;
-using Combats.Battle.Realtime.Contracts;
+using Kombats.Battle.Realtime.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;

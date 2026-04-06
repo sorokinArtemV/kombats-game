@@ -5,8 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <RootNamespace>Combats.Infrastructure.Messaging</RootNamespace>
+    <RootNamespace>Kombats.Messaging</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

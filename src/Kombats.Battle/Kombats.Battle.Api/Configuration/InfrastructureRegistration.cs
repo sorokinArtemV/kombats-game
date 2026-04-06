@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using Combats.Infrastructure.Messaging.DependencyInjection;
+using Kombats.Messaging.DependencyInjection;
 using Kombats.Battle.Api.Workers;
 using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Contracts.Battle;

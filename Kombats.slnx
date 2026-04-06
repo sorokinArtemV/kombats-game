@@ -8,7 +8,7 @@
     <Project Path="src/Kombats.Battle/Kombats.Battle.Realtime.Contracts/Kombats.Battle.Realtime.Contracts.csproj" />
   </Folder>
   <Folder Name="/Common/">
-    <Project Path="src/Kombats.Common/Kombats.Infrastructure.Messaging/Kombats.Infrastructure.Messaging.csproj" />
+    <Project Path="src/Kombats.Common/Kombats.Messaging/Kombats.Messaging.csproj" />
   </Folder>
   <Folder Name="/Matchmaking/">
     <Project Path="src/Kombats.Matchmaking/Kombats.Matchmaking.Api/Kombats.Matchmaking.Api.csproj" />

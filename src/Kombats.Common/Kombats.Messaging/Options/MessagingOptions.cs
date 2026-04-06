@@ -1,4 +1,4 @@
-namespace Combats.Infrastructure.Messaging.Options;
+namespace Kombats.Messaging.Options;
 
 public class MessagingOptions
 {

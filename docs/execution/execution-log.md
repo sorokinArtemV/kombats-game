@@ -132,3 +132,114 @@ Validation: `dotnet build Kombats.sln` — 0 warnings, 0 errors. Project include
 | Solution folders match target structure | Pass |
 | `Kombats.Abstractions` has zero NuGet deps | Pass |
 | No changes outside Batch 0B scope | Pass |
+
+---
+
+## Batch 0C — Test Infrastructure, Messaging Rename, Contracts, Auth
+
+**Date:** 2026-04-06
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Tickets Executed
+
+#### F-05: Test Infrastructure Baseline
+**Status:** Done
+
+Created:
+- `tests/Kombats.Players/Kombats.Players.Domain.Tests/` — xUnit, FluentAssertions, NSubstitute; references Players.Domain
+- `tests/Kombats.Players/Kombats.Players.Application.Tests/` — xUnit, FluentAssertions, NSubstitute; references Players.Application, Players.Domain
+- `tests/Kombats.Players/Kombats.Players.Infrastructure.Tests/` — xUnit, FluentAssertions, NSubstitute, Testcontainers.PostgreSql, Testcontainers.RabbitMq; references Players.Infrastructure, Application, Domain
+- `tests/Kombats.Players/Kombats.Players.Api.Tests/` — xUnit, FluentAssertions, NSubstitute, FrameworkReference Microsoft.AspNetCore.App; references Players.Api
+- `tests/Kombats.Common/Kombats.Messaging.Tests/` — xUnit, FluentAssertions, NSubstitute, MassTransit, Testcontainers.PostgreSql, Testcontainers.RabbitMq; references Kombats.Messaging
+- Empty placeholder directories: `tests/Kombats.Matchmaking/`, `tests/Kombats.Battle/`
+
+All 5 test projects added to `Kombats.sln` under `tests/Players` and `tests/Common` solution folders.
+
+Note: `MassTransit.Testing` package (declared in `Directory.Packages.props`) does not exist as a separate NuGet package in MassTransit 8.3.0. Testing utilities are included in the main `MassTransit` package. Test project references `MassTransit` directly. See EI-006.
+
+Validation: `dotnet build Kombats.sln` — 0 errors. `dotnet test Kombats.sln` — runs (zero tests, as expected).
+
+#### F-06: Rename Kombats.Infrastructure.Messaging → Kombats.Messaging
+**Status:** Done
+
+Renamed (via git mv):
+- `src/Kombats.Common/Kombats.Infrastructure.Messaging/` → `src/Kombats.Common/Kombats.Messaging/`
+- `Kombats.Infrastructure.Messaging.csproj` → `Kombats.Messaging.csproj`
+
+Updated in `Kombats.Messaging.csproj`:
+- RootNamespace: `Combats.Infrastructure.Messaging` → `Kombats.Messaging`
+- Removed `DockerDefaultTargetOS` (not needed for a class library)
+
+Updated namespaces in all 7 source files (from `Combats.Infrastructure.Messaging.*` → `Kombats.Messaging.*`):
+- `DependencyInjection/MessagingBuilder.cs`
+- `DependencyInjection/MessagingServiceCollectionExtensions.cs`
+- `Filters/ConsumeLoggingFilter.cs`
+- `Naming/CombatsEndpointNameFormatter.cs`
+- `Naming/EntityNameConvention.cs`
+- `Naming/EntityNameFormatter.cs`
+- `Options/MessagingOptions.cs`
+
+Updated ProjectReference in:
+- `Kombats.Battle.Api.csproj`
+- `Kombats.Matchmaking.Api.csproj`
+
+Updated using statements in:
+- `Kombats.Battle.Api/Configuration/InfrastructureRegistration.cs`
+- `Kombats.Matchmaking.Api/Program.cs`
+
+Updated solution files:
+- `Kombats.sln` — project name and path updated
+- `Kombats.slnx` — project path updated
+
+Validation: `dotnet build Kombats.sln` — 0 warnings, 0 errors. No `Combats.Infrastructure.Messaging` references remain in any `.cs` file.
+
+#### F-09: Contract Project Alignment
+**Status:** Done
+
+Battle.Contracts — added missing fields:
+- `BattleCompleted`: Added `TurnCount`, `DurationMs`, `RulesetVersion` fields (already had `Version`, nullable `WinnerIdentityId`/`LoserIdentityId`)
+- `BattleCreated`: Added `Version` field (default 1)
+- `CreateBattle`, `BattleParticipantSnapshot`, `BattleEndReason`: Verified correct, no changes needed
+
+Players.Contracts:
+- `PlayerCombatProfileChanged`: Added `Version` field (default 1). Existing `Revision` field retained (domain-level revision vs contract-level version).
+
+Matchmaking.Contracts — created:
+- `MatchCreated.cs` — MessageId, MatchId, PlayerAIdentityId, PlayerBIdentityId, OccurredAt, Version
+- `MatchCompleted.cs` — MessageId, MatchId, PlayerAIdentityId, PlayerBIdentityId, WinnerIdentityId?, LoserIdentityId?, OccurredAt, Version
+
+Battle.Realtime.Contracts — namespace correction:
+- `Kombats.Battle.Realtime.Contracts.csproj`: RootNamespace changed from `Combats.Battle.Realtime.Contracts` → `Kombats.Battle.Realtime.Contracts`
+- All 14 `.cs` files: namespace changed from `Combats.Battle.Realtime.Contracts` → `Kombats.Battle.Realtime.Contracts`
+- Updated 3 consuming files in `Kombats.Battle.Infrastructure/Realtime/SignalR/` to use new namespace
+
+All contract projects verified: zero NuGet dependencies. No non-contract types present.
+
+Validation: `dotnet build Kombats.sln` — 0 errors.
+
+#### F-11: Shared Auth Configuration Helper
+**Status:** Done
+
+Created:
+- `src/Kombats.Common/Kombats.Abstractions/Auth/KombatsAuthExtensions.cs` — `AddKombatsAuth(IServiceCollection, IConfiguration)` extension method. Configures JWT Bearer authentication with `Keycloak:Authority` and `Keycloak:Audience` from configuration. No dev auth bypass.
+- `src/Kombats.Common/Kombats.Abstractions/Auth/IdentityIdExtensions.cs` — `GetIdentityId(ClaimsPrincipal)` extension method. Extracts identity ID from `sub` or `NameIdentifier` claim. Returns `Guid?`.
+
+Updated:
+- `Kombats.Abstractions.csproj` — added `FrameworkReference Microsoft.AspNetCore.App` and `PackageReference Microsoft.AspNetCore.Authentication.JwtBearer`
+
+Validation: `dotnet build Kombats.sln` — 0 errors.
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, MSB3277 warnings only — legacy assembly version conflicts) |
+| `dotnet build Kombats.slnx` | Pass (0 errors, 0 warnings) |
+| `dotnet test Kombats.sln` | Pass (zero tests, expected) |
+| All 24 projects in `Kombats.sln` | Pass (19 source + 5 test) |
+| No `Combats.*` namespaces in any `.cs` file under `src/` | Pass |
+| No `Combats.Infrastructure.Messaging` references in code | Pass |
+| All contract projects have zero NuGet deps | Pass |
+| All integration events carry `Version` field | Pass |
+| No changes outside Batch 0C scope | Pass |

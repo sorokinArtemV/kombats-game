@@ -2,7 +2,7 @@ using System.Diagnostics;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
-namespace Combats.Infrastructure.Messaging.Filters;
+namespace Kombats.Messaging.Filters;
 
 public class ConsumeLoggingFilter<T> : IFilter<ConsumeContext<T>> where T : class
 {

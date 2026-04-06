@@ -1,6 +1,6 @@
 ﻿using MassTransit;
 
-namespace Combats.Infrastructure.Messaging.Naming;
+namespace Kombats.Messaging.Naming;
 
 public class CombatsEndpointNameFormatter : IEndpointNameFormatter
 {

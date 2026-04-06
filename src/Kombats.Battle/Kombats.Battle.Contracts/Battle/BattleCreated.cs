@@ -10,6 +10,7 @@ public record BattleCreated
     public Guid PlayerAId { get; init; }
     public Guid PlayerBId { get; init; }
     public DateTimeOffset OccurredAt { get; init; }
+    public int Version { get; init; } = 1;
 }
 
 

@@ -3,11 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Combats.Infrastructure.Messaging.Filters;
-using Combats.Infrastructure.Messaging.Naming;
-using Combats.Infrastructure.Messaging.Options;
+using Kombats.Messaging.Filters;
+using Kombats.Messaging.Naming;
+using Kombats.Messaging.Options;
 
-namespace Combats.Infrastructure.Messaging.DependencyInjection;
+namespace Kombats.Messaging.DependencyInjection;
 
 public static class MessagingServiceCollectionExtensions
 {

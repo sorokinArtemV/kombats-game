@@ -1,7 +1,7 @@
 using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Domain.Rules;
-using Combats.Battle.Realtime.Contracts;
+using Kombats.Battle.Realtime.Contracts;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 

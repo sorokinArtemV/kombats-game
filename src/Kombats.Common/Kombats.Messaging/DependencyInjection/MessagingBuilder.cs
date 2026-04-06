@@ -1,9 +1,9 @@
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Combats.Infrastructure.Messaging.Naming;
+using Kombats.Messaging.Naming;
 
-namespace Combats.Infrastructure.Messaging.DependencyInjection;
+namespace Kombats.Messaging.DependencyInjection;
 
 public class MessagingBuilder
 {
