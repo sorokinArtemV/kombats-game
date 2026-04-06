@@ -1,4 +1,0 @@
-- Use snapshot integration events
-- Publish after SaveChanges only
-- Include Revision in events
-- Do not split into many granular events

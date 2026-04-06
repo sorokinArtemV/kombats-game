@@ -33,7 +33,21 @@
       "Bash(python3 -c \" import subprocess, re result = subprocess.run\\(['dotnet', 'build', '--no-restore', '-v', 'q'], capture_output=True, text=True, cwd='D:/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Players/Kombats.Players.Api'\\) \")",
       "Bash(python3 -c \" import subprocess result = subprocess.run\\( ['dotnet', 'tool', 'run', 'ildasm', '--help'], capture_output=True, text=True \\) print\\(result.stdout[:500]\\) print\\(result.stderr[:500]\\) \")",
       "Bash(powershell:*)",
-      "Bash(grep -E \"Reference$|ReferenceType\")"
+      "Bash(grep -E \"Reference$|ReferenceType\")",
+      "Bash(grep -E '\\\\.\\(cs|csproj|json|proto|sql\\)$')",
+      "Bash(wc -l \"D:/Programming/Sharp/kombats-game/kombats-game/.claude/docs/reconstruction/battle/\"*.md)",
+      "Bash(grep -E \"\\\\.\\(cs|json\\)$\")",
+      "Bash(grep -E \"\\\\.\\(cs\\)$\")",
+      "Bash(xargs cat:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir -p /d/Programming/Sharp/kombats-game/kombats-game/.claude/archive/prompts)",
+      "Bash(mkdir -p /d/Programming/Sharp/kombats-game/kombats-game/.claude/archive/docs)",
+      "Bash(mv .claude/prompts/battle .claude/archive/prompts/battle)",
+      "Bash(mv .claude/prompts/matchmaking .claude/archive/prompts/matchmaking)",
+      "Bash(mv .claude/prompts/players .claude/archive/prompts/players)",
+      "Bash(mv .claude/prompts/monorepo .claude/archive/prompts/monorepo)",
+      "Bash(mv .claude/docs/reconstruction .claude/archive/docs/reconstruction)",
+      "Bash(mv .claude/docs/summary .claude/archive/docs/summary)"
     ]
   }
 }
