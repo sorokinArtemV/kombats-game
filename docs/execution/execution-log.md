@@ -243,3 +243,81 @@ Validation: `dotnet build Kombats.sln` — 0 errors.
 | All contract projects have zero NuGet deps | Pass |
 | All integration events carry `Version` field | Pass |
 | No changes outside Batch 0C scope | Pass |
+
+---
+
+## Batch 0D — Align Kombats.Messaging with Target Configuration
+
+**Date:** 2026-04-06
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Tickets Executed
+
+#### F-07: Align Kombats.Messaging with Target Configuration
+**Status:** Done
+
+**Source changes:**
+
+`MessagingServiceCollectionExtensions.cs` — simplified and aligned:
+- Added `UseBusOutbox()` inside `AddEntityFrameworkOutbox<TDbContext>` configuration — critical fix. Without this, messages published from handler context (non-consumer) bypass the outbox. Now all `IPublishEndpoint` / `ISendEndpointProvider` usage goes through the outbox atomically.
+- Removed dead non-generic `AddMessaging()` overload (no callers — Battle and Matchmaking both use the generic version)
+- Removed `AddMessagingInternal()` helper (only used by the dead non-generic overload)
+- Consolidated into a single clean `AddMessaging<TDbContext>()` entry point
+
+`MessagingBuilder.cs` — simplified:
+- Removed unused `WithServiceDbContext<T>()`, `WithOutbox<T>()`, `WithInbox<T>()`, `GetServiceDbContextType()` methods (no callers)
+- Removed `IConfiguration` from constructor (moved to `BuildEntityNameMap` parameter)
+- Kept `Map<T>()` and `MapEntityName<T>()` for entity name mapping
+
+`MessagingOptions.cs`:
+- Added `Port` property to `RabbitMqOptions` (default: 5672) to support non-standard port configuration (needed for Testcontainers and non-default deployments)
+
+`Kombats.Messaging.csproj` — unchanged.
+
+`Directory.Packages.props` — added:
+- `Microsoft.Extensions.Configuration` 10.0.3
+- `Microsoft.Extensions.Hosting` 10.0.3
+(Both needed by Kombats.Messaging.Tests for integration test host setup)
+
+**Verification of target capabilities:**
+
+| Capability | Status |
+|---|---|
+| MassTransit 8.3.0 RabbitMQ transport | Verified — configured via `UsingRabbitMq` |
+| EF Core transactional outbox | Verified — `AddEntityFrameworkOutbox<TDbContext>` with `UsePostgres()` + `UseBusOutbox()` |
+| Inbox consumer idempotency | Verified — `UseEntityFrameworkOutbox<TDbContext>` on endpoint configurator |
+| Entity name formatter (`combats.{event-name}` kebab-case) | Verified — `EntityNameConvention` with default prefix "combats" |
+| Consumer registration (explicit + assembly scanning) | Verified — `configureConsumers` callback supports both `AddConsumer<T>()` and `AddConsumers(assembly)` |
+| Retry: 5 attempts, 200ms–5000ms exponential | Verified — defaults match target |
+| Redelivery: 30s, 120s, 600s | Verified — defaults match target |
+| Consume logging filter | Verified — `ConsumeLoggingFilter<T>` applied via `UseConsumeFilter` |
+| RabbitMQ health check | Verified — MassTransit's built-in health check registered automatically by `AddMassTransit()` |
+| `AddMessaging<TDbContext>()` entry point | Verified — all three services can use it |
+
+**Tests added:**
+
+| Test file | Tests | Coverage |
+|---|---|---|
+| `EntityNameFormatterTests.cs` | 9 | ToKebabCase (PascalCase, empty, idempotent), FormatQueueName, FormatEntityName |
+| `EntityNameConventionTests.cs` | 6 | Default convention with combats prefix, mapped names, no-prefix, no-kebab, battle event names |
+| `MessagingOptionsDefaultsTests.cs` | 5 | Retry defaults, redelivery defaults, outbox enabled, topology prefix+kebab, section name |
+| `OutboxIntegrationTests.cs` | 1 | Full outbox round-trip: publish via outbox → SaveChanges → outbox delivery → consumer receives |
+
+Total: 25 tests (24 unit + 1 integration).
+
+`Kombats.Messaging.Tests.csproj` — added package references:
+- `MassTransit.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore`, `Npgsql.EntityFrameworkCore.PostgreSQL` (for test DbContext with outbox entities)
+- `Microsoft.Extensions.Configuration`, `Microsoft.Extensions.Configuration.Binder`, `Microsoft.Extensions.Hosting` (for integration test host setup)
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, MSB3277 warnings only — EI-007) |
+| `dotnet build Kombats.slnx` | Pass (0 errors, 0 warnings) |
+| `dotnet test` unit tests | Pass (24 tests) |
+| `dotnet test` integration test | Pass (1 test — outbox round-trip with Testcontainers PostgreSQL + RabbitMQ) |
+| All 24 projects in `Kombats.sln` | Pass (19 source + 5 test) |
+| Existing service consumers unchanged | Pass (Battle and Matchmaking `AddMessaging<T>` calls unaffected) |
+| No changes outside Batch 0D scope | Pass |

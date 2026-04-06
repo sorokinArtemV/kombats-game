@@ -58,7 +58,8 @@
       "Bash(ls:*)",
       "Bash(dotnet:*)",
       "Bash(git checkout:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(docker version:*)"
     ]
   }
 }
