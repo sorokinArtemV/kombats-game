@@ -41,6 +41,30 @@ Read these before planning or implementing:
 
 ---
 
+## Execution State Discipline
+
+Execution state is tracked in project docs, not only in chat history.
+
+Before starting any planning, implementation, or review work that relates to ticket/batch execution, also read:
+
+- `docs/execution/execution-log.md`
+- `docs/execution/execution-issues.md`
+
+These execution files are **supporting state**, not architecture authority.
+If execution tracking conflicts with authoritative docs or actual repository state:
+- trust the architecture/ticket package over the execution log,
+- verify the real repository state,
+- record the discrepancy explicitly,
+- do not continue on a false assumption.
+
+Detailed rules for execution-state handling are defined in:
+
+- `.claude/rules/execution-tracking.md`
+
+This rule is mandatory for planner, implementer, and reviewer modes.
+
+---
+
 ## Hard Constraints
 
 These are non-negotiable. Violations are defects.
