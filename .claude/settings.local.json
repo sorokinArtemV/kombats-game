@@ -47,7 +47,12 @@
       "Bash(mv .claude/prompts/players .claude/archive/prompts/players)",
       "Bash(mv .claude/prompts/monorepo .claude/archive/prompts/monorepo)",
       "Bash(mv .claude/docs/reconstruction .claude/archive/docs/reconstruction)",
-      "Bash(mv .claude/docs/summary .claude/archive/docs/summary)"
+      "Bash(mv .claude/docs/summary .claude/archive/docs/summary)",
+      "Bash(ls -la /d/1/tmp/kombats-game/*.json /d/1/tmp/kombats-game/*.props /d/1/tmp/kombats-game/.editorconfig)",
+      "Bash(grep -E '\\\\.\\(json|props|editorconfig|yml|yaml\\)$')",
+      "Bash(git rm:*)",
+      "Bash(docker compose:*)",
+      "Bash(echo \"Exit code: $?\")"
     ]
   }
 }
