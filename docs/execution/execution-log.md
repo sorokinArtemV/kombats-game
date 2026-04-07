@@ -1093,3 +1093,137 @@ src/Kombats.Players/
   - `JwtAuthenticationExtensions` → replaced by `AddKombatsAuth()` in P-F
   - Legacy Api config files → deleted in P-G
   - `Kombats.Shared` project → deleted in P-G
+
+---
+
+## Phase 3: Matchmaking Replacement Stream
+
+**Executed**: 2026-04-07
+**Status**: COMPLETE
+
+### Batch M-A: M-01 — Replace Matchmaking Domain Layer
+
+**Scope**: Refactor `Match` from anemic DTO to proper domain entity with full state machine.
+
+**Changes**:
+- `Match.cs`: Replaced with sealed class, factory method `Create()`, `Rehydrate()`, CAS transition methods
+- `MatchState.cs`: Renamed `Created` → `Queued` (semantic), added `Cancelled` state
+- State machine: Queued → BattleCreateRequested → BattleCreated → Completed|TimedOut; Cancel from any active
+- All transitions guarded: `MarkBattleCreateRequested` throws on wrong state; `Try*` methods return bool
+- Created `Kombats.Matchmaking.Domain.Tests` with 55 tests covering all transitions, invariants, idempotency
+
+**Files changed**: `Match.cs`, `MatchState.cs`
+**Files created**: `Kombats.Matchmaking.Domain.Tests.csproj`, `MatchTests.cs`
+**Tests**: 55 domain tests, all pass
+
+---
+
+### Batch M-B: M-02 — Queue and Pairing Handlers
+
+**Scope**: Replace legacy `QueueService`/`MatchmakingService` with CQRS handlers.
+
+**Changes**:
+- Created `JoinQueueCommand/Handler` — checks Postgres for active match, validates profile, adds to Redis queue
+- Created `LeaveQueueCommand/Handler` — checks active match, removes from queue/status
+- Created `GetQueueStatusQuery/Handler` — Postgres first (source of truth), then Redis
+- Created `ExecuteMatchmakingTickCommand/Handler` — pops pair, creates Match via domain, publishes CreateBattle via outbox
+- Replaced `IOutboxWriter`/`ITransactionManager` with `ICreateBattlePublisher`/`IUnitOfWork` ports
+- Updated `IMatchRepository` interface with new method signatures
+- Deleted legacy: `QueueService.cs`, `MatchmakingService.cs`, `MatchCreatedResult.cs`, `MatchCreatedInfo.cs`, `LeaveQueueResult.cs`, `QueueJoinRejectedException.cs`, `CreateBattleOutboxPayload.cs`
+- Added Abstractions dependency to Application csproj
+- Created `Kombats.Matchmaking.Application.Tests` with 14 tests
+
+**Tests**: 14 application tests (stubbed ports), all pass
+
+---
+
+### Batch M-C: M-03 — Timeout Workers
+
+**Scope**: Application handler for timeout scan.
+
+**Changes**:
+- Created `TimeoutStaleMatchesCommand/Handler` — delegates to `IMatchRepository.TimeoutStaleMatchesAsync`
+- 3 additional application tests
+
+**Tests**: 17 total application tests, all pass
+
+---
+
+### Batch M-D: M-04, M-06, M-07 — DbContext, Redis Queue, Redis Lease
+
+**Scope**: Update DbContext, verify Redis operations.
+
+**Changes**:
+- `MatchmakingDbContext`: Removed custom outbox table (`OutboxMessageEntity`), kept MassTransit outbox/inbox entities
+- Deleted legacy: `OutboxMessageEntity.cs`, `OutboxWriter.cs`, `OutboxDispatcherService.cs`, `TransactionManager.cs`, `OutboxDispatcherOptions.cs`
+- Redis queue operations (RedisScripts, RedisMatchQueueStore): Unchanged, correct
+- Redis player status (RedisPlayerMatchStatusStore): Unchanged, correct
+- Redis lease (RedisLeaseLock, MatchmakingLeaseService): Unchanged, correct
+
+---
+
+### Batch M-E: M-05 — Repository Implementations
+
+**Scope**: Rewrite MatchRepository, create EfUnitOfWork and MassTransitCreateBattlePublisher.
+
+**Changes**:
+- `MatchRepository`: Full rewrite using `Match.Rehydrate()`, CAS via `ExecuteUpdateAsync`, `GetActiveForPlayerAsync` filters terminal states
+- `EfUnitOfWork`: Wraps `DbContext.SaveChangesAsync` (MassTransit outbox flushes atomically)
+- `MassTransitCreateBattlePublisher`: Maps application request to `Battle.Contracts.CreateBattle` via `IPublishEndpoint`
+- Consumer method calls updated to new interface names (mechanical fix)
+
+---
+
+### Batch M-F: M-08, M-09, M-10 — Consumers
+
+**Scope**: Verify and update consumers.
+
+**Changes**:
+- `PlayerCombatProfileChangedConsumer`: Unchanged, already correct
+- `BattleCreatedConsumer`: Updated to `TryAdvanceToBattleCreatedAsync` (in M-E)
+- `BattleCompletedConsumer`: Updated to `TryAdvanceToTerminalAsync` (in M-E)
+- All consumers thin: deserialize → call port → return
+
+---
+
+### Batch M-G + M-H: M-11, M-13, M-12 — Bootstrap + API
+
+**Scope**: Create Bootstrap composition root, move workers, replace API with Minimal Endpoints.
+
+**Changes (Bootstrap)**:
+- Created `Kombats.Matchmaking.Bootstrap` as `Microsoft.NET.Sdk.Web` composition root
+- `Program.cs`: All DI registration (handlers, repos, UoW, Redis, messaging, auth, workers)
+- `MatchmakingPairingWorker`: Moved from Api, uses CQRS handler via DI, lease-protected
+- `MatchTimeoutWorker`: Moved from Api, uses CQRS handler via DI
+- `appsettings.json`: Full config with Keycloak, Redis, messaging
+- No `Database.MigrateAsync()` on startup (AD-13)
+
+**Changes (API)**:
+- Changed `Kombats.Matchmaking.Api` SDK to `Microsoft.NET.Sdk` (not Web)
+- Api depends only on Application + Abstractions (no infrastructure)
+- Deleted legacy: `QueueController.cs`, `Program.cs`, workers, models, appsettings, Dockerfile
+- Created Minimal API endpoints: `/api/v1/matchmaking/queue/join`, `/leave`, `/status`
+- All endpoints `RequireAuthorization()`, health `AllowAnonymous()`
+- Endpoint discovery, FluentValidation filter, OpenAPI/Scalar docs
+- `ICurrentIdentityProvider` extracts player ID from JWT
+
+---
+
+### Batch M-I: M-14 — Legacy Removal and Cleanup
+
+**Scope**: Clean up remaining legacy artifacts.
+
+**Changes**:
+- Deleted remaining legacy files from Api (old appsettings, Dockerfile, .http)
+- Renamed misleading abstraction files: `IOutboxWriter.cs` → `ICreateBattlePublisher.cs`, `ITransactionManager.cs` → `IUnitOfWork.cs`
+- Verified no orphan references to `Kombats.Shared`, `DependencyInjection.cs`, `ApiController`, or `Database.MigrateAsync()`
+
+---
+
+### Phase 3 Final Validation
+
+- **Solution build**: CLEAN (0 warnings, 0 errors)
+- **All tests**: 211 pass (59 Players Domain + 32 Players Application + 23 Players Infrastructure + 25 Messaging + 55 Matchmaking Domain + 17 Matchmaking Application)
+- **No forbidden patterns**: No controllers, no DependencyInjection.cs in infrastructure, no Kombats.Shared, no MigrateAsync on startup
+- **Architecture compliance**: Domain pure, Application uses ports, Infrastructure implements ports, Bootstrap is sole composition root, Api is thin transport
+- **Players unchanged**: No Players code modified

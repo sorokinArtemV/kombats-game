@@ -80,6 +80,80 @@ The pre-existing `Kombats.Messaging` library configured `AddEntityFrameworkOutbo
 
 ### EI-011: Players startup fails on empty migration history with existing tables
 **Severity:** Low
-**Status:** Pre-existing — resolves during Players replacement
+**Status:** Resolved — Players Bootstrap (P-06) removed `Database.MigrateAsync()` per AD-13
 
-Players service crashes on startup when `players.__ef_migrations_history` table exists but is empty while the `players.characters` table already exists. `Database.MigrateAsync()` (called in `Program.cs:68`) attempts to apply the baseline migration which tries to `CREATE TABLE players.characters`, hitting `42P07: relation "characters" already exists`. This is a database state issue from a prior run that created tables without recording migrations. Workaround: manually insert the baseline migration record. This pattern (`MigrateAsync` on startup) is forbidden by AD-13 and will be eliminated when Players moves to target Bootstrap architecture. Not caused by foundation changes.
+Players service crashed on startup when `players.__ef_migrations_history` table existed but was empty while the `players.characters` table already existed. Eliminated when Players moved to Bootstrap architecture — `Database.MigrateAsync()` removed from startup per AD-13.
+
+## Phase 3 — Matchmaking Replacement Stream
+
+### EI-012: Missing Matchmaking Infrastructure integration tests
+**Severity:** High
+**Status:** Open — non-blocking follow-up required before Phase 5
+
+Phase 3 delivered Domain tests (55) and Application tests (17) but did **not** create `Kombats.Matchmaking.Infrastructure.Tests`. Per the test strategy, the following are mandatory:
+- MatchRepository round-trip and CAS operations with real PostgreSQL (Testcontainers)
+- MatchmakingDbContext schema verification (snake_case, `matchmaking` schema, outbox tables)
+- Redis queue Lua script integration tests (join, leave, pop-pair atomicity, canceled-player cleanup)
+- Redis lease (SETNX/PX) behavior under contention
+- Redis player status store (set/get/clear with TTL)
+- Consumer idempotency tests: BattleCreatedConsumer, BattleCompletedConsumer, PlayerCombatProfileChangedConsumer — each with duplicate-message no-op verification
+- Outbox atomicity test: match insert + CreateBattle event in one transaction, rollback = no event
+
+The "unchanged, correct" claims for Redis operations (M-D: M-06, M-07) and consumers (M-F: M-08, M-09, M-10) are plausible from code review but **unverified by automated tests**. This is an accepted deviation — infrastructure was carried forward from legacy, not rewritten — but the test gap must be closed before Phase 5 integration verification.
+
+### EI-013: Missing Matchmaking API tests
+**Severity:** Medium
+**Status:** Open — non-blocking follow-up required before Phase 5
+
+No `Kombats.Matchmaking.Api.Tests` project was created. Per the test strategy, these are mandatory:
+- Auth enforcement: valid JWT accepted, missing/invalid/expired JWT → 401
+- Input validation: FluentValidation rules tested
+- Response contract: correct shape for join, leave, status endpoints
+
+The endpoints themselves are thin and structurally correct (verified by code review), but the automated test gate is not met.
+
+### EI-014: Profile-miss during pair-pop drops players from queue
+**Severity:** Medium
+**Status:** Open — accepted deviation, follow-up required
+
+The implementation plan specifies: "profile miss handling — return to queue head." The `ExecuteMatchmakingTickHandler` (line 53-60) pops two players from the Redis queue, then checks for combat profiles. If a profile is missing, it logs an error and returns `MatchmakingTickResult(false)` — but the players are **not returned to the queue**. They are silently lost.
+
+The comment on line 58 says "Return players to indicate no match" but refers to the return value, not returning players to the queue. This is a behavioral gap: under normal operation, all queued players should have profiles (the join handler validates this), but if a profile projection is stale or missing, the player is permanently dequeued.
+
+Acceptable for now because profile miss is an edge case (join validates profile existence), but should be addressed before production.
+
+### EI-015: Single timeout worker covers only BattleCreateRequested state
+**Severity:** Low
+**Status:** Open — accepted deviation
+
+The implementation plan specifies two timeout concerns:
+- `BattleCreateRequestedTimeoutWorker` (60s) — matches waiting for Battle service to acknowledge
+- `BattleCreatedTimeoutWorker` (10min) — battles created but never completed
+
+The implementation has a single `MatchTimeoutWorker` that only times out `BattleCreateRequested` matches (MatchRepository line 93: `WHERE State == BattleCreateRequested`). Matches stuck in `BattleCreated` state are not timed out by any worker.
+
+In practice, the Battle service is responsible for completing battles (including inactivity termination), so `BattleCreated` timeout is a safety net, not a primary mechanism. Acceptable for Phase 3 scope. Should be added before production hardening (Phase 7).
+
+### EI-016: Level-based filtering not implemented in pairing
+**Severity:** Low
+**Status:** Open — accepted deviation
+
+The implementation plan specifies "level-based filtering" for queue pairing. The actual implementation uses strict FIFO pairing via the Lua `TryPopPairScript` — it pops the first two valid (non-canceled) players regardless of level. No level proximity check is performed.
+
+This is acceptable for v1 where the player base is small and FIFO provides fairness. Level-based filtering can be added as an enhancement without architectural changes (modify the Lua script or add a filtering layer in the application handler).
+
+### EI-017: Batch merging in M-D and M-G/M-H
+**Severity:** Info
+**Status:** Resolved — no material risk
+
+Batches were merged during execution:
+- **M-D** combined M-04 (repository), M-06 (Redis queue), M-07 (Redis lease) — justified because M-06 and M-07 were verified as "unchanged, correct" from legacy code, requiring no new implementation
+- **M-G + M-H** combined M-11 (Bootstrap), M-13 (workers), M-12 (API) — justified because API layer was thin and Bootstrap/workers are tightly coupled
+
+The merging did not hide risk: each batch's scope was clearly documented in the execution log. The main risk (untested Redis operations and consumers) is captured separately in EI-012.
+
+### EI-018: Execution-issues.md not maintained during Phase 3
+**Severity:** Info
+**Status:** Resolved — retroactively populated in this gate check
+
+Phase 3 execution did not record any issues in `execution-issues.md` during implementation. All Matchmaking-phase findings have been retroactively reconstructed and recorded (EI-012 through EI-017) as part of the Phase 3 gate check.

@@ -32,11 +32,9 @@ public sealed class BattleCreatedConsumer : IConsumer<BattleCreated>
             "Received BattleCreated: BattleId={BattleId}, MatchId={MatchId}",
             msg.BattleId, msg.MatchId);
 
-        var updated = await _matchRepository.TryUpdateStateAsync(
+        var updated = await _matchRepository.TryAdvanceToBattleCreatedAsync(
             msg.MatchId,
-            MatchState.BattleCreateRequested,
-            MatchState.BattleCreated,
-            DateTime.UtcNow,
+            DateTimeOffset.UtcNow,
             context.CancellationToken);
 
         if (updated)

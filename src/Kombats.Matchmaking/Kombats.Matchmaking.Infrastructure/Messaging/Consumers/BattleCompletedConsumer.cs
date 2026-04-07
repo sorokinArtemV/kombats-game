@@ -40,11 +40,10 @@ public sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
             ? MatchState.TimedOut
             : MatchState.Completed;
 
-        var updated = await _matchRepository.TryUpdateStateAsync(
+        var updated = await _matchRepository.TryAdvanceToTerminalAsync(
             msg.MatchId,
-            MatchState.BattleCreated,
             terminalState,
-            DateTime.UtcNow,
+            DateTimeOffset.UtcNow,
             context.CancellationToken);
 
         if (updated)

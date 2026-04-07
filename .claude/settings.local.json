@@ -63,7 +63,8 @@
       "Bash(echo \"Exit: $?\")",
       "Bash(PGPASSWORD=postgres psql -h localhost -U postgres -tc \"SELECT 1 FROM pg_database WHERE datname = 'kombats'\")",
       "Bash(docker exec:*)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(grep:*)"
     ]
   }
 }

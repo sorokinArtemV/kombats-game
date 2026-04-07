@@ -8,47 +8,42 @@ namespace Kombats.Matchmaking.Application.Abstractions;
 public interface IMatchRepository
 {
     /// <summary>
-    /// Gets the latest match for a player (by PlayerAId or PlayerBId).
-    /// Returns null if no match found.
+    /// Gets the latest active match for a player (by PlayerAId or PlayerBId).
+    /// Returns null if no active match found.
     /// </summary>
-    Task<Match?> GetLatestForPlayerAsync(Guid playerId, CancellationToken cancellationToken = default);
+    Task<Match?> GetActiveForPlayerAsync(Guid playerId, CancellationToken ct = default);
 
     /// <summary>
     /// Gets a match by MatchId.
-    /// Returns null if not found.
     /// </summary>
-    Task<Match?> GetByMatchIdAsync(Guid matchId, CancellationToken cancellationToken = default);
+    Task<Match?> GetByMatchIdAsync(Guid matchId, CancellationToken ct = default);
 
     /// <summary>
-    /// Inserts a new match.
+    /// Gets a match by BattleId.
     /// </summary>
-    Task InsertAsync(Match match, CancellationToken cancellationToken = default);
+    Task<Match?> GetByBattleIdAsync(Guid battleId, CancellationToken ct = default);
 
     /// <summary>
-    /// Updates the state of an existing match.
+    /// Persists a new match (must be in Queued state).
     /// </summary>
-    Task UpdateStateAsync(Guid matchId, MatchState newState, DateTime updatedAtUtc, CancellationToken cancellationToken = default);
+    void Add(Match match);
 
     /// <summary>
-    /// Attempts to update match state using Compare-And-Swap (CAS) pattern.
-    /// Only updates if current state matches expected state.
-    /// Returns true if update succeeded, false if state mismatch (concurrent modification or already transitioned).
+    /// Attempts to CAS-update match state: BattleCreateRequested -> BattleCreated.
+    /// Returns true if updated, false if state mismatch.
     /// </summary>
-    Task<bool> TryUpdateStateAsync(
-        Guid matchId,
-        MatchState expectedState,
-        MatchState newState,
-        DateTime updatedAtUtc,
-        CancellationToken cancellationToken = default);
+    Task<bool> TryAdvanceToBattleCreatedAsync(Guid matchId, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
-    /// Conditionally times out matches that are still in BattleCreateRequested state and older than the threshold.
-    /// Uses a single SQL UPDATE with WHERE conditions to ensure race-free updates.
-    /// Returns the number of matches that were actually updated.
+    /// Attempts to CAS-update match state: BattleCreated -> Completed or TimedOut.
+    /// Returns true if updated, false if state mismatch.
     /// </summary>
-    Task<int> TimeoutMatchesConditionallyAsync(
-        DateTimeOffset timeoutThreshold,
-        DateTime updatedAtUtc,
-        CancellationToken cancellationToken = default);
+    Task<bool> TryAdvanceToTerminalAsync(Guid matchId, MatchState terminalState, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk timeout: transitions all BattleCreateRequested matches older than threshold to TimedOut.
+    /// Returns count of affected rows.
+    /// </summary>
+    Task<int> TimeoutStaleMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default);
 }
 
