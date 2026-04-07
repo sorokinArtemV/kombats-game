@@ -419,3 +419,227 @@ Verification:
 | Players startup | Pass (after migration history fix — EI-011, pre-existing) |
 | No foundation-caused regressions | Pass |
 | Foundation phase complete | **Yes — Phase 2 (Players) may begin** |
+
+---
+
+## Batch P-A — Players Domain Layer Alignment
+
+**Date:** 2026-04-07
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Tickets Executed
+
+#### P-01: Evaluate and Align Players Domain Layer
+**Status:** Done
+
+**Evaluation findings:**
+- Domain project (`Kombats.Players.Domain`) has zero NuGet dependencies — compliant
+- Namespace `Kombats.Players.Domain` — compliant
+- Character aggregate root: correct encapsulation, factory method, state machine
+- OnboardingState enum: Draft → Named → Ready — compliant
+- LevelingConfig value object with validation — compliant
+- LevelingPolicyV1 deterministic leveling curve — compliant
+- DomainException with stable error codes — compliant
+
+**Gaps found and fixed:**
+
+1. **Missing `IsReady` computed property** — Architecture requires `IsReady = (OnboardingState == Ready)`. Contract `PlayerCombatProfileChanged` uses `IsReady`. Added derived property to Character entity.
+
+2. **Timestamp impurity** — `CreateDraft` accepted `DateTimeOffset occurredAt`, but `SetNameOnce`, `AllocatePoints`, `AddExperience`, `RecordWin`, `RecordLoss` all used `DateTimeOffset.UtcNow` directly. This made the domain non-deterministic and harder to test. All mutation methods now accept `DateTimeOffset occurredAt` parameter for consistency and testability. Application-layer callers updated minimally (pass `DateTimeOffset.UtcNow`) to maintain compilation.
+
+3. **Zero-total allocation guard** — `AllocatePoints(0, 0, 0, 0)` previously transitioned Named → Ready without allocating any points. Added `ZeroPoints` domain error code: total must be > 0.
+
+**Areas evaluated and kept stable (no changes needed):**
+- OnboardingState enum — correct transitions, correct values
+- DomainException — stable error codes, appropriate for domain layer
+- LevelingConfig — value object with positive BaseFactor validation
+- LevelingPolicyV1 — deterministic triangular curve, version-aware, MaxLevel = 10,000
+- Character initial state: base stats 3 each, 3 unspent points, Level 0
+
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `src/Kombats.Players/Kombats.Players.Domain/Entities/Character.cs` | Added `IsReady` property, `occurredAt` parameter on all mutation methods, `ZeroPoints` guard on `AllocatePoints` |
+| `src/Kombats.Players/Kombats.Players.Application/UseCases/SetCharacterName/SetCharacterNameHandler.cs` | Pass `DateTimeOffset.UtcNow` to `SetNameOnce` (compilation fix) |
+| `src/Kombats.Players/Kombats.Players.Application/UseCases/AllocateStatPoints/AllocateStatPointsHandler.cs` | Pass `DateTimeOffset.UtcNow` to `AllocatePoints` (compilation fix) |
+| `src/Kombats.Players/Kombats.Players.Application/Battles/HandleBattleCompletedCommand.cs` | Pass `DateTimeOffset.UtcNow` to `AddExperience`, `RecordWin`, `RecordLoss` (compilation fix) |
+
+**Files created:**
+
+| File | Content |
+|---|---|
+| `tests/Kombats.Players/Kombats.Players.Domain.Tests/Entities/CharacterTests.cs` | 6 test classes, 47 tests covering creation, naming, stat allocation, XP/leveling, combat record, IsReady derivation, onboarding transitions |
+| `tests/Kombats.Players/Kombats.Players.Domain.Tests/Progression/LevelingPolicyV1Tests.cs` | 2 test classes, 12 tests covering LevelingConfig validation and leveling curve thresholds |
+
+**Tests added:** 59 domain unit tests total
+
+| Test class | Tests | Coverage |
+|---|---|---|
+| `CharacterCreationTests` | 2 | CreateDraft initial state, unique IDs |
+| `CharacterSetNameTests` | 8 | Valid name, trim, too short, too long, boundary lengths, whitespace, duplicate, wrong state |
+| `CharacterAllocatePointsTests` | 8 | Valid allocation, partial, subsequent, draft state, negative, exceeds unspent, zero total, all-to-one |
+| `CharacterExperienceTests` | 8 | XP accumulation, level-up threshold, multi-level, just-below, incremental, zero/negative, revision |
+| `CharacterCombatRecordTests` | 6 | Win/loss increment, multiple, revision |
+| `CharacterIsReadyTests` | 3 | Draft=false, Named=false, Ready=true |
+| `CharacterOnboardingTransitionTests` | 4 | Full flow, allocate-in-draft, set-name-when-named, set-name-when-ready |
+| `LevelingConfigTests` | 2 | Positive factor, non-positive throws |
+| `LevelingPolicyV1Tests` | 8 | Threshold curve (10 data points), unspent points per level, incremental XP, level 4 boundary |
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, MSB3277 warnings only — EI-007) |
+| `dotnet test Kombats.Players.Domain.Tests` | Pass (59 tests) |
+| Domain zero NuGet dependencies | Pass |
+| Character `IsReady` derivation | Pass (3 tests) |
+| Stat allocation invariants | Pass (zero-total guard, negative guard, insufficient points guard) |
+| OnboardingState transitions | Pass (valid and invalid transitions tested) |
+| XP/leveling curve | Pass (threshold boundaries verified) |
+| Application callers compile | Pass (minimal `DateTimeOffset.UtcNow` pass-through) |
+| No changes outside P-01 scope | Pass |
+
+---
+
+## Batch P-B — Players Application Layer Replacement
+
+**Date:** 2026-04-07
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Tickets Executed
+
+#### P-02: Replace Players Application Layer
+**Status:** Done
+
+**Primary changes (Application layer — in scope):**
+
+Migrated from `Kombats.Shared` to `Kombats.Abstractions`:
+- `Kombats.Players.Application.csproj` — removed `Kombats.Shared` project reference + `Microsoft.Extensions.DependencyInjection.Abstractions` package. Added `Kombats.Abstractions` project reference. Application now has zero infrastructure transitive dependencies (no MassTransit, Scrutor, Serilog, OpenTelemetry).
+- All commands, queries, and handlers — `using Kombats.Shared.Types` → `using Kombats.Abstractions`
+
+Deleted legacy composition files:
+- `ApplicationServicesExtensions.cs` — used Scrutor assembly scanning + `LoggingDecorator` from `Kombats.Shared.Behaviours`. Legacy pattern; handler registration moves to Bootstrap (P-06).
+- `DependencyInjection.cs` — `AddPlayersApplication()` called `ApplicationServicesExtensions`. Composition belongs in Bootstrap.
+
+Created application-layer port for event publishing:
+- `Abstractions/ICombatProfilePublisher.cs` — replaces direct `MassTransit.IPublishEndpoint` dependency. Infrastructure implements this (currently via temporary adapter, outbox-based in P-04/P-05).
+
+Replaced `IPublishEndpoint` with `ICombatProfilePublisher` in all handlers:
+- `AllocateStatPointsHandler` — `IPublishEndpoint` → `ICombatProfilePublisher`
+- `EnsureCharacterExistsHandler` — same
+- `SetCharacterNameHandler` — same
+- `HandleBattleCompletedHandler` — same
+- `using MassTransit;` removed from all Application files
+
+Fixed CQRS alignment:
+- `GetMeCommand` (was `ICommand<CharacterStateResult>`) → `GetCharacterQuery` (`IQuery<CharacterStateResult>`)
+- `GetMeHandler` (was `ICommandHandler<>`) → `GetCharacterHandler` (`IQueryHandler<>`)
+- Deleted `UseCases/GetMe/` directory, created `UseCases/GetCharacter/`
+
+Handler visibility aligned for DI registration:
+- `AllocateStatPointsHandler` — `internal sealed` → `public sealed`
+- `EnsureCharacterExistsHandler` — `internal sealed` → `public sealed`
+- `HandleBattleCompletedCommand` + `HandleBattleCompletedHandler` — `internal` → `public` (needed for DI registration from current Api/future Bootstrap)
+
+Updated `PlayerCombatProfileChangedFactory`:
+- Uses `character.IsReady` property (added in P-01) instead of inline `OnboardingState == Ready` comparison
+
+Updated `AssemblyInfo.cs`:
+- Added `InternalsVisibleTo("Kombats.Players.Application.Tests")`
+
+**Cross-layer compile fixes (deviations — minimal, no behavioral changes):**
+
+Api layer — `using Kombats.Shared.Types` → `using Kombats.Abstractions`:
+- `ICurrentIdentityProvider.cs` — using statement change only
+- `HttpCurrentIdentityProvider.cs` — using statement change only
+- `ResultExtensions.cs` — switched to `Kombats.Abstractions` types, added `ToProblem()` extension method (replaces `Kombats.Shared.CustomResults.Problem()` which takes `Kombats.Shared.Types.Result`)
+- `MeEndpoint.cs` — switched to Abstractions types, updated `GetMeCommand`/`ICommandHandler` → `GetCharacterQuery`/`IQueryHandler`, replaced `CustomResults.Problem()` → `result.ToProblem()`
+- `AllocateStatPointsEndpoint.cs` — same pattern (using + `CustomResults` → `ToProblem()`)
+- `SetCharacterNameEndpoint.cs` — same pattern
+
+Api layer — handler registration (temporary bridge):
+- `Program.cs` — replaced `AddPlayersApplication()` (deleted Scrutor-based method) with direct handler DI registrations. Added `ICombatProfilePublisher` → `MassTransitCombatProfilePublisher` registration. Marked as `// TEMPORARY: Direct handler registration until Bootstrap (P-06) takes over as composition root.`
+
+Infrastructure layer:
+- `BattleCompletedConsumer.cs` — `using Kombats.Shared.Types` → `using Kombats.Abstractions`
+- `MassTransitCombatProfilePublisher.cs` — **new file**, temporary adapter implementing `ICombatProfilePublisher` via `IPublishEndpoint.Publish()`. Marked `// TEMPORARY: Bridge adapter until outbox-based publisher is implemented in P-04/P-05.`
+
+**Tests added:** 32 application unit tests
+
+| Test class | Tests | Coverage |
+|---|---|---|
+| `EnsureCharacterExistsHandlerTests` | 5 | Returns existing, creates draft, publishes event, handles concurrent create, conflict on reload failure |
+| `SetCharacterNameHandlerTests` | 7 | Sets name, not found, name taken (pre-check), short name validation, concurrency conflict, unique name DB conflict, wrong state |
+| `AllocateStatPointsHandlerTests` | 10 | Allocates points, invalid revision, not found, revision mismatch, draft state, negative points, exceeds unspent, zero total, concurrency conflict, Named→Ready transition |
+| `GetCharacterHandlerTests` | 3 | Returns character, not found, full snapshot |
+| `HandleBattleCompletedHandlerTests` | 7 | Awards XP + win/loss, draw (null winner/loser), idempotency (already processed), winner not found, loser not found, marks processed, publishes for both |
+
+All tests use stubbed ports (NSubstitute) — zero infrastructure dependencies.
+
+**Files changed:**
+
+| File | Change |
+|---|---|
+| `Kombats.Players.Application.csproj` | Removed Shared ref + DI Abstractions pkg, added Abstractions ref |
+| `UseCases/AllocateStatPoints/AllocateStatPointsCommand.cs` | `Kombats.Shared.Types` → `Kombats.Abstractions` |
+| `UseCases/AllocateStatPoints/AllocateStatPointsHandler.cs` | Abstractions types, ICombatProfilePublisher, public, ZeroPoints error case |
+| `UseCases/EnsureCharacterExists/EnsureCharacterExistsCommand.cs` | `Kombats.Shared.Types` → `Kombats.Abstractions` |
+| `UseCases/EnsureCharacterExists/EnsureCharacterExistsHandler.cs` | Abstractions types, ICombatProfilePublisher, public |
+| `UseCases/SetCharacterName/SetCharacterNameCommand.cs` | `Kombats.Shared.Types` → `Kombats.Abstractions` |
+| `UseCases/SetCharacterName/SetCharacterNameHandler.cs` | Abstractions types, ICombatProfilePublisher |
+| `Battles/HandleBattleCompletedCommand.cs` | Abstractions types, ICombatProfilePublisher, public |
+| `IntegrationEvents/PlayerMatchProfileChangedIntegrationEvent.cs` | Uses `character.IsReady` property |
+| `AssemblyInfo.cs` | Added InternalsVisibleTo for test project |
+| Api: `Program.cs` | Direct handler DI registration (temporary bridge) |
+| Api: `MeEndpoint.cs` | Abstractions types, GetCharacterQuery, ToProblem() |
+| Api: `AllocateStatPointsEndpoint.cs` | Abstractions types, ToProblem() |
+| Api: `SetCharacterNameEndpoint.cs` | Abstractions types, ToProblem() |
+| Api: `ResultExtensions.cs` | Abstractions types, added ToProblem() |
+| Api: `ICurrentIdentityProvider.cs` | Abstractions types |
+| Api: `HttpCurrentIdentityProvider.cs` | Abstractions types |
+| Infra: `BattleCompletedConsumer.cs` | Abstractions types |
+
+**Files created:**
+
+| File | Content |
+|---|---|
+| `Abstractions/ICombatProfilePublisher.cs` | Application port for combat profile event publishing |
+| `UseCases/GetCharacter/GetCharacterQuery.cs` | Query replacing GetMeCommand |
+| `UseCases/GetCharacter/GetCharacterHandler.cs` | Query handler replacing GetMeHandler |
+| `Infra: Messaging/MassTransitCombatProfilePublisher.cs` | Temporary IPublishEndpoint adapter |
+| Tests: 5 test files | 32 application handler unit tests |
+
+**Files deleted:**
+
+| File | Reason |
+|---|---|
+| `ApplicationServicesExtensions.cs` | Legacy Scrutor scanning + LoggingDecorator |
+| `DependencyInjection.cs` | Composition belongs in Bootstrap |
+| `UseCases/GetMe/GetMeCommand.cs` | Replaced by GetCharacterQuery |
+| `UseCases/GetMe/GetMeHandler.cs` | Replaced by GetCharacterHandler |
+
+**Temporary bridges in place:**
+
+| Bridge | Location | Removal condition |
+|---|---|---|
+| Direct handler DI registration in Program.cs | `Api/Program.cs` | Bootstrap (P-06) takes over as composition root |
+| `MassTransitCombatProfilePublisher` adapter | `Infrastructure/Messaging/` | Infrastructure replacement (P-04/P-05) implements outbox-scoped publisher |
+| Api still references `Kombats.Shared` for `Messaging`, `Observability`, `Configuration`, `CustomResults` | `Api/Kombats.Players.Api.csproj` | API/Bootstrap replacement (P-06/P-07) |
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, MSB3277 warnings only — EI-007) |
+| `dotnet test` all tests | Pass (59 domain + 32 application + 25 messaging = 116 total) |
+| Application has zero `Kombats.Shared` references | Pass |
+| Application has zero `using MassTransit` in code | Pass (comment-only reference in ICombatProfilePublisher doc) |
+| Application depends only on Domain + Contracts + Abstractions | Pass |
+| All handlers use ICombatProfilePublisher port | Pass |
+| GetCharacter is IQuery/IQueryHandler (CQRS compliance) | Pass |
+| No new NuGet packages added | Pass |
+| Cross-layer changes are minimal compile fixes only | Pass |
+| All temporary bridges documented | Pass |

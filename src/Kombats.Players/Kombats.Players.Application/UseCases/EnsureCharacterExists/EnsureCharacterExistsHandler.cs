@@ -1,27 +1,25 @@
-using Kombats.Players.Application;
+using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Entities;
-using Kombats.Shared.Types;
-using MassTransit;
 
 namespace Kombats.Players.Application.UseCases.EnsureCharacterExists;
 
-internal sealed class EnsureCharacterExistsHandler
+public sealed class EnsureCharacterExistsHandler
     : ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult>
 {
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ICombatProfilePublisher _profilePublisher;
 
     public EnsureCharacterExistsHandler(
         IUnitOfWork uow,
         ICharacterRepository characters,
-        IPublishEndpoint publishEndpoint)
+        ICombatProfilePublisher profilePublisher)
     {
         _uow = uow;
         _characters = characters;
-        _publishEndpoint = publishEndpoint;
+        _profilePublisher = profilePublisher;
     }
 
     public async Task<Result<CharacterStateResult>> HandleAsync(EnsureCharacterExistsCommand cmd, CancellationToken ct)
@@ -39,16 +37,13 @@ internal sealed class EnsureCharacterExistsHandler
         {
             await _uow.SaveChangesAsync(ct);
 
-            // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
-            await _publishEndpoint.Publish(
+            await _profilePublisher.PublishAsync(
                 PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }
         catch (UniqueConstraintConflictException ex) when (ex.ConflictKind == UniqueConflictKind.IdentityId)
         {
-            // Concurrent create — character already persisted by another request.
-            // That request is responsible for publishing the event.
             var race = await _characters.GetByIdentityIdAsync(cmd.IdentityId, ct);
             if (race is not null)
             {

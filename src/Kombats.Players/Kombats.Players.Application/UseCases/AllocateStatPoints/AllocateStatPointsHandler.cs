@@ -1,26 +1,25 @@
+using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Exceptions;
-using Kombats.Shared.Types;
-using MassTransit;
 
 namespace Kombats.Players.Application.UseCases.AllocateStatPoints;
 
-internal sealed class AllocateStatPointsHandler
+public sealed class AllocateStatPointsHandler
     : ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult>
 {
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ICombatProfilePublisher _profilePublisher;
 
     public AllocateStatPointsHandler(
         IUnitOfWork uow,
         ICharacterRepository characters,
-        IPublishEndpoint publishEndpoint)
+        ICombatProfilePublisher profilePublisher)
     {
         _uow = uow;
         _characters = characters;
-        _publishEndpoint = publishEndpoint;
+        _profilePublisher = profilePublisher;
     }
 
     public async Task<Result<AllocateStatPointsResult>> HandleAsync(AllocateStatPointsCommand cmd, CancellationToken ct)
@@ -38,7 +37,6 @@ internal sealed class AllocateStatPointsHandler
                 Error.NotFound("AllocateStatPoints.CharacterNotFound", $"Character for identity {cmd.IdentityId} was not found."));
         }
 
-        // Fast fail: client is stale (nice UX). Still keep DB concurrency catch below.
         if (character.Revision != cmd.ExpectedRevision)
         {
             return Result.Failure<AllocateStatPointsResult>(
@@ -49,7 +47,7 @@ internal sealed class AllocateStatPointsHandler
 
         try
         {
-            character.AllocatePoints(cmd.Str, cmd.Agi, cmd.Intuition, cmd.Vit);
+            character.AllocatePoints(cmd.Str, cmd.Agi, cmd.Intuition, cmd.Vit, DateTimeOffset.UtcNow);
         }
         catch (DomainException ex)
         {
@@ -63,6 +61,9 @@ internal sealed class AllocateStatPointsHandler
 
                 "NotEnoughPoints" => Result.Failure<AllocateStatPointsResult>(
                     Error.Validation("AllocateStatPoints.NotEnoughPoints", ex.Message)),
+
+                "ZeroPoints" => Result.Failure<AllocateStatPointsResult>(
+                    Error.Validation("AllocateStatPoints.ZeroPoints", ex.Message)),
 
                 _ => Result.Failure<AllocateStatPointsResult>(
                     Error.Problem("AllocateStatPoints.DomainError", ex.Message))
@@ -81,8 +82,7 @@ internal sealed class AllocateStatPointsHandler
                     "Character was modified by another request. Reload and retry."));
         }
 
-        // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
-        await _publishEndpoint.Publish(
+        await _profilePublisher.PublishAsync(
             PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
         return Result.Success(new AllocateStatPointsResult(

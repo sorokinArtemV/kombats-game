@@ -1,19 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-    </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
         <ProjectReference Include="..\Kombats.Players.Contracts\Kombats.Players.Contracts.csproj"/>
         <ProjectReference Include="..\Kombats.Players.Domain\Kombats.Players.Domain.csproj"/>
-        <ProjectReference Include="..\Kombats.Shared\Kombats.Shared.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions"/>
+        <ProjectReference Include="..\..\Kombats.Common\Kombats.Abstractions\Kombats.Abstractions.csproj"/>
     </ItemGroup>
 
 </Project>

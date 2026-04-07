@@ -1,5 +1,4 @@
-using Kombats.Players.Application;
-using Kombats.Shared.Types;
+using Kombats.Abstractions;
 
 namespace Kombats.Players.Application.UseCases.EnsureCharacterExists;
 

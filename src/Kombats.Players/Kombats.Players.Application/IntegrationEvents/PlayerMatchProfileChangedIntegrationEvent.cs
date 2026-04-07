@@ -22,7 +22,7 @@ public static class PlayerCombatProfileChangedFactory
             Agility = character.Agility,
             Intuition = character.Intuition,
             Vitality = character.Vitality,
-            IsReady = character.OnboardingState == OnboardingState.Ready,
+            IsReady = character.IsReady,
             Revision = character.Revision,
             OccurredAt = DateTimeOffset.UtcNow
         };

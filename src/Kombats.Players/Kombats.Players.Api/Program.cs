@@ -1,8 +1,16 @@
 using System.Reflection;
+using Kombats.Abstractions;
+using Kombats.Players.Application;
+using Kombats.Players.Application.Abstractions;
+using Kombats.Players.Application.Battles;
+using Kombats.Players.Application.UseCases.AllocateStatPoints;
+using Kombats.Players.Application.UseCases.EnsureCharacterExists;
+using Kombats.Players.Application.UseCases.GetCharacter;
+using Kombats.Players.Application.UseCases.SetCharacterName;
 using Kombats.Players.Infrastructure;
+using Kombats.Players.Infrastructure.Messaging;
 using Kombats.Players.Infrastructure.Messaging.Consumers;
 using Kombats.Players.Api.Extensions;
-using Kombats.Players.Application;
 using Kombats.Shared.Messaging;
 using Kombats.Shared.Observability;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +60,14 @@ builder.Services.AddCors(options =>
 builder.Services.Configure<Kombats.Players.Infrastructure.Configuration.LevelingOptions>(
     builder.Configuration.GetSection("Leveling"));
 
-builder.Services.AddPlayersApplication();
+// TEMPORARY: Direct handler registration until Bootstrap (P-06) takes over as composition root.
+builder.Services.AddScoped<ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult>, AllocateStatPointsHandler>();
+builder.Services.AddScoped<ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult>, EnsureCharacterExistsHandler>();
+builder.Services.AddScoped<ICommandHandler<SetCharacterNameCommand, CharacterStateResult>, SetCharacterNameHandler>();
+builder.Services.AddScoped<IQueryHandler<GetCharacterQuery, CharacterStateResult>, GetCharacterHandler>();
+builder.Services.AddScoped<ICommandHandler<HandleBattleCompletedCommand>, HandleBattleCompletedHandler>();
+builder.Services.AddScoped<ICombatProfilePublisher, MassTransitCombatProfilePublisher>();
+
 builder.Services.AddPlayersInfrastructure(builder.Configuration);
 builder.Services.AddMessageBus(builder.Configuration, configureConsumers: bus =>
 {

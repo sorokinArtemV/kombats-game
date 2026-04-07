@@ -1,9 +1,7 @@
-using Kombats.Players.Application;
+using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Exceptions;
-using Kombats.Shared.Types;
-using MassTransit;
 
 namespace Kombats.Players.Application.UseCases.SetCharacterName;
 
@@ -12,13 +10,16 @@ public sealed class SetCharacterNameHandler
 {
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ICombatProfilePublisher _profilePublisher;
 
-    public SetCharacterNameHandler(IUnitOfWork uow, ICharacterRepository characters, IPublishEndpoint publishEndpoint)
+    public SetCharacterNameHandler(
+        IUnitOfWork uow,
+        ICharacterRepository characters,
+        ICombatProfilePublisher profilePublisher)
     {
         _uow = uow;
         _characters = characters;
-        _publishEndpoint = publishEndpoint;
+        _profilePublisher = profilePublisher;
     }
 
     public async Task<Result<CharacterStateResult>> HandleAsync(SetCharacterNameCommand cmd, CancellationToken ct)
@@ -30,7 +31,6 @@ public sealed class SetCharacterNameHandler
                 Error.NotFound("SetCharacterName.NotProvisioned", "Character not provisioned. Call POST /api/me/ensure first."));
         }
 
-        // Pre-check for fast UX feedback; the DB unique index is the real safety net.
         var normalizedName = cmd.Name.Trim().ToLowerInvariant();
         var nameTaken = await _characters.IsNameTakenAsync(normalizedName, character.Id, ct);
         if (nameTaken)
@@ -41,7 +41,7 @@ public sealed class SetCharacterNameHandler
 
         try
         {
-            character.SetNameOnce(cmd.Name);
+            character.SetNameOnce(cmd.Name, DateTimeOffset.UtcNow);
         }
         catch (DomainException ex)
         {
@@ -65,8 +65,7 @@ public sealed class SetCharacterNameHandler
         {
             await _uow.SaveChangesAsync(ct);
 
-            // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
-            await _publishEndpoint.Publish(
+            await _profilePublisher.PublishAsync(
                 PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
             return Result.Success(CharacterStateResult.FromCharacter(character));

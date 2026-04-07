@@ -1,10 +1,9 @@
+using Kombats.Abstractions;
 using Kombats.Players.Api.Endpoints;
 using Kombats.Players.Api.Extensions;
-using Kombats.Players.Api.Identity;
 using Kombats.Players.Api.Filters;
+using Kombats.Players.Api.Identity;
 using Kombats.Players.Application.UseCases.AllocateStatPoints;
-using Kombats.Shared.CustomResults;
-using Kombats.Shared.Types;
 using Microsoft.AspNetCore.Http;
 
 namespace Kombats.Players.Api.Endpoints.AllocateStatPoints;
@@ -48,7 +47,7 @@ internal sealed class AllocateStatPointsEndpoint : IEndpoint
                         value.Vitality,
                         value.UnspentPoints,
                         value.Revision)),
-                    CustomResults.Problem);
+                    failure => result.ToProblem());
             })
             .WithRequestValidation<AllocateStatPointsRequest>()
             .WithTags(Tags.PlayersStats)

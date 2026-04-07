@@ -1,4 +1,4 @@
-using Kombats.Shared.Types;
+using Kombats.Abstractions;
 
 namespace Kombats.Players.Application.UseCases.AllocateStatPoints;
 
@@ -9,6 +9,3 @@ public sealed record AllocateStatPointsCommand(
     int Agi,
     int Intuition,
     int Vit) : ICommand<AllocateStatPointsResult>;
-
-
-
