@@ -854,3 +854,242 @@ The `CharacterRepository` was already implemented in P-03 with GetByIdentityId, 
 | Consumer idempotency verified | Pass |
 | Outbox publish ordering correct | Pass (publish before SaveChanges) |
 | No new NuGet packages | Pass |
+
+---
+
+## Batch P-E — Players Bootstrap / Composition Root
+
+**Date**: 2026-04-07
+**Tickets**: P-06
+**Status**: Done
+
+### P-06: Create Players Bootstrap Project
+
+**Status**: Done
+
+#### Objective
+
+Create `Kombats.Players.Bootstrap` as the service's composition root (`Microsoft.NET.Sdk.Web`). Move all DI registration, middleware pipeline, and endpoint mapping from Api's `Program.cs` to Bootstrap. Convert Api to a plain class library (`Microsoft.NET.Sdk`). Remove the forbidden `DependencyInjection.cs` from Infrastructure (composition inlined into Bootstrap). Switch from legacy `Kombats.Shared.Messaging` to `Kombats.Messaging` with transactional outbox. Remove the forbidden `Database.MigrateAsync()` on startup (AD-13).
+
+#### Files Created
+
+| File | Content |
+|---|---|
+| `src/Kombats.Players/Kombats.Players.Bootstrap/Kombats.Players.Bootstrap.csproj` | `Microsoft.NET.Sdk.Web` composition root. References: Api, Application, Infrastructure, Domain, Contracts, Abstractions, Messaging. Packages: Serilog.AspNetCore, EF Core Design (for migration CLI). |
+| `src/Kombats.Players/Kombats.Players.Bootstrap/Program.cs` | Composition root: Serilog, JWT auth, identity provider, FluentValidation, endpoint discovery (Api assembly), OpenAPI/Scalar, CORS, LevelingOptions, handler DI registration, infrastructure DI (inlined), DbContext config, `AddMessaging<PlayersDbContext>()` with BattleCompletedConsumer. No `Database.MigrateAsync()`. |
+| `src/Kombats.Players/Kombats.Players.Bootstrap/appsettings.json` | Config with `Messaging` section (replacing legacy `MessageBus`), `ConnectionStrings`, `Auth`, `Leveling`, `Serilog`. Removed legacy OpenTelemetry/ApplicationInsights config. |
+| `src/Kombats.Players/Kombats.Players.Bootstrap/appsettings.Development.json` | Debug-level auth logging overrides. |
+| `src/Kombats.Players/Kombats.Players.Bootstrap/Properties/launchSettings.json` | HTTP (5007) and HTTPS (7035) profiles. Launch URL updated to `scalar/v1`. |
+| `src/Kombats.Players/Kombats.Players.Api/GlobalUsings.cs` | ASP.NET Core implicit usings required after SDK change from `Microsoft.NET.Sdk.Web` to `Microsoft.NET.Sdk`. |
+
+#### Files Modified
+
+| File | Change |
+|---|---|
+| `src/Kombats.Players/Kombats.Players.Api/Kombats.Players.Api.csproj` | SDK: `Microsoft.NET.Sdk.Web` → `Microsoft.NET.Sdk`. Added `FrameworkReference Microsoft.AspNetCore.App`. Removed `UserSecretsId`, `DockerDefaultTargetOS`, `TargetFramework`/`Nullable`/`ImplicitUsings` (inherited from Directory.Build.props). Removed `Serilog.AspNetCore`, `Microsoft.EntityFrameworkCore`, `Microsoft.EntityFrameworkCore.Design` packages (moved to Bootstrap). |
+| `src/Kombats.Players/Kombats.Players.Infrastructure/Messaging/Consumers/BattleCompletedConsumer.cs` | `internal sealed` → `public sealed` (Bootstrap registers it from a separate assembly). |
+| `Kombats.sln` | Added `Kombats.Players.Bootstrap` under Players solution folder. |
+
+#### Files Deleted
+
+| File | Reason |
+|---|---|
+| `src/Kombats.Players/Kombats.Players.Api/Program.cs` | Composition moved to Bootstrap. Api is now a class library, not an executable. |
+| `src/Kombats.Players/Kombats.Players.Infrastructure/DependencyInjection.cs` | Forbidden pattern — composition logic belongs in Bootstrap only. Registrations inlined into Bootstrap Program.cs. |
+
+#### Key Architecture Decisions Applied
+
+| Decision | Implementation |
+|---|---|
+| AD-01 (Transactional outbox) | `AddMessaging<PlayersDbContext>()` from `Kombats.Messaging` configures EF Core outbox/inbox |
+| AD-13 (No startup migrations) | Removed `Database.MigrateAsync()` — migrations run via CI/CD |
+| Bootstrap as sole composition root | All DI in Bootstrap Program.cs, Api is `Microsoft.NET.Sdk` class library |
+| No `DependencyInjection.cs` in Infrastructure | Deleted, registrations inlined into Bootstrap |
+| `Kombats.Messaging` replaces `Kombats.Shared.Messaging` | Config section: `MessageBus` → `Messaging:RabbitMq` |
+
+#### Temporary Bridges Remaining
+
+| Bridge | Location | Removal Condition |
+|---|---|---|
+| Api still references `Kombats.Shared` | `Api/Kombats.Players.Api.csproj` | P-07/P-08: Remove when auth extensions are replaced with `AddKombatsAuth()` from Abstractions and `ConfigureSettings` usage is eliminated |
+| `JwtAuthenticationExtensions` reads from `Auth:` config section | `Api/Extensions/JwtAuthenticationExtensions.cs` | P-07: Replace with `AddKombatsAuth()` from `Kombats.Abstractions` (reads `Keycloak:` section) |
+| OpenTelemetry observability not configured | Bootstrap omits `AddOpenTelemetryObservability()` (was from `Kombats.Shared`) | Post-Players: Re-add via shared observability library if needed |
+| Legacy Api endpoints (Controllers) still present | `Api/Endpoints/` | P-07: Endpoint replacement is next batch |
+
+#### Intentionally Not Changed
+
+| Item | Reason |
+|---|---|
+| Api endpoint code | P-07 scope (endpoint replacement) |
+| Api `Kombats.Shared` reference | Transitively needed by auth extensions; removal is P-08 scope |
+| Legacy Api config files (`appsettings.json`, `launchSettings.json`) | Orphaned (no Program.cs), harmless; removal is P-08 scope |
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, MSB3277 warnings only — pre-existing EI-007) |
+| `dotnet test` Domain.Tests | Pass (59 tests) |
+| `dotnet test` Application.Tests | Pass (32 tests) |
+| `dotnet test` Infrastructure.Tests | Pass (23 tests) |
+| Total Players tests | 114 (unchanged from P-D) |
+| Bootstrap is `Microsoft.NET.Sdk.Web` | Pass |
+| Api is `Microsoft.NET.Sdk` | Pass |
+| No `DependencyInjection.cs` in Infrastructure | Pass (deleted) |
+| No `Database.MigrateAsync()` on startup | Pass (AD-13 compliant) |
+| `Kombats.Messaging` used (not `Kombats.Shared.Messaging`) | Pass |
+| Transactional outbox configured | Pass |
+| No new NuGet packages outside approved list | Pass |
+| Bootstrap added to `Kombats.sln` | Pass |
+
+---
+
+## Batch P-F — Players Minimal API Endpoint Alignment
+
+**Date**: 2026-04-07
+**Tickets**: P-07
+**Status**: Done
+
+### P-07: Align Players Minimal API Endpoints
+
+**Status**: Done
+
+#### Objective
+
+Align the Players API surface with the target architecture under the new Bootstrap/composition model. Replace legacy auth wiring that depended on `Kombats.Shared` with `AddKombatsAuth()` from `Kombats.Abstractions`. Fix Api project dependency violations (referenced Infrastructure and Kombats.Shared).
+
+#### Evaluation
+
+The existing Minimal API endpoints (MeEndpoint, AllocateStatPointsEndpoint, SetCharacterNameEndpoint, HealthEndpoint) are already thin and handler-driven — no replacement needed. The endpoint discovery pattern (IEndpoint + assembly scanning) is clean and target-compliant. The only issues were:
+
+1. **Auth wiring**: `JwtAuthenticationExtensions.cs` depended on `Kombats.Shared.Configuration.ConfigureSettings` and read from `Auth:` config section. Replaced with `AddKombatsAuth()` from `Kombats.Abstractions.Auth` which reads from `Keycloak:` section.
+2. **Api project references**: Api referenced `Kombats.Players.Infrastructure` and `Kombats.Shared` — both violate the dependency direction rule (Api → Application only). Removed.
+3. **Config section**: Bootstrap `appsettings.json` `Auth:` section renamed to `Keycloak:` to match `AddKombatsAuth()` expectations.
+
+#### Files Modified
+
+| File | Change |
+|---|---|
+| `src/Kombats.Players/Kombats.Players.Bootstrap/Program.cs` | `AddJwtAuthentication()` → `AddKombatsAuth()` from `Kombats.Abstractions.Auth` |
+| `src/Kombats.Players/Kombats.Players.Bootstrap/appsettings.json` | `Auth:` section → `Keycloak:` section (Authority, Audience; removed RequireHttpsMetadata — AddKombatsAuth defaults to false) |
+| `src/Kombats.Players/Kombats.Players.Api/Kombats.Players.Api.csproj` | Removed `Kombats.Players.Infrastructure` and `Kombats.Shared` project references. Api now references only Application. |
+
+#### Files Deleted
+
+| File | Reason |
+|---|---|
+| `src/Kombats.Players/Kombats.Players.Api/Extensions/JwtAuthenticationExtensions.cs` | Superseded by `AddKombatsAuth()` from `Kombats.Abstractions.Auth` |
+| `src/Kombats.Players/Kombats.Players.Api/Auth/KeycloakAuthOptions.cs` | Only used by deleted JwtAuthenticationExtensions |
+
+#### Architecture Compliance
+
+| Rule | Status |
+|---|---|
+| Api references Application only | Pass (Infrastructure and Shared references removed) |
+| Auth uses shared `AddKombatsAuth()` | Pass |
+| Config reads from `Keycloak:` section | Pass |
+| Endpoints are thin and handler-driven | Pass (unchanged — already compliant) |
+| FluentValidation at API layer | Pass (unchanged) |
+| All endpoints `[Authorize]` except health | Pass (unchanged) |
+| No domain logic in endpoints | Pass (unchanged) |
+
+#### Temporary Bridges Remaining
+
+| Bridge | Location | Removal Condition |
+|---|---|---|
+| Api still has `Microsoft.AspNetCore.Authentication.JwtBearer` package | `Api/Kombats.Players.Api.csproj` | Used by SwaggerExtensions for `JwtBearerDefaults.AuthenticationScheme` — correct usage for OpenAPI security scheme definition |
+
+#### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, 0 warnings) |
+| `dotnet test` Domain.Tests | Pass (59 tests) |
+| `dotnet test` Application.Tests | Pass (32 tests) |
+| `dotnet test` Infrastructure.Tests | Pass (23 tests) |
+| Total Players tests | 114 (unchanged from P-E) |
+| Api only references Application | Pass |
+| Zero `Kombats.Shared` usings in Api code | Pass |
+| Zero `Kombats.Players.Infrastructure` usings in Api code | Pass |
+| Auth uses `AddKombatsAuth()` from Abstractions | Pass |
+| Config section is `Keycloak:` | Pass |
+
+---
+
+## Batch P-G — Players Legacy Removal and Cleanup
+
+**Date**: 2026-04-07
+**Tickets**: P-08
+**Status**: Done
+
+### P-08: Players Legacy Removal and Cleanup
+
+**Status**: Done
+
+#### Objective
+
+Remove remaining Players legacy artifacts that are now obsolete after P-06 (Bootstrap) and P-07 (endpoint alignment). Finalize the Players replacement stream.
+
+#### Files Deleted
+
+| File/Directory | Reason |
+|---|---|
+| `src/Kombats.Players/Kombats.Shared/` (entire directory) | Legacy shared library. All consumers migrated to `Kombats.Abstractions` (types) and `Kombats.Messaging` (messaging). Zero csproj references remaining. |
+| `src/Kombats.Players/Kombats.Players.Api/appsettings.json` | Orphaned — Api is a class library, Bootstrap owns config |
+| `src/Kombats.Players/Kombats.Players.Api/appsettings.Development.json` | Orphaned — same reason |
+| `src/Kombats.Players/Kombats.Players.Api/Dockerfile` | Orphaned — referenced old Api as executable entry point. Bootstrap Dockerfile is Phase 7 scope. |
+| `src/Kombats.Players/Kombats.Players.Api/Kombats.Players.Api.http` | Orphaned — paired with old Api executable |
+| `src/Kombats.Players/Kombats.Players.Api/Properties/launchSettings.json` | Orphaned — Api is not a launchable project |
+| `src/Kombats.Players/Kombats.Players.Api/Properties/` | Empty directory after launchSettings removal |
+| `src/Kombats.Players/.dockerignore` | Orphaned — paired with deleted Dockerfile |
+
+#### Solution Changes
+
+| Change | Detail |
+|---|---|
+| `Kombats.sln` | Removed `Kombats.Shared` project (via `dotnet sln remove`) |
+
+#### Verification
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, 0 warnings) |
+| `dotnet test Kombats.sln` | Pass (139 tests: 59 domain + 32 application + 23 infrastructure + 25 messaging) |
+| Zero `Kombats.Shared` references in `src/` | Pass |
+| Zero `Kombats.Shared` references in `Kombats.sln` | Pass |
+| Players directory structure matches target | Pass |
+| No orphaned legacy files remain in Players | Pass |
+
+#### Players Final Directory Structure
+
+```
+src/Kombats.Players/
+├── Kombats.Players.Api/           # Thin transport layer (Microsoft.NET.Sdk)
+│   ├── Endpoints/                 # Minimal API endpoint definitions
+│   ├── Extensions/                # EndpointExtensions, ResultExtensions, SwaggerExtensions, etc.
+│   ├── Filters/                   # ValidationEndpointFilter
+│   ├── Identity/                  # CurrentIdentity, ICurrentIdentityProvider, HttpCurrentIdentityProvider
+│   ├── Validators/                # FluentValidation validators
+│   ├── GlobalUsings.cs
+│   └── Kombats.Players.Api.csproj
+├── Kombats.Players.Application/   # Handlers, ports, orchestration
+├── Kombats.Players.Bootstrap/     # Composition root (Microsoft.NET.Sdk.Web)
+├── Kombats.Players.Contracts/     # Integration events (zero deps)
+├── Kombats.Players.Domain/        # Entities, invariants, pure logic
+└── Kombats.Players.Infrastructure/ # DbContext, repos, consumers
+```
+
+#### Risks and Deviations
+
+- **None**: All deletions are confirmed-orphaned artifacts with zero remaining references.
+
+#### Remaining Temporary Bridges (Players-scope)
+
+- **None**: All Players-specific temporary bridges from P-B through P-E have been resolved:
+  - `DependencyInjection.cs` in Infrastructure → deleted in P-E (Bootstrap took over)
+  - `MassTransitCombatProfilePublisher` adapter → confirmed as the actual outbox implementation in P-D
+  - Api `Kombats.Shared` reference → removed in P-F
+  - Api `Kombats.Players.Infrastructure` reference → removed in P-F
+  - `JwtAuthenticationExtensions` → replaced by `AddKombatsAuth()` in P-F
+  - Legacy Api config files → deleted in P-G
+  - `Kombats.Shared` project → deleted in P-G

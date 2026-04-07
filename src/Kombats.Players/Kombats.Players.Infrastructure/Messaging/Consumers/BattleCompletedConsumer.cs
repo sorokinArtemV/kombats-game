@@ -9,7 +9,7 @@ namespace Kombats.Players.Infrastructure.Messaging.Consumers;
 /// Thin integration consumer for the canonical BattleCompleted event from Battle service.
 /// Maps into HandleBattleCompletedCommand and delegates to the application handler.
 /// </summary>
-internal sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
+public sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
 {
     private readonly ICommandHandler<HandleBattleCompletedCommand> _handler;
 

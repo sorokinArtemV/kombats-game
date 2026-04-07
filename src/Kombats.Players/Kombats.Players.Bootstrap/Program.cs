@@ -1,5 +1,8 @@
 using System.Reflection;
 using Kombats.Abstractions;
+using Kombats.Messaging.DependencyInjection;
+using Kombats.Abstractions.Auth;
+using Kombats.Players.Api.Extensions;
 using Kombats.Players.Application;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.Battles;
@@ -7,28 +10,36 @@ using Kombats.Players.Application.UseCases.AllocateStatPoints;
 using Kombats.Players.Application.UseCases.EnsureCharacterExists;
 using Kombats.Players.Application.UseCases.GetCharacter;
 using Kombats.Players.Application.UseCases.SetCharacterName;
-using Kombats.Players.Infrastructure;
+using Kombats.Players.Infrastructure.Configuration;
+using Kombats.Players.Infrastructure.Data;
 using Kombats.Players.Infrastructure.Messaging;
 using Kombats.Players.Infrastructure.Messaging.Consumers;
-using Kombats.Players.Api.Extensions;
-using Kombats.Shared.Messaging;
-using Kombats.Shared.Observability;
+using Kombats.Players.Infrastructure.Persistence.EF;
+using Kombats.Players.Infrastructure.Persistence.Repository;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((context, loggerConfig) => loggerConfig.ReadFrom.Configuration(context.Configuration));
-builder.Services.AddOpenTelemetryObservability(builder.Configuration);
+// Logging
+builder.Host.UseSerilog((context, loggerConfig) =>
+    loggerConfig.ReadFrom.Configuration(context.Configuration));
 
-builder.Services.AddJwtAuthentication(builder.Configuration);
+// Authentication & Authorization
+builder.Services.AddKombatsAuth(builder.Configuration);
 builder.Services.AddCurrentIdentity();
 
-builder.Services.AddValidation(Assembly.GetExecutingAssembly());
-builder.Services.AddEndpoints(Assembly.GetExecutingAssembly());
+// Validation & Endpoints (scan Api assembly)
+var apiAssembly = typeof(Kombats.Players.Api.Endpoints.IEndpoint).Assembly;
+builder.Services.AddValidation(apiAssembly);
+builder.Services.AddEndpoints(apiAssembly);
 
+// API Documentation
 builder.Services.AddApiDocumentation();
 
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
@@ -57,10 +68,11 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.Configure<Kombats.Players.Infrastructure.Configuration.LevelingOptions>(
+// Domain configuration
+builder.Services.Configure<LevelingOptions>(
     builder.Configuration.GetSection("Leveling"));
 
-// TEMPORARY: Direct handler registration until Bootstrap (P-06) takes over as composition root.
+// Application handlers
 builder.Services.AddScoped<ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult>, AllocateStatPointsHandler>();
 builder.Services.AddScoped<ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult>, EnsureCharacterExistsHandler>();
 builder.Services.AddScoped<ICommandHandler<SetCharacterNameCommand, CharacterStateResult>, SetCharacterNameHandler>();
@@ -68,20 +80,34 @@ builder.Services.AddScoped<IQueryHandler<GetCharacterQuery, CharacterStateResult
 builder.Services.AddScoped<ICommandHandler<HandleBattleCompletedCommand>, HandleBattleCompletedHandler>();
 builder.Services.AddScoped<ICombatProfilePublisher, MassTransitCombatProfilePublisher>();
 
-builder.Services.AddPlayersInfrastructure(builder.Configuration);
-builder.Services.AddMessageBus(builder.Configuration, configureConsumers: bus =>
+// Infrastructure (inlined from DependencyInjection.cs — composition belongs in Bootstrap)
+builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+builder.Services.AddScoped<ICharacterRepository, CharacterRepository>();
+builder.Services.AddScoped<IInboxRepository, InboxRepository>();
+builder.Services.AddScoped<ILevelingConfigProvider, LevelingConfigProvider>();
+
+builder.Services.AddDbContext<PlayersDbContext>(options =>
 {
-    bus.AddConsumer<BattleCompletedConsumer>();
+    options
+        .UseNpgsql(builder.Configuration.GetConnectionString("PostgresConnection"), npgsql =>
+            npgsql.MigrationsHistoryTable("__ef_migrations_history", PlayersDbContext.Schema))
+        .UseSnakeCaseNamingConvention()
+        .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
 });
+
+// Messaging (Kombats.Messaging with transactional outbox — AD-01)
+builder.Services.AddMessaging<PlayersDbContext>(
+    builder.Configuration,
+    "players",
+    configureConsumers: bus =>
+    {
+        bus.AddConsumer<BattleCompletedConsumer>();
+    });
 
 var app = builder.Build();
 
-// Ensure database is created/migrated
-using (var scope = app.Services.CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<Kombats.Players.Infrastructure.Data.PlayersDbContext>();
-    await dbContext.Database.MigrateAsync();
-}
+// NOTE: No Database.MigrateAsync() on startup — AD-13 forbids it.
+// Migrations are applied via CI/CD pipeline.
 
 app.UseApiDocumentation();
 
@@ -95,4 +121,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapEndpoints();
+
 app.Run();
