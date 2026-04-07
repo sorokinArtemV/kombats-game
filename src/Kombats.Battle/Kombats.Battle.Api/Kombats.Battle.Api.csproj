@@ -1,33 +1,19 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
-
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
-  </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Kombats.Common\Kombats.Messaging\Kombats.Messaging.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Kombats.Battle.Application\Kombats.Battle.Application.csproj" />
-    <ProjectReference Include="..\Kombats.Battle.Domain\Kombats.Battle.Domain.csproj" />
-    <ProjectReference Include="..\Kombats.Battle.Infrastructure\Kombats.Battle.Infrastructure.csproj" />
-    <ProjectReference Include="..\Kombats.Battle.Realtime.Contracts\Kombats.Battle.Realtime.Contracts.csproj" />
-    <ProjectReference Include="..\Kombats.Battle.Contracts\Kombats.Battle.Contracts.csproj" />
+    <ProjectReference Include="..\..\Kombats.Common\Kombats.Abstractions\Kombats.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-    <PackageReference Include="Serilog.AspNetCore" />
-    <PackageReference Include="Serilog.Exceptions" />
-    <PackageReference Include="Serilog.Settings.Configuration" />
-    <PackageReference Include="Serilog.Sinks.Console" />
-    <PackageReference Include="StackExchange.Redis" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
   </ItemGroup>
-
 
 </Project>

@@ -1,11 +1,8 @@
 using Kombats.Battle.Infrastructure.Rules;
 
-namespace Kombats.Battle.Api.Configuration;
+namespace Kombats.Battle.Infrastructure.Configuration;
 
-/// <summary>
-/// Startup validation for BattleRulesetsOptions. Fail-fast on misconfiguration.
-/// </summary>
-internal static class RulesetsOptionsValidator
+public static class RulesetsOptionsValidator
 {
     public static bool Validate(BattleRulesetsOptions options)
     {

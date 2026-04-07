@@ -157,3 +157,59 @@ The merging did not hide risk: each batch's scope was clearly documented in the 
 **Status:** Resolved — retroactively populated in this gate check
 
 Phase 3 execution did not record any issues in `execution-issues.md` during implementation. All Matchmaking-phase findings have been retroactively reconstructed and recorded (EI-012 through EI-017) as part of the Phase 3 gate check.
+
+## Phase 4: Battle Replacement Stream
+
+### EI-019: Battle Domain largely reusable — evaluate-only for most batches
+**Severity:** Info
+**Status:** Resolved by design
+
+The Battle domain, application, and infrastructure code was already substantially aligned with the target architecture. Batches B-A through B-C (domain core, CombatMath, engine), B-E through B-I (application handlers, consumers, notifier), and B-J (SignalR notifier) required no code changes — only evaluation and test addition. This is expected: the Battle service was the most recently implemented service and was built with the target architecture in mind.
+
+### EI-020: Api project was composition root (legacy pattern)
+**Severity:** Medium
+**Status:** Resolved in B-L/B-M
+
+The Battle Api project (`Kombats.Battle.Api`) was `Microsoft.NET.Sdk.Web` and served as the composition root with `Program.cs`, DI registration, controllers, workers, and dev middleware. This violated the target architecture where Bootstrap is the sole composition root and Api is a thin transport layer.
+
+Resolved by:
+- Creating `Kombats.Battle.Bootstrap` as the new composition root (B-L)
+- Deleting all legacy code from Api (B-M)
+- Changing Api to `Microsoft.NET.Sdk` (B-M)
+- Moving RulesetsOptionsValidator from Api to Infrastructure (B-M)
+
+### EI-021: RulesetsOptionsValidator was internal in Api, needed by Bootstrap
+**Severity:** Low
+**Status:** Resolved in B-M
+
+`RulesetsOptionsValidator` was `internal static class` in `Kombats.Battle.Api.Configuration`, referencing `Kombats.Battle.Infrastructure.Rules.BattleRulesetsOptions`. Since it references Infrastructure types and Bootstrap needs it, it was moved to `Kombats.Battle.Infrastructure.Configuration` namespace during B-M cleanup.
+
+### EI-022: TurnDeadlineWorker recreated in Bootstrap (not moved)
+**Severity:** Info
+**Status:** Resolved by design
+
+The TurnDeadlineWorker was recreated fresh in `Kombats.Battle.Bootstrap.Workers` rather than moved from `Kombats.Battle.Api.Workers`. The Bootstrap version is a simplified, equivalent implementation. The original in Api was deleted in B-M. This avoids partial file moves and keeps the implementation clean.
+
+### EI-023: Missing Battle Infrastructure integration tests
+**Severity:** High
+**Status:** Open, non-blocking before Phase 5
+
+Phase 4 delivered domain (113 tests) and application (15 tests) tests but NOT infrastructure integration tests. Required before production:
+- BattleDbContext round-trip tests with real Postgres (Testcontainers)
+- RedisBattleStateStore Lua script tests with real Redis
+- Consumer idempotency tests (CreateBattleConsumer, BattleCompletedProjectionConsumer)
+- Outbox atomicity verification
+
+Similar to EI-012 for Matchmaking. These should be added in Phase 5 (Integration Verification) or a dedicated testing phase.
+
+### EI-024: Missing Battle API tests
+**Severity:** Medium
+**Status:** Open, non-blocking before Phase 5
+
+No `Kombats.Battle.Api.Tests` project created. Required: SignalR hub auth enforcement, health endpoint response. Similar to EI-013 for Matchmaking.
+
+### EI-025: appsettings TurnSeconds value mismatch between legacy and new config
+**Severity:** Low
+**Status:** Resolved
+
+Legacy Api appsettings had `TurnSeconds: 30000` (likely milliseconds) while target Bootstrap uses `TurnSeconds: 30` (seconds). The domain Ruleset.TurnSeconds is used as seconds throughout the application. The Bootstrap value of 30 is correct; the legacy value of 30000 was likely a configuration error in the old code.
