@@ -768,3 +768,89 @@ No new temporary bridges introduced. Existing bridges from P-B remain:
 | Concurrency token behavior | Pass |
 | Unique constraint mapping | Pass |
 | No new NuGet packages outside approved list | Pass (MassTransit 8.3.0 + MassTransit.EntityFrameworkCore 8.3.0 — both approved) |
+
+---
+
+## Batch P-D — Players Repository + BattleCompleted Consumer
+
+**Date**: 2026-04-07
+**Tickets**: P-04, P-05
+**Status**: Done
+
+### P-04: Players Character Repository Implementation
+
+**Status**: Done
+
+The `CharacterRepository` was already implemented in P-03 with GetByIdentityId, GetById, Add, and IsNameTaken. P-04 verifies completeness and adds the required "update → reload → verify" integration test.
+
+#### Files Changed
+| File | Action | Notes |
+|---|---|---|
+| `tests/.../CharacterPersistenceTests.cs` | Modified | Added `UpdateCharacter_PersistsChanges` test |
+
+#### Acceptance Criteria Verification
+| Criterion | Status |
+|---|---|
+| `CharacterRepository` implements `ICharacterRepository` | Pass (P-03) |
+| GetByIdentityId returns character or null | Pass (existing tests) |
+| Add persists new character | Pass (existing test) |
+| Update persists changes with concurrency check | Pass (new test + existing UnitOfWorkTests) |
+| No generic repository wrapper | Pass |
+| Integration tests pass with real PostgreSQL | Pass (Testcontainers) |
+
+### P-05: Players BattleCompleted Consumer
+
+**Status**: Done
+
+#### Files Changed
+| File | Action | Notes |
+|---|---|---|
+| `src/.../Battles/HandleBattleCompletedCommand.cs` | Modified | Moved publish before SaveChanges for outbox atomicity (AD-01) |
+| `src/.../Messaging/MassTransitCombatProfilePublisher.cs` | Modified | Removed TEMPORARY bridge marking — this IS the outbox implementation |
+| `src/.../AssemblyInfo.cs` | Modified | Added `InternalsVisibleTo` for test project |
+| `tests/.../BattleCompletedConsumerTests.cs` | Created | 4 consumer integration tests |
+
+#### Tests Added
+| Test | What It Proves |
+|---|---|
+| `BattleCompleted_WithWinner_AwardsXpAndRecordsWinLoss` | Winner gets 10 XP + win; loser gets 5 XP + loss; both profiles published |
+| `BattleCompleted_Draw_NoXpChangesAndNoProfilePublished` | Null winner/loser → no character changes, inbox entry still recorded |
+| `BattleCompleted_SameMessageTwice_SecondIsNoOp` | Idempotency: same MessageId consumed twice, XP/wins only applied once |
+| `BattleCompleted_WinnerNotFound_Throws` | Consumer throws when winner character doesn't exist |
+
+#### Acceptance Criteria Verification
+| Criterion | Status |
+|---|---|
+| Consumer calls HandleBattleCompletedCommand handler | Pass |
+| Consumer is thin — no domain logic | Pass |
+| Handles draw case (null WinnerIdentityId) | Pass |
+| Handles unknown player gracefully | Pass (throws, MassTransit retries) |
+| Inbox configured for idempotent processing | Pass |
+| Integration tests pass | Pass (Testcontainers) |
+
+### Coexistence State
+
+| Item | Old | New | Removal |
+|---|---|---|---|
+| `DependencyInjection.cs` in Infrastructure | Registers repos, DbContext | Still present | Removed when Bootstrap (P-06) replaces it |
+| Legacy Players Api/Controllers | Still active | Not touched | P-07 replaces them |
+
+### Risks and Deviations
+
+- **Publish ordering fix (P-05)**: Moved `PublishAsync` calls before `SaveChangesAsync` in `HandleBattleCompletedHandler`. This is a minimal application adjustment strictly required for outbox correctness (AD-01). Without this fix, outbox entries would not be committed atomically with domain changes. The same pattern issue exists in other handlers (EnsureCharacterExists, SetCharacterName, AllocateStatPoints) but those are API-path handlers and will be addressed when Bootstrap wires the full outbox pipeline (P-06/P-07 scope).
+- **No legacy removal**: Both tickets create new or fix existing target-architecture code. No legacy code was removed; legacy coexistence continues as documented in P-C.
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build` Infrastructure.Tests | Pass (0 errors, 0 warnings) |
+| `dotnet build` Application.Tests | Pass (0 errors, 0 warnings) |
+| `dotnet test` Domain.Tests | Pass (59 tests) |
+| `dotnet test` Application.Tests | Pass (32 tests) |
+| `dotnet test` Infrastructure.Tests | Pass (23 tests) |
+| Total Players tests | 114 (was 109 in P-C) |
+| Consumer behavior verified with real Postgres | Pass |
+| Consumer idempotency verified | Pass |
+| Outbox publish ordering correct | Pass (publish before SaveChanges) |
+| No new NuGet packages | Pass |

@@ -131,6 +131,42 @@ public sealed class CharacterPersistenceTests
     }
 
     [Fact]
+    public async Task UpdateCharacter_PersistsChanges()
+    {
+        var identityId = Guid.NewGuid();
+        var character = Character.CreateDraft(identityId, Now);
+
+        await using (var db = _fixture.CreateDbContext())
+        {
+            db.Characters.Add(character);
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _fixture.CreateDbContext())
+        {
+            var repo = new CharacterRepository(db);
+            var loaded = await repo.GetByIdentityIdAsync(identityId, CancellationToken.None);
+            loaded!.SetNameOnce("UpdatedHero", Now);
+            loaded.AllocatePoints(1, 1, 1, 0, Now);
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _fixture.CreateDbContext())
+        {
+            var loaded = await new CharacterRepository(db).GetByIdentityIdAsync(identityId, CancellationToken.None);
+            loaded.Should().NotBeNull();
+            loaded!.Name.Should().Be("UpdatedHero");
+            loaded.Strength.Should().Be(4);
+            loaded.Agility.Should().Be(4);
+            loaded.Intuition.Should().Be(4);
+            loaded.Vitality.Should().Be(3);
+            loaded.UnspentPoints.Should().Be(0);
+            loaded.OnboardingState.Should().Be(OnboardingState.Ready);
+            loaded.Revision.Should().Be(3);
+        }
+    }
+
+    [Fact]
     public async Task IsNameTakenAsync_ReturnsFalse_WhenNoMatchingName()
     {
         await using var db = _fixture.CreateDbContext();

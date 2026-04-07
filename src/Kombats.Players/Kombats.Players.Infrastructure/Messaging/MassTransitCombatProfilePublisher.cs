@@ -4,9 +4,12 @@ using MassTransit;
 
 namespace Kombats.Players.Infrastructure.Messaging;
 
-// TEMPORARY: Bridge adapter until outbox-based publisher is implemented in P-04/P-05.
-// Uses direct IPublishEndpoint.Publish() — events may be lost if publish fails after SaveChanges.
-// Remove when Infrastructure replacement implements outbox-scoped publishing.
+/// <summary>
+/// Publishes combat profile change events via MassTransit.
+/// When MassTransit outbox is configured (AD-01), IPublishEndpoint.Publish() writes to outbox
+/// tables in the DbContext rather than directly to RabbitMQ, ensuring atomicity with domain changes.
+/// Callers must invoke PublishAsync before SaveChanges for correct outbox semantics.
+/// </summary>
 public sealed class MassTransitCombatProfilePublisher : ICombatProfilePublisher
 {
     private readonly IPublishEndpoint _publishEndpoint;

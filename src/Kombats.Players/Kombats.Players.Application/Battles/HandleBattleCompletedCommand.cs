@@ -78,8 +78,10 @@ public sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattleC
         }
 
         await _inbox.AddProcessedAsync(command.MessageId, DateTimeOffset.UtcNow, cancellationToken);
-        await _uow.SaveChangesAsync(cancellationToken);
 
+        // Publish before SaveChanges so outbox entries are committed atomically
+        // with domain changes (AD-01). With MassTransit outbox configured,
+        // IPublishEndpoint.Publish() writes to outbox tables in the DbContext.
         if (winner is not null)
         {
             await _profilePublisher.PublishAsync(
@@ -91,6 +93,8 @@ public sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattleC
             await _profilePublisher.PublishAsync(
                 PlayerCombatProfileChangedFactory.FromCharacter(loser), cancellationToken);
         }
+
+        await _uow.SaveChangesAsync(cancellationToken);
 
         return Result.Success();
     }
