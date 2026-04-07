@@ -213,3 +213,35 @@ No `Kombats.Battle.Api.Tests` project created. Required: SignalR hub auth enforc
 **Status:** Resolved
 
 Legacy Api appsettings had `TurnSeconds: 30000` (likely milliseconds) while target Bootstrap uses `TurnSeconds: 30` (seconds). The domain Ruleset.TurnSeconds is used as seconds throughout the application. The Bootstrap value of 30 is correct; the legacy value of 30000 was likely a configuration error in the old code.
+
+## Phase 5: Integration Verification
+
+### EI-026: Infrastructure integration tests require Docker (Testcontainers)
+**Severity:** Info
+**Status:** Accepted by design
+
+The new infrastructure test projects (Matchmaking.Infrastructure.Tests, Battle.Infrastructure.Tests) and integration flow tests (I-01, I-02, I-03) use Testcontainers for real PostgreSQL. These tests compile and are structurally correct but require Docker to run. This is the intended testing strategy (real infrastructure, no mocks) per the test strategy document.
+
+### EI-027: Redis integration tests not included in Phase 5 infrastructure test closure
+**Severity:** Medium
+**Status:** Open — deferred to Phase 7
+
+The Matchmaking Redis operations (queue join/leave/pop-pair Lua scripts, lease lock, player status store) and Battle Redis operations (battle state store, Lua scripts for CAS transitions) are not covered by the new infrastructure test projects. These require Testcontainers.Redis and dedicated Lua script verification. The operations were carried forward from legacy code and verified via code review in Phase 3/4 (EI-012 note). Full Redis integration testing is deferred to Phase 7 (Production-Readiness Hardening) where it can be done alongside other operational verification.
+
+### EI-028: Consumer idempotency relies on inbox for Matchmaking/Battle consumers
+**Severity:** Info
+**Status:** Accepted by design
+
+Matchmaking consumers (BattleCreatedConsumer, BattleCompletedConsumer) achieve idempotency through CAS state transitions (ExecuteUpdateAsync with state guard). The MassTransit inbox provides a second safety layer. Phase 5 tests verify the CAS-based idempotency directly (duplicate event → no state change). The inbox-level idempotency is structurally guaranteed by the MassTransit configuration in Kombats.Messaging and was verified in the outbox integration test (Phase 1).
+
+### EI-029: BattleLifecycleAppService is concrete class — not directly mockable for full consumer tests
+**Severity:** Low
+**Status:** Accepted — alternative test approach used
+
+The I-02 (Matchmaking→Battle) flow test could not mock BattleLifecycleAppService as it is a concrete class without virtual methods. The test was restructured to verify the persistence layer and contract mapping directly rather than running the full consumer with mocked lifecycle service. The lifecycle service itself is tested in Battle.Application.Tests with stubbed ports. The consumer → persistence → event publication chain is verified by the persistence tests plus contract alignment tests.
+
+### EI-030: Match.Create produces Queued state — tests must call MarkBattleCreateRequested
+**Severity:** Info
+**Status:** Resolved
+
+Match.Create() creates matches in Queued state, but the repository CAS operations require BattleCreateRequested or BattleCreated states. Integration tests that verify CAS transitions must call match.MarkBattleCreateRequested() after creation. This was initially missed in test drafts and corrected during implementation.
