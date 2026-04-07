@@ -1,5 +1,6 @@
 ﻿using Kombats.Players.Domain.Entities;
 using Kombats.Players.Infrastructure.Messaging.Inbox;
+using MassTransit;
 using Microsoft.EntityFrameworkCore;
 
 namespace Kombats.Players.Infrastructure.Data;
@@ -18,5 +19,10 @@ public sealed class PlayersDbContext : DbContext
         modelBuilder.HasDefaultSchema(Schema);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlayersDbContext).Assembly);
+
+        // MassTransit EF Core transactional outbox/inbox entities (AD-01)
+        modelBuilder.AddInboxStateEntity();
+        modelBuilder.AddOutboxMessageEntity();
+        modelBuilder.AddOutboxStateEntity();
     }
 }

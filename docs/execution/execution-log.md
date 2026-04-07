@@ -643,3 +643,128 @@ All tests use stubbed ports (NSubstitute) — zero infrastructure dependencies.
 | No new NuGet packages added | Pass |
 | Cross-layer changes are minimal compile fixes only | Pass |
 | All temporary bridges documented | Pass |
+
+---
+
+## Batch P-C — Players Persistence Replacement
+
+**Date**: 2026-04-07
+**Status**: Completed
+**Ticket**: P-03 — Replace Players DbContext and Persistence
+
+### Objective
+
+Replace the Players DbContext and persistence layer to comply with the target architecture: MassTransit transactional outbox entity support (AD-01), removal of `Kombats.Shared` dependency from Infrastructure, schema ownership, and comprehensive integration tests.
+
+### Changes
+
+#### PlayersDbContext — Outbox Entity Support
+
+- Added `MassTransit.AddInboxStateEntity()`, `AddOutboxMessageEntity()`, `AddOutboxStateEntity()` to `OnModelCreating`
+- This enables the MassTransit EF Core transactional outbox (AD-01) — events published through the outbox are atomically committed with domain writes
+- Added `using MassTransit;` import
+
+**File**: `src/Kombats.Players/Kombats.Players.Infrastructure/Data/PlayersDbContext.cs`
+
+#### Infrastructure.csproj — Package and Reference Updates
+
+- Added `MassTransit` and `MassTransit.EntityFrameworkCore` (8.3.0, pinned) package references
+- Removed `Kombats.Shared` project reference — no Infrastructure code uses it (verified: zero `using Kombats.Shared` in Infrastructure)
+- Api project still references `Kombats.Shared` (legacy, not in P-03 scope)
+
+**File**: `src/Kombats.Players/Kombats.Players.Infrastructure/Kombats.Players.Infrastructure.csproj`
+
+#### Migration — AddOutboxEntities
+
+- Auto-generated migration adding `inbox_state`, `outbox_message`, `outbox_state` tables to `players` schema
+- All tables use snake_case naming consistent with existing schema
+- Indexes: `ix_inbox_state_delivered`, `ix_outbox_message_enqueue_time`, `ix_outbox_message_expiration_time`, `ix_outbox_message_outbox_id_sequence_number`, `ix_outbox_message_inbox_message_id_inbox_consumer_id_sequence_`, `ix_outbox_state_created`
+- FK relationships: `outbox_message → outbox_state`, `outbox_message → inbox_state`
+- Pattern matches Matchmaking and Battle outbox migrations exactly
+
+**Files**:
+- `src/Kombats.Players/Kombats.Players.Infrastructure/Persistence/EF/Migrations/20260407054312_AddOutboxEntities.cs`
+- `src/Kombats.Players/Kombats.Players.Infrastructure/Persistence/EF/Migrations/20260407054312_AddOutboxEntities.Designer.cs`
+- `src/Kombats.Players/Kombats.Players.Infrastructure/Persistence/EF/Migrations/PlayersDbContextModelSnapshot.cs` (updated)
+
+#### Infrastructure Integration Tests (18 tests)
+
+Created comprehensive integration test suite using real PostgreSQL via Testcontainers:
+
+**Test fixture**: `PostgresFixture` — spins up PostgreSQL 16 container, runs migrations, provides fresh `PlayersDbContext` instances
+- Uses `ICollectionFixture` for shared container across test classes
+
+**CharacterPersistenceTests** (8 tests):
+- `RoundTrip_DraftCharacter_AllFieldsPersisted` — create draft, save, reload, verify all 16 fields
+- `RoundTrip_ReadyCharacter_AllFieldsPersisted` — full onboarding flow persisted correctly
+- `GetByIdentityIdAsync_ReturnsCorrectCharacter` — repository query by identity ID
+- `GetByIdentityIdAsync_ReturnsNull_WhenNotFound` — missing identity ID
+- `AddAsync_ThenSave_PersistsCharacter` — repository add + save
+- `IsNameTakenAsync_ReturnsFalse_WhenNoMatchingName` — no match
+- `IsNameTakenAsync_ReturnsTrue_WhenNameExists` — case-insensitive match
+- `IsNameTakenAsync_ExcludesOwnCharacter` — exclusion filter works
+
+**UnitOfWorkTests** (3 tests):
+- `SaveChangesAsync_DuplicateIdentityId_ThrowsUniqueConstraintConflict` — maps to `UniqueConflictKind.IdentityId`
+- `SaveChangesAsync_DuplicateNormalizedName_ThrowsUniqueConstraintConflict` — maps to `UniqueConflictKind.CharacterName`
+- `SaveChangesAsync_ConcurrentModification_ThrowsConcurrencyConflict` — optimistic concurrency via Revision token
+
+**InboxPersistenceTests** (3 tests):
+- `IsProcessedAsync_ReturnsFalse_WhenNotProcessed`
+- `AddProcessedAsync_ThenIsProcessed_ReturnsTrue` — round-trip
+- `AddProcessedAsync_DuplicateMessageId_ThrowsOnSave` — PK enforcement
+
+**SchemaTests** (4 tests):
+- `Schema_UsesPlayersSchema` — all entities in `players` schema
+- `Schema_CharactersTable_UsesSnakeCaseColumns` — snake_case naming verified
+- `Schema_OutboxTables_Exist` — `inbox_state`, `outbox_message`, `outbox_state` present
+- `Migrations_ApplyCleanly` — no pending migrations
+
+**Files**:
+- `tests/Kombats.Players/Kombats.Players.Infrastructure.Tests/Fixtures/PostgresFixture.cs`
+- `tests/Kombats.Players/Kombats.Players.Infrastructure.Tests/CharacterPersistenceTests.cs`
+- `tests/Kombats.Players/Kombats.Players.Infrastructure.Tests/UnitOfWorkTests.cs`
+- `tests/Kombats.Players/Kombats.Players.Infrastructure.Tests/InboxPersistenceTests.cs`
+- `tests/Kombats.Players/Kombats.Players.Infrastructure.Tests/SchemaTests.cs`
+- `tests/Kombats.Players/Kombats.Players.Infrastructure.Tests/Kombats.Players.Infrastructure.Tests.csproj` (updated with EF Core + MassTransit packages)
+
+### Not Changed (Intentionally)
+
+| Item | Reason |
+|---|---|
+| `DependencyInjection.cs` | Composition — belongs in Bootstrap (P-06), not P-03 scope |
+| Repositories (CharacterRepository, InboxRepository) | Already implemented, no changes needed for P-03 |
+| EfUnitOfWork | Already implemented correctly |
+| BattleCompletedConsumer | Consumer scope (P-05) |
+| MassTransitCombatProfilePublisher | Outbox-scoped publisher is P-04/P-05 scope |
+| Api/Program.cs legacy composition | Bootstrap replacement (P-06) |
+
+### Temporary Bridges
+
+No new temporary bridges introduced. Existing bridges from P-B remain:
+
+| Bridge | Location | Removal condition |
+|---|---|---|
+| `DependencyInjection.cs` in Infrastructure | `Infrastructure/DependencyInjection.cs` | Bootstrap (P-06) takes over — forbidden pattern, removal deferred |
+| `MassTransitCombatProfilePublisher` adapter | `Infrastructure/Messaging/` | P-04/P-05 implements outbox-scoped publisher |
+| Api still references `Kombats.Shared` | `Api/Kombats.Players.Api.csproj` | API/Bootstrap replacement (P-06/P-07) |
+
+### Risks and Deviations
+
+- **None**: Changes are strictly persistence-scoped
+- The `DependencyInjection.cs` in Infrastructure is a known forbidden pattern but cannot be removed until Bootstrap (P-06) exists as the composition root. Documented as pre-existing technical debt.
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors) |
+| `dotnet test` all Players tests | Pass (59 domain + 32 application + 18 infrastructure = 109 tests) |
+| Infrastructure has zero `Kombats.Shared` references | Pass |
+| Outbox entities mapped in DbContext | Pass |
+| Migration applies cleanly to empty database | Pass (Testcontainers) |
+| Schema isolation (players schema) | Pass |
+| Snake_case naming | Pass |
+| Concurrency token behavior | Pass |
+| Unique constraint mapping | Pass |
+| No new NuGet packages outside approved list | Pass (MassTransit 8.3.0 + MassTransit.EntityFrameworkCore 8.3.0 — both approved) |
