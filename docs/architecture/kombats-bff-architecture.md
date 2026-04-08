@@ -1,6 +1,6 @@
 # Kombats BFF Architecture and Execution Plan
 
-**Status:** Approved for implementation — execution plan at `docs/tickets/bff-execution-plan.md`
+**Status:** Implemented (BFF v1) — execution plan at `docs/tickets/bff-execution-plan.md`
 **Date:** 2026-04-08
 **Preconditions:** Phases 0–6 complete. Phase 7A (backend hardening) in scope. All three backend services replaced with target architecture.
 
@@ -324,6 +324,7 @@ Every BFF endpoint and the exact backend endpoint(s) it depends on:
 | `/battlehub` (JoinBattle) | SignalR | Battle | `/battlehub` → `JoinBattle(battleId)` | SignalR |
 | `/battlehub` (SubmitTurnAction) | SignalR | Battle | `/battlehub` → `SubmitTurnAction(battleId, turnIndex, actionPayload)` | SignalR |
 | `/battlehub` (server→client events) | SignalR | Battle | `/battlehub` → `BattleReady`, `TurnOpened`, `TurnResolved`, `PlayerDamaged`, `BattleStateUpdated`, `BattleEnded` | SignalR |
+| `/battlehub` (`BattleConnectionLost`) | SignalR | **BFF-originated** | Not from Battle — synthetic event emitted by BFF when the BFF→Battle downstream connection is lost | SignalR |
 | `/health` | GET | Players | `GET /health` | HTTP |
 | `/health` | GET | Matchmaking | `GET /health` | HTTP |
 | `/health` | GET | Battle | `GET /health` | HTTP |
@@ -433,6 +434,20 @@ The default architecture is BFF-proxied SignalR. However, if BFF-3 implementatio
 - BFF is no longer the single entry point for realtime traffic
 
 **Decision authority:** The implementer evaluates during BFF-3. If a fallback trigger is hit, the implementer documents the finding and requests reviewer confirmation before switching. The reviewer must approve the topology change (Battle externally accessible).
+
+### BFF-Originated Synthetic Events
+
+The BFF relay emits one synthetic event that is **not** a native Battle service event:
+
+| Event | Origin | Payload | When |
+|---|---|---|---|
+| `BattleConnectionLost` | BFF relay | `{ Reason: string }` | The BFF→Battle downstream SignalR connection was lost (network failure, Battle restart, etc.) |
+
+**Frontend handling:** `BattleConnectionLost` is a hard failure signal. The frontend must treat it as an indication that battle events are no longer being relayed. To resume, the frontend should call `JoinBattle` again, which creates a fresh downstream connection. If the battle has already ended, `JoinBattle` will return an error.
+
+This event exists because the BFF does **not** use automatic reconnection on the downstream connection. After a transport-level reconnect, the downstream `HubConnection` would get a new connection ID and would no longer be in the Battle group — events would be silently dropped. Instead, any downstream connection loss is treated as a hard failure: the `Closed` handler fires, `BattleConnectionLost` is sent to the frontend, and the downstream connection is not retried. The frontend is responsible for re-joining.
+
+The 6 native Battle events (`BattleReady`, `TurnOpened`, `TurnResolved`, `PlayerDamaged`, `BattleStateUpdated`, `BattleEnded`) are relayed transparently without modification. `BattleConnectionLost` is the only BFF-originated event on the `/battlehub` connection.
 
 ---
 

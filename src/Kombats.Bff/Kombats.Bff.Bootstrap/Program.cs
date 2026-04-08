@@ -1,8 +1,10 @@
 using System.Reflection;
 using Kombats.Bff.Api.Extensions;
+using Kombats.Bff.Api.Hubs;
 using Kombats.Bff.Application.Clients;
 using Kombats.Bff.Application.Composition;
 using Kombats.Bff.Application.Errors;
+using Kombats.Bff.Application.Relay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Scalar.AspNetCore;
 using Serilog;
@@ -26,6 +28,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Audience = audience;
         options.RequireHttpsMetadata = false;
         options.TokenValidationParameters.NameClaimType = "preferred_username";
+
+        // SignalR sends the token as a query string parameter for WebSocket connections
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                string? accessToken = context.Request.Query["access_token"];
+                string path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWith("/battlehub"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -44,9 +63,10 @@ builder.Services.AddCors(options =>
     {
         if (builder.Environment.IsDevelopment())
         {
-            policy.AllowAnyOrigin()
+            policy.SetIsOriginAllowed(_ => true)
                 .AllowAnyMethod()
-                .AllowAnyHeader();
+                .AllowAnyHeader()
+                .AllowCredentials();
         }
         else
         {
@@ -62,7 +82,8 @@ builder.Services.AddCors(options =>
 
             policy.WithOrigins(origins)
                 .AllowAnyMethod()
-                .AllowAnyHeader();
+                .AllowAnyHeader()
+                .AllowCredentials();
         }
     });
 });
@@ -91,6 +112,16 @@ builder.Services.AddHttpClient<IMatchmakingClient, MatchmakingClient>(client =>
         ?? throw new InvalidOperationException("Services:Matchmaking:BaseUrl is required.");
     client.BaseAddress = new Uri(baseUrl);
 }).AddHttpMessageHandler<JwtForwardingHandler>();
+
+// SignalR — frontend-facing hub
+builder.Services.AddSignalR();
+
+// Frontend event sender — uses IHubContext<BattleHub> to target connections by ID.
+// IHubContext is stable outside hub method scope (unlike Hub.Clients.Caller).
+builder.Services.AddSingleton<IFrontendBattleSender, HubContextBattleSender>();
+
+// Battle hub relay — manages per-connection downstream SignalR connections to Battle
+builder.Services.AddSingleton<IBattleHubRelay, BattleHubRelay>();
 
 WebApplication app = builder.Build();
 
@@ -129,5 +160,8 @@ app.Use(async (context, next) =>
 });
 
 app.MapEndpoints();
+
+// SignalR hub — battle realtime proxy (AD-16)
+app.MapHub<BattleHub>("/battlehub");
 
 app.Run();

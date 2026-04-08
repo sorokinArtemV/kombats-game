@@ -86,6 +86,24 @@ services:
       timeout: 3s
       retries: 5
 
+  bff:
+    build:
+      context: .
+      dockerfile: src/Kombats.Bff/Kombats.Bff.Bootstrap/Dockerfile
+    container_name: kombats_bff
+    restart: unless-stopped
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Services__Players__BaseUrl: "http://players:8080"
+      Services__Matchmaking__BaseUrl: "http://matchmaking:8080"
+      Services__Battle__BaseUrl: "http://battle:8080"
+      Keycloak__Authority: "http://keycloak:8080/realms/kombats"
+      Keycloak__Audience: "account"
+    depends_on:
+      - keycloak
+
 volumes:
   postgres_data:
   keycloak_db:

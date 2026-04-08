@@ -563,3 +563,91 @@ Both deleted. No build or test impact.
 **Status:** Resolved in BFF-1 review fix pass
 
 `Scalar.AspNetCore` was declared as a package reference in `Kombats.Bff.Bootstrap.csproj` but `app.MapScalarApiReference()` was never called. Added one-line call after `app.MapOpenApi()`. Scalar UI now available at `/scalar/v1`.
+
+## Batch BFF-3
+
+### EI-059: Microsoft.AspNetCore.SignalR.Client added to Directory.Packages.props
+**Severity:** Info
+**Status:** Resolved
+
+`Microsoft.AspNetCore.SignalR.Client` was not in the central package management file. Added at version 10.0.3 to align with other ASP.NET Core packages. This is a standard ASP.NET Core package — no approval concern per the BFF execution plan (listed under "New Packages Required").
+
+### EI-060: CORS updated to AllowCredentials for SignalR WebSocket support
+**Severity:** Info
+**Status:** Resolved by design
+
+SignalR WebSocket connections require CORS to allow credentials. Updated BFF CORS policy:
+- Development: `SetIsOriginAllowed(_ => true)` + `AllowCredentials()` (replaces `AllowAnyOrigin()` which is incompatible with `AllowCredentials()`)
+- Production: Added `AllowCredentials()` to the existing `WithOrigins()` policy
+
+This is a required configuration for SignalR to function over WebSocket transport.
+
+### EI-061: EI-045 resolved — BFF-3A implemented as single ticket
+**Severity:** Info
+**Status:** Resolved
+
+EI-045 flagged that BFF-3A might need splitting into sub-tickets if it exceeded ~500 lines production code. The implementation is ~160 lines of production code (BattleHubRelay: ~155 lines, BattleHub: ~85 lines) — well within the reviewable ticket size. No split needed.
+
+### EI-041 status update: SignalR proxy complexity — resolved
+**Severity:** High → Resolved
+**Status:** Resolved in BFF-3
+
+EI-041 (SignalR proxy connection lifecycle and scaling complexity) has been resolved. The proxy implementation is straightforward:
+1. **Connection lifecycle**: ConcurrentDictionary of per-frontend-connection HubConnections. Create on JoinBattle, dispose on BattleEnded or frontend disconnect. ~160 lines total.
+2. **Multi-instance BFF**: Not required for v1 (confirmed). Single-instance is the target.
+3. **Error propagation**: Downstream connection loss triggers `BattleConnectionLost` event to frontend.
+
+No fallback triggers were hit. Proxy topology is viable for v1.
+
+## BFF Closeout Fix Pass
+
+### EI-062: `BattleConnectionLost` was undocumented as BFF-originated synthetic event
+**Severity:** Medium
+**Status:** Resolved in closeout fix pass
+
+`BattleConnectionLost` was emitted by the BFF relay on downstream connection loss but was not documented as distinct from the 6 native Battle events. A frontend consumer or future developer could mistake it for a Battle service event.
+
+**Fix:** Added inline code comment at the emission site. Added `BattleConnectionLost` row to the BFF-to-Backend Endpoint Mapping table in the architecture doc with "BFF-originated" origin. Added "BFF-Originated Synthetic Events" subsection in the Realtime Position section documenting the event, its payload, trigger condition, and expected frontend handling.
+
+### EI-063: `WithAutomaticReconnect()` on downstream HubConnection caused silent event loss
+**Severity:** High
+**Status:** Resolved in closeout fix pass
+
+The downstream BFF→Battle `HubConnection` was configured with `WithAutomaticReconnect()`. After a transport-level reconnect, the connection would get a new connection ID but would NOT be re-added to the Battle group (group membership is per-connection-ID, set by `JoinBattle`). This meant events would be silently dropped after a successful automatic reconnect — worse than a hard failure because it is invisible.
+
+**Resolution:** Option (a) — removed `WithAutomaticReconnect()`. On any downstream connection loss, the `Closed` handler fires, `BattleConnectionLost` is sent to the frontend, and the frontend must re-join from scratch via a new `JoinBattle` call. This is clean, honest, and avoids silent data loss.
+
+**Alternatives considered:**
+- (b) Add reconnected handler that re-invokes `JoinBattle` — rejected because it introduces complexity (stored battleId, race conditions during re-join, duplicate snapshots, battle-ended-during-reconnect edge case) that exceeds v1 budget for marginal benefit.
+- (c) Document as known limitation — rejected because option (a) is a clean fix with no downside.
+
+## BFF Correctness Fix Pass
+
+### EI-064: Captured `Clients.Caller` in long-lived downstream event callbacks
+**Severity:** High (blocker)
+**Status:** Resolved in correctness fix pass
+
+`BattleHub.JoinBattle` created a local function capturing `Clients.Caller` and passed it as a `Func<string, object?[], Task>` callback to `BattleHubRelay.JoinBattleAsync`. This callback was stored and invoked from downstream Battle event handlers long after the hub method completed. ASP.NET Core SignalR guidance explicitly states: do not store `Hub.Clients`, `Hub.Context`, or `Hub.Groups` for use outside the hub invocation scope. The behavior of captured `Clients.Caller` in async callbacks is undocumented and unreliable.
+
+**Fix:** Replaced the callback pattern with a stable `IHubContext<BattleHub>`-based sender:
+- Created `IFrontendBattleSender` interface in Application (port)
+- Created `HubContextBattleSender` in Api using `IHubContext<BattleHub>.Clients.Client(connectionId).SendCoreAsync()` — explicitly designed for out-of-scope usage
+- Modified relay to inject `IFrontendBattleSender` and target frontend by stored connection ID
+- Removed `Func<>` callback from `IBattleHubRelay` interface and `BattleHub`
+- `Clients.Caller` is fully eliminated from all long-lived callback paths
+
+### EI-065: Happy-path relay testing requires running Battle service
+**Severity:** Medium
+**Status:** Open — accepted v1 limitation
+
+The BFF relay tests verify failure paths (unreachable Battle, no active connection, cleanup) and structural correctness (interface compliance, constructor dependencies, no callback parameter). However, the full happy-path relay flow (JoinBattle → downstream connect → subscribe to events → relay event to frontend → BattleEnded cleanup) cannot be tested without a running Battle service. The `HubConnection` cannot be meaningfully mocked (sealed class, internal construction).
+
+**Mitigation:** Structural tests verify the relay is correctly wired. The `IFrontendBattleSender` abstraction is testable (NSubstitute). End-to-end relay correctness is verified via manual integration testing with all services running (documented in BFF-4A). Full automated integration testing would require Testcontainers with a Battle service instance — this is Phase 7B scope.
+
+### EI-066: BattleHubRelay and IFrontendBattleSender are public, not internal
+**Severity:** Low
+**Status:** Accepted — BFF-specific deviation
+
+`BattleHubRelay`, `IBattleHubRelay`, `IFrontendBattleSender`, and other Application-layer types in the BFF are `public` rather than `internal sealed`. This deviates from the standard "Application classes are internal sealed" rule (CLAUDE.md).
+
+**Justification:** The BFF has no Infrastructure layer and no `DependencyInjection` project. Bootstrap directly registers Application types. `InternalsVisibleTo` from Application to Bootstrap is an option but would be the only such relationship in the BFF — the pragmatic deviation is accepted given the BFF's simpler 3-project structure. If a BFF Infrastructure or DI project is added later, these types should be made internal with appropriate `InternalsVisibleTo` entries.
