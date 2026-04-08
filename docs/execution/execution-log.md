@@ -1904,3 +1904,260 @@ Created four previously missing test projects to close known test gaps:
 | EI-028: Consumer inbox idempotency | Accepted by design |
 | EI-029: BattleLifecycleAppService not mockable | Accepted — alternative test approach |
 | EI-030: Match.Create produces Queued state | Resolved during implementation |
+
+---
+
+## Phase 6: Legacy Cleanup and Release
+
+### Batch C-A — Legacy Deletion and Docker Update
+
+**Date:** 2026-04-08
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+#### Tickets Executed
+
+##### C-01: Delete Kombats.Shared Project
+**Status:** Verified complete (already deleted in Phase 2, Batch P-G)
+
+Verification:
+- `grep -r "Kombats.Shared" --include="*.csproj" --include="*.sln" --include="*.cs"` — zero matches
+- No `Kombats.Shared` directory exists anywhere in the repository
+- No solution file entries reference the project
+
+No action required — deletion was completed in Phase 2.
+
+##### C-02: Delete Root-Level Legacy Directories
+**Status:** Done
+
+Deleted:
+- `src/Kombats.Common/Kombats.Infrastructure.Messaging/` — legacy directory containing only `obj/` artifacts. No `.csproj`, no source files. Zero project references in any `.csproj` or `.sln`. The `Kombats.Messaging` project (target replacement) is fully operational.
+- `src/Kombats.Players/.claude/.claude.md` — legacy per-service Claude configuration. Superseded by repository-level `.claude/` configuration.
+- `scripts/add-to-sln.ps1` — legacy scaffolding script referencing `Kombats.slnx` (deleted in earlier phases). No other files reference this script.
+- `tools/manual_test_battle.md` — legacy manual test documentation referencing old infrastructure (postgres:15, `combats_battle` database). Superseded by automated test suite.
+- `tools/test_battle.html` — legacy manual test HTML client. Superseded by automated test suite.
+- `tools/` — directory emptied and removed.
+- `Kombats.sln.DotSettings.user` — user-specific JetBrains Rider settings file. Should not be in version control.
+
+Retained:
+- `scripts/show-tree.ps1` — generic utility script, not legacy-specific
+- `infra/postgres/init/` — empty directory but referenced by `docker-compose.yml` volume mount; harmless
+
+##### C-03: Update Docker Configuration for Bootstrap Services
+**Status:** Done
+
+Deleted:
+- `src/Kombats.Battle/Kombats.Battle.Api/Dockerfile` — legacy Dockerfile targeting `Kombats.Battle.Api` as composition root. References deleted `Kombats.Infrastructure.Messaging` project.
+
+Created:
+- `src/Kombats.Players/Kombats.Players.Bootstrap/Dockerfile` — multi-stage build targeting Players Bootstrap composition root
+- `src/Kombats.Matchmaking/Kombats.Matchmaking.Bootstrap/Dockerfile` — multi-stage build targeting Matchmaking Bootstrap composition root
+- `src/Kombats.Battle/Kombats.Battle.Bootstrap/Dockerfile` — multi-stage build targeting Battle Bootstrap composition root
+
+All Dockerfiles:
+- Use `mcr.microsoft.com/dotnet/aspnet:10.0` base image
+- Copy `Directory.Build.props` and `Directory.Packages.props` for central package management
+- Include all transitive project dependencies
+- Target the correct Bootstrap `.csproj` for restore, build, and publish
+- Set `ENTRYPOINT` to the Bootstrap DLL
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors, 1 pre-existing warning MSB3277) |
+| `docker compose config --quiet` | Pass |
+| Zero references to deleted artifacts | Verified via grep |
+| Solution file integrity | No changes to Kombats.sln required |
+| Dockerfile targets correct Bootstrap projects | Verified |
+
+### Reviewer Verdict: APPROVED
+
+---
+
+### Batch C-B — Release Gate Verification
+
+**Date:** 2026-04-08
+**Status:** Completed (with fixes applied)
+**Branch:** kombats_full_refactor
+
+#### Tickets Executed
+
+##### C-04: Release Gate Verification — Full Test Suite
+**Status:** Done (with 2 corrective fixes)
+
+**Initial run:** 418 total tests, 10 failures.
+
+**Issue 1: Matchmaking PendingModelChangesWarning (all 10 failures)**
+
+Root cause: `MatchmakingDbContextModelSnapshot.cs` contained a legacy `Kombats.Matchmaking.Infrastructure.Entities.OutboxMessageEntity` entity (table `matchmaking_outbox_messages`) that was a custom outbox implementation from legacy code. The entity class was deleted during Phase 3 but the snapshot was not updated, causing EF Core to detect "pending model changes" and refuse to apply migrations.
+
+Fix:
+- Added `Microsoft.EntityFrameworkCore.Design` to `Kombats.Matchmaking.Bootstrap.csproj` (required for EF tooling)
+- Generated migration `20260408062301_RemoveLegacyCustomOutboxTable` — drops the orphaned `matchmaking_outbox_messages` table
+- EF Core auto-updated `MatchmakingDbContextModelSnapshot.cs` to remove the entity
+
+Files changed:
+- `src/Kombats.Matchmaking/Kombats.Matchmaking.Bootstrap/Kombats.Matchmaking.Bootstrap.csproj` — added `Microsoft.EntityFrameworkCore.Design`
+- `src/Kombats.Matchmaking/Kombats.Matchmaking.Infrastructure/Migrations/20260408062301_RemoveLegacyCustomOutboxTable.cs` — new migration
+- `src/Kombats.Matchmaking/Kombats.Matchmaking.Infrastructure/Migrations/20260408062301_RemoveLegacyCustomOutboxTable.Designer.cs` — auto-generated
+- `src/Kombats.Matchmaking/Kombats.Matchmaking.Infrastructure/Migrations/MatchmakingDbContextModelSnapshot.cs` — auto-updated
+
+**Second run:** 418 total tests, 1 failure remaining.
+
+**Issue 2: I-04 E2E test point allocation exceeded budget**
+
+Root cause: `I04_EndToEndGameplayLoopTests` called `AllocatePoints(3, 2, 1, 0)` (total 6 points) but `Character.CreateDraft` only provides 3 unspent points. Pre-existing test bug from Phase 5.
+
+Fix:
+- Changed Player A allocation from `(3, 2, 1, 0)` to `(1, 1, 1, 0)` (total 3)
+- Changed Player B allocation from `(1, 1, 3, 1)` to `(0, 0, 2, 1)` (total 3)
+- Updated `PlayerCombatProfileChanged` event stat values to match (base stats 3 + allocated)
+
+Files changed:
+- `tests/Kombats.Integration/Kombats.Integration.Tests/I04_EndToEndGameplayLoopTests.cs`
+
+**Final run:** 418 total tests, 0 failures.
+
+#### Release Gate Summary
+
+| Gate | Status | Evidence |
+|---|---|---|
+| Gate 1: All mandatory tests pass | **Pass** | 418/418 tests pass |
+| Gate 2: Battle determinism suite passes | **Pass** | 113 domain tests include full determinism suite |
+| Gate 3: Outbox atomicity verified | **Pass** | Kombats.Messaging.Tests outbox integration test passes |
+| Gate 4: Consumer idempotency verified | **Pass** | Integration tests I-01, I-02, I-03 include duplicate-event tests |
+| Gate 5: Auth enforced | **Pass** | Players/Matchmaking/Battle API tests verify auth |
+| Gate 6: Contract compatibility | **Pass** | Solution builds, serialization tests pass |
+| Gate 7: Migration forward-apply | **Pass** | All infrastructure tests apply migrations to empty database |
+| Gate 8: No test infra in production | **Pass** | Test code only in test assemblies |
+
+#### Test Breakdown
+
+| Project | Tests | Status |
+|---|---|---|
+| Players.Domain.Tests | 59 | Pass |
+| Players.Application.Tests | 17 | Pass |
+| Players.Infrastructure.Tests (Testcontainers) | 11 | Pass |
+| Players.Api.Tests | 4 | Pass |
+| Matchmaking.Domain.Tests | 55 | Pass |
+| Matchmaking.Application.Tests | 15 | Pass |
+| Matchmaking.Infrastructure.Tests (Testcontainers) | 14 | Pass |
+| Matchmaking.Api.Tests | 23 | Pass |
+| Battle.Domain.Tests | 113 | Pass |
+| Battle.Application.Tests | 32 | Pass |
+| Battle.Infrastructure.Tests (Testcontainers) | 7 | Pass |
+| Messaging.Tests (Testcontainers) | 25 | Pass |
+| Integration.Tests (Testcontainers) | 43 | Pass |
+| **Total** | **418** | **All Pass** |
+
+### Reviewer Verdict: APPROVED WITH FIXES APPLIED
+
+---
+
+### Batch C-C — Final Dead Code and Orphan Sweep
+
+**Date:** 2026-04-08
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+#### Tickets Executed
+
+##### C-05: Final Dead Code and Orphan Sweep
+**Status:** Done
+
+**Sweep Results:**
+
+| Check | Result |
+|---|---|
+| Solution file integrity | All 35 project entries verified against disk |
+| `Kombats.Shared` references | Zero |
+| `DependencyInjection.cs` in Infrastructure | None |
+| Controller classes | None |
+| `.slnx` or per-service `.sln` files | None |
+| `DevSignalRAuthMiddleware` | None |
+| Orphaned `.cs` files outside projects | None |
+| Dead project references in `.sln` | None |
+
+**Unused Package Declarations Removed from `Directory.Packages.props`:**
+
+| Package | Reason |
+|---|---|
+| `Serilog.Sinks.ApplicationInsights` 5.0.0 | Explicitly removed from baseline — Application Insights is not used |
+| `MassTransit.Testing` 8.3.0 | Does not exist as separate package in MassTransit v8+ (EI-006) |
+| `OpenTelemetry.Instrumentation.SqlClient` 1.15.0 | Explicitly irrelevant per baseline — system uses Npgsql, not SqlClient |
+
+**Retained unused packages (approved baseline, Phase 7 scope):**
+- OpenTelemetry suite (7 packages) — approved telemetry standard, Phase 7
+- Serilog packages (3) — Exceptions, Settings.Configuration, Sinks.Console — Phase 7
+- `Scrutor` — assembly-scanning DI registration, Phase 7
+- `Microsoft.AspNetCore.Mvc.Testing` — WebApplicationFactory integration tests, Phase 7
+- `Testcontainers.Redis` — Redis integration tests, Phase 7 (EI-027)
+
+**Not changed:**
+- Redundant PropertyGroup entries in 10 .csproj files — harmless, cosmetic only (EI-002)
+- `infra/postgres/init/` empty directory — referenced by docker-compose volume mount
+
+Files changed:
+- `Directory.Packages.props` — removed 3 package declarations
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors) |
+| All 418 tests pass | Pass (intermittent Docker contention is EI-026, not a regression) |
+| Zero legacy patterns remaining | Verified |
+| Zero dead references | Verified |
+| Zero orphaned files | Verified |
+
+### Reviewer Verdict: APPROVED
+
+---
+
+## Phase 6 Final Verdict
+
+**Status: ACCEPTED**
+**Date:** 2026-04-08
+
+### Batch-by-Batch Approval Summary
+
+| Batch | Tickets | Verdict |
+|---|---|---|
+| C-A | C-01, C-02, C-03 | APPROVED |
+| C-B | C-04 | APPROVED WITH FIXES APPLIED |
+| C-C | C-05 | APPROVED |
+
+### Fixes Applied During Phase 6
+
+1. **Matchmaking migration snapshot mismatch** (EI-033): Created migration to drop orphaned legacy `matchmaking_outbox_messages` table. Added `Microsoft.EntityFrameworkCore.Design` to Matchmaking Bootstrap.
+2. **I-04 E2E test point allocation bug** (EI-034): Fixed stat allocation in test to respect domain constraint (3 unspent points, not 6).
+
+### Remaining Cleanup/Release Debt
+
+| Item | Status | Phase |
+|---|---|---|
+| Redundant PropertyGroup entries in 10 .csproj files | Deferred (cosmetic, EI-002) | Phase 7 |
+| Keycloak realm-export.json missing (EI-031) | Open | Phase 7 |
+| Redis integration tests (EI-027) | Open | Phase 7 |
+| OpenTelemetry standardization | Open | Phase 7 |
+| Production logging sink strategy | Open | Phase 7 |
+| Profile-miss during pair-pop (EI-014) | Open | Phase 7 |
+| BattleCreated timeout worker (EI-015) | Open | Phase 7 |
+| Level-based filtering in pairing (EI-016) | Open | Phase 7 |
+
+### Release Readiness
+
+The project is **ready for release** at the Phase 6 completion gate:
+
+- All legacy code has been removed
+- All three services run from Bootstrap composition roots
+- All 418 tests pass (8 release gates met)
+- Docker configuration targets correct Bootstrap projects
+- No dead code, no orphaned files, no legacy patterns remain
+- Solution builds cleanly with zero errors
+- Contract compatibility verified
+- Outbox atomicity, consumer idempotency, and auth enforcement verified
+- Battle determinism suite passes
+
+Phase 7 (Production-Readiness Hardening) items are documented and non-blocking for functional release.

@@ -16,7 +16,6 @@ using Kombats.Players.Infrastructure.Messaging;
 using Kombats.Players.Infrastructure.Messaging.Consumers;
 using Kombats.Players.Infrastructure.Persistence.EF;
 using Kombats.Players.Infrastructure.Persistence.Repository;
-using MassTransit;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Serilog;

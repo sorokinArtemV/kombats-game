@@ -103,12 +103,12 @@ public sealed class I04_EndToEndGameplayLoopTests : IAsyncLifetime
         {
             var charA = Character.CreateDraft(playerAId, now);
             charA.SetNameOnce("PlayerA", now);
-            charA.AllocatePoints(3, 2, 1, 0, now);
+            charA.AllocatePoints(1, 1, 1, 0, now);
             db.Characters.Add(charA);
 
             var charB = Character.CreateDraft(playerBId, now);
             charB.SetNameOnce("PlayerB", now);
-            charB.AllocatePoints(1, 1, 3, 1, now);
+            charB.AllocatePoints(0, 0, 2, 1, now);
             db.Characters.Add(charB);
 
             await db.SaveChangesAsync();
@@ -138,10 +138,10 @@ public sealed class I04_EndToEndGameplayLoopTests : IAsyncLifetime
             CharacterId = charAId,
             Name = "PlayerA",
             Level = 1,
-            Strength = 3,
-            Agility = 2,
-            Intuition = 1,
-            Vitality = 0,
+            Strength = 4,
+            Agility = 4,
+            Intuition = 4,
+            Vitality = 3,
             IsReady = true,
             Revision = 1,
             OccurredAt = now,
@@ -155,10 +155,10 @@ public sealed class I04_EndToEndGameplayLoopTests : IAsyncLifetime
             CharacterId = charBId,
             Name = "PlayerB",
             Level = 1,
-            Strength = 1,
-            Agility = 1,
-            Intuition = 3,
-            Vitality = 1,
+            Strength = 3,
+            Agility = 3,
+            Intuition = 5,
+            Vitality = 4,
             IsReady = true,
             Revision = 1,
             OccurredAt = now,
@@ -358,10 +358,10 @@ public sealed class I04_EndToEndGameplayLoopTests : IAsyncLifetime
             CharacterId = charAId,
             Name = "PlayerA",
             Level = 1,
-            Strength = 3,
-            Agility = 2,
-            Intuition = 1,
-            Vitality = 0,
+            Strength = 4,
+            Agility = 4,
+            Intuition = 4,
+            Vitality = 3,
             IsReady = true,
             Revision = 2, // Bumped after battle
             OccurredAt = now.AddMinutes(6),

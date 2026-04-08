@@ -245,3 +245,37 @@ The I-02 (Matchmaking→Battle) flow test could not mock BattleLifecycleAppServi
 **Status:** Resolved
 
 Match.Create() creates matches in Queued state, but the repository CAS operations require BattleCreateRequested or BattleCreated states. Integration tests that verify CAS transitions must call match.MarkBattleCreateRequested() after creation. This was initially missed in test drafts and corrected during implementation.
+
+## Phase 6: Legacy Cleanup and Release
+
+### EI-031: Keycloak realm-export.json volume mount references non-existent file
+**Severity:** Low
+**Status:** Open — pre-existing, not introduced by Phase 6
+
+`docker-compose.yml` line 73 mounts `./infra/keycloak/realm-export.json` but the `infra/keycloak/` directory does not exist. This is a pre-existing configuration issue — Keycloak will start but without realm import. Not blocking for Phase 6 — should be addressed in Phase 7 (Production-Readiness Hardening) when Keycloak configuration is finalized.
+
+### EI-033: Matchmaking migration snapshot contained orphaned OutboxMessageEntity
+**Severity:** High
+**Status:** Resolved in C-B
+
+The `MatchmakingDbContextModelSnapshot.cs` contained a `Kombats.Matchmaking.Infrastructure.Entities.OutboxMessageEntity` entity (table `matchmaking_outbox_messages`) that was a custom outbox implementation from legacy code. The entity class was deleted during Phase 3 migration but the snapshot was not updated. This caused EF Core's `PendingModelChangesWarning` to throw during `MigrateAsync()`, failing all 10 Matchmaking infrastructure and integration tests.
+
+Fix: Generated migration `RemoveLegacyCustomOutboxTable` that drops the orphaned table. The standard MassTransit outbox (`outbox_message` table) remains and is the correct implementation per AD-01.
+
+### EI-034: I-04 E2E test allocated more points than available
+**Severity:** Medium
+**Status:** Resolved in C-B
+
+`I04_EndToEndGameplayLoopTests.FullGameplayLoop` called `AllocatePoints(3, 2, 1, 0)` (total 6 points) but `Character.CreateDraft` only provides 3 unspent points. Pre-existing test bug introduced in Phase 5. Fix: adjusted allocations to sum to 3 and updated corresponding profile event stat values.
+
+### EI-035: Intermittent Docker/Testcontainers test failures under parallel execution
+**Severity:** Info
+**Status:** Accepted by design (pre-existing, see EI-026)
+
+When all 13 test projects run simultaneously via `dotnet test Kombats.sln`, Docker resource contention can cause Testcontainers-based tests to fail at initialization (1ms failures). The same tests pass when run individually or in smaller batches. This is a known Testcontainers characteristic, not a code defect. Documented in EI-026.
+
+### EI-032: Legacy Kombats.Infrastructure.Messaging AssemblyInfo in Kombats.Messaging obj/
+**Severity:** Info
+**Status:** Resolved
+
+`src/Kombats.Common/Kombats.Messaging/obj/Debug/net10.0/Kombats.Infrastructure.Messaging.AssemblyInfo.cs` was an auto-generated build artifact containing the old assembly name. This is a build cache artifact in `obj/` (gitignored) and will be regenerated on next clean build. No action required.
