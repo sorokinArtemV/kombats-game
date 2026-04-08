@@ -478,18 +478,15 @@ EI-044 (no existing architecture decision for BFF) is now resolved. AD-14 throug
 
 ### EI-050: Players MeResponse lacks win/loss record fields
 **Severity:** Low
-**Status:** Open — surfaces during BFF-2A (GameStateResponse composition)
+**Status:** Open — accepted deviation for BFF v1
 
 During BFF-0B implementation, the internal service response types were modeled from the actual Players API endpoint responses. The `MeResponse` from `GET /api/v1/me` includes: `CharacterId`, `IdentityId`, `OnboardingState`, `Name`, `Strength`, `Agility`, `Intuition`, `Vitality`, `UnspentPoints`, `Revision`, `TotalXp`, `Level`, `LevelingVersion`. It does NOT include win/loss record fields.
 
-The BFF architecture document (Section 4) says the `GameStateResponse` should include "win/loss record." This field does not exist in the current Players API response. This will surface as a gap during BFF-2A implementation.
+The BFF architecture document (Section 4) says the `GameStateResponse` should include "win/loss record." The Players backend internally has `Wins`/`Losses` in `CharacterStateResult` but the `MeResponse` mapping explicitly excludes them.
 
-**Options:**
-1. Add win/loss fields to Players' `MeResponse` (minor backend change)
-2. Defer win/loss from `GameStateResponse` v1 and document as future enhancement
-3. Source win/loss from a different endpoint (none currently exists)
+**BFF-2A resolution:** Win/loss fields are omitted from `GameStateResponse` v1. Per execution rules, backend service code was not modified in this batch. The `CharacterResponse` and `GameStateResponse` DTOs do not include win/loss fields.
 
-This does not block BFF-0 or BFF-1. The gap will be evaluated during BFF-2A.
+**Follow-up required:** To add win/loss to `GameStateResponse`, Players' `MeResponse` must be updated to include `Wins`/`Losses` (minor backend change — the data is already in `CharacterStateResult`). Then `InternalCharacterResponse`, `CharacterResponse`, and `GameStateResponse` can be updated to carry the fields through. This is a backend change that should be tracked as a separate ticket.
 
 ### EI-051: AllocateStatsAsync hardcoded ExpectedRevision = 0
 **Severity:** Medium

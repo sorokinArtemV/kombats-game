@@ -2820,3 +2820,98 @@ Changed `int statusCode = allHealthy ? 200 : 200;` to `int statusCode = allHealt
 
 ### BFF-1 Status
 BFF-1 review fixes complete. Ready to proceed to BFF-2.
+
+---
+
+## Batch BFF-2: Composed Read Endpoint
+
+**Date:** 2026-04-08
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+**Goal:** Cross-service composed game state endpoint with partial failure handling.
+
+### Tickets Executed
+
+#### BFF-2A: Composed Game State Endpoint
+**Status:** Done
+
+**Source changes:**
+
+`src/Kombats.Bff/Kombats.Bff.Api/Models/Responses/GameStateResponse.cs` — created:
+- `GameStateResponse` record: `Character` (nullable `CharacterResponse`), `QueueStatus` (nullable `QueueStatusResponse`), `IsCharacterCreated` (bool), `DegradedServices` (nullable `IReadOnlyList<string>`)
+- Reuses existing `CharacterResponse` and `QueueStatusResponse` DTOs from BFF-1
+
+`src/Kombats.Bff/Kombats.Bff.Application/Composition/GameStateComposer.cs` — created:
+- `GameStateComposer` — scoped service injecting `IPlayersClient`, `IMatchmakingClient`, `ILogger`
+- `ComposeAsync()` calls both clients in parallel via `Task.WhenAll`
+- Graceful degradation: catches `ServiceUnavailableException` per client independently
+  - Players unavailable → `Character: null`, `DegradedServices: ["Players"]`
+  - Matchmaking unavailable → `QueueStatus: null`, `DegradedServices: ["Matchmaking"]`
+  - Both unavailable → `GameStateResult.BothUnavailable()` (endpoint returns 503)
+- `IsCharacterCreated` derived from whether Players returned a non-null character (404 = not created)
+- No domain logic — pure composition and mapping
+- `GameStateResult` record holds composition output for endpoint mapping
+
+`src/Kombats.Bff/Kombats.Bff.Api/Endpoints/Game/GetGameStateEndpoint.cs` — created:
+- `GET /api/v1/game/state` endpoint implementing `IEndpoint`
+- `RequireAuthorization()`, tagged "Game"
+- Thin: calls `GameStateComposer.ComposeAsync()` → maps result to `GameStateResponse` → returns
+- Both-unavailable case returns `Results.StatusCode(503)`
+- Uses existing `CharacterMapper.ToCharacterResponse()` for character mapping
+
+`src/Kombats.Bff/Kombats.Bff.Bootstrap/Program.cs` — modified:
+- Added `using Kombats.Bff.Application.Composition`
+- Added `builder.Services.AddScoped<GameStateComposer>()` DI registration
+
+**Field gap — win/loss data (EI-050):**
+
+The BFF architecture spec (Section 4) says GameStateResponse should include "win/loss record" from Players. The Players `GET /api/v1/me` endpoint (`MeResponse`) does NOT include `Wins`/`Losses` fields — they exist in the internal `CharacterStateResult` but are excluded from the HTTP response mapping. Per BFF-2 execution rules: do not silently change backend service code. Win/loss fields are omitted from BFF v1 `GameStateResponse`. EI-050 remains open and is updated with BFF-2 resolution.
+
+**Tests added:**
+
+`tests/Kombats.Bff/Kombats.Bff.Application.Tests/GameStateComposerTests.cs` — 8 tests:
+- `ComposeAsync_BothServicesSucceed_ReturnsFullResponse` — full composition with character + queue data
+- `ComposeAsync_PlayersReturnsNull_IsCharacterCreatedFalse` — Players returns 404 (new user)
+- `ComposeAsync_PlayersUnavailable_ReturnsPartialWithDegradation` — Players throws ServiceUnavailableException
+- `ComposeAsync_MatchmakingUnavailable_ReturnsPartialWithDegradation` — Matchmaking throws ServiceUnavailableException
+- `ComposeAsync_BothUnavailable_ReturnsBothUnavailableResult` — both services throw
+- `ComposeAsync_CallsClientsInParallel` — timing-based assertion: 200ms each, total < 350ms
+- `ComposeAsync_MatchedWithBattleId_IncludesBattleIdInQueueStatus` — BattleId/MatchId/MatchState pass-through
+- `ComposeAsync_DoesNotCallAnyBattleService` — verifies no Battle client calls (live battle state is SignalR-only)
+
+`tests/Kombats.Bff/Kombats.Bff.Api.Tests/ResponseDtoTests.cs` — 5 tests added:
+- `GameStateResponse_HasExpectedProperties` — Character, QueueStatus, IsCharacterCreated, DegradedServices
+- `GameStateResponse_Character_IsNullable` — nullable CharacterResponse
+- `GameStateResponse_QueueStatus_IsNullable` — nullable QueueStatusResponse
+- `GameStateResponse_DegradedServices_IsNullableList` — IReadOnlyList<string>
+- `GameStateResponse_DoesNotContainLiveBattleStateFields` — asserts no CurrentHp, MaxHp, CurrentTurn, TurnIndex, Actions, TurnResults, BattleState, PlayerHp, OpponentHp, etc.
+- `AllResponseDtos_AreRecords` and `AllResponseDtos_AreSealed` updated to include `GameStateResponse`
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.Bff.Bootstrap` | Pass (0 warnings, 0 errors) |
+| `dotnet build Kombats.Bff.Application.Tests` | Pass (0 warnings, 0 errors) |
+| `dotnet build Kombats.Bff.Api.Tests` | Pass (0 warnings, 0 errors) |
+| BFF Application.Tests | Pass (38/38 tests) |
+| BFF Api.Tests | Pass (26/26 tests) |
+| Parallel execution verified | Pass (timing test: 226ms for 2x200ms tasks) |
+| No live battle state in GameStateResponse | Pass (contract test) |
+| No backend service code modified | Pass |
+| No BFF-3 scope pulled in | Pass |
+
+### BFF-2 Gate Check
+
+| Check | Criteria | Result |
+|---|---|---|
+| Composition | Composed endpoint returns merged data from 2 services | Pass |
+| Partial failure | Graceful degradation verified (4 degradation tests) | Pass |
+| No N+1 | Exactly 2 parallel HTTP calls (1 Players + 1 Matchmaking) | Pass |
+| No domain logic | Composition is pure mapping, no business rules | Pass |
+| Tests | Composition tests with stubbed clients pass | Pass (13 new tests) |
+| No live battle state | GameStateResponse excludes HP/turns/actions | Pass (contract test) |
+
+### BFF-2 Status
+BFF-2 gate passed. Safe to proceed to BFF-3 (SignalR Battle realtime proxy).

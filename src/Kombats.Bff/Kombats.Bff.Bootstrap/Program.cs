@@ -1,21 +1,23 @@
+using System.Reflection;
 using Kombats.Bff.Api.Extensions;
 using Kombats.Bff.Application.Clients;
+using Kombats.Bff.Application.Composition;
 using Kombats.Bff.Application.Errors;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Scalar.AspNetCore;
 using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Logging
 builder.Host.UseSerilog((context, loggerConfig) =>
     loggerConfig.ReadFrom.Configuration(context.Configuration));
 
 // Authentication & Authorization (inlined — BFF does not reference Kombats.Abstractions per AD-17)
-var authority = builder.Configuration["Keycloak:Authority"]
-    ?? throw new InvalidOperationException("Keycloak:Authority configuration is required.");
-var audience = builder.Configuration["Keycloak:Audience"]
-    ?? throw new InvalidOperationException("Keycloak:Audience configuration is required.");
+string authority = builder.Configuration["Keycloak:Authority"]
+                   ?? throw new InvalidOperationException("Keycloak:Authority configuration is required.");
+string audience = builder.Configuration["Keycloak:Audience"]
+                  ?? throw new InvalidOperationException("Keycloak:Audience configuration is required.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -29,7 +31,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Endpoints (scan Api assembly)
-var apiAssembly = typeof(Kombats.Bff.Api.Endpoints.IEndpoint).Assembly;
+Assembly apiAssembly = typeof(Kombats.Bff.Api.Endpoints.IEndpoint).Assembly;
 builder.Services.AddEndpoints(apiAssembly);
 
 // API Documentation
@@ -48,13 +50,15 @@ builder.Services.AddCors(options =>
         }
         else
         {
-            var origins = builder.Configuration
+            string[]? origins = builder.Configuration
                 .GetSection("Cors:AllowedOrigins")
                 .Get<string[]>();
 
             if (origins is null || origins.Length == 0)
+            {
                 throw new InvalidOperationException(
                     "Cors:AllowedOrigins must be configured in non-Development environments.");
+            }
 
             policy.WithOrigins(origins)
                 .AllowAnyMethod()
@@ -88,7 +92,7 @@ builder.Services.AddHttpClient<IMatchmakingClient, MatchmakingClient>(client =>
     client.BaseAddress = new Uri(baseUrl);
 }).AddHttpMessageHandler<JwtForwardingHandler>();
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 app.MapOpenApi();
 app.MapScalarApiReference();
