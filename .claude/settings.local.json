@@ -71,7 +71,12 @@
       "Bash(rmdir src/Kombats.Battle/Kombats.Battle.Api/Middleware)",
       "Bash(rm -f src/Kombats.Battle/Kombats.Battle.Api/Program.cs)",
       "Bash(git -C /d/1/tmp/kombats-game log --oneline --all)",
-      "Bash(shuf)"
+      "Bash(shuf)",
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Bootstrap)",
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Endpoints/Health)",
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Extensions)",
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Models/Requests)",
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Models/Responses)"
     ]
   }
 }

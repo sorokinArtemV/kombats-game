@@ -390,3 +390,141 @@ Multi-instance deployments race on migrations. Slow migrations block application
 - Predictable migration execution (single runner)
 - Independent failure handling (migration failure doesn't crash the app)
 - Rollback capability (migrations can be tested and reversed in CI before deployment)
+
+---
+
+## AD-14: BFF as Stateless Orchestration/Composition Layer
+
+### Decision
+The BFF (Backend-for-Frontend) is a stateless ASP.NET Core service that composes reads across backend services and forwards writes. It owns no durable state — no database, no Redis, no message bus.
+
+### Context
+The Kombats frontend needs a unified API surface. Three independent backend services (Players, Matchmaking, Battle) each expose separate APIs with different contract conventions. The frontend would otherwise need to orchestrate cross-service workflows, manage partial failures, and maintain separate connections.
+
+### Trade-offs
+
+| Factor | Stateless BFF (chosen) | Stateful BFF | No BFF |
+|---|---|---|---|
+| Complexity | Low — pure composition | Higher — consistency, projections, event subscriptions | None at BFF layer, shifted to frontend |
+| Scalability | Trivial — horizontally scalable | Requires state synchronization | N/A |
+| Data freshness | Always fresh (reads from source) | May serve stale projections | Always fresh |
+| Frontend complexity | Low — single API surface | Low | High — orchestrates 3 services |
+
+### Rejected Alternatives
+
+1. **Stateful BFF with Redis cache or PostgreSQL projections.** Rejected because it creates a fourth bounded context with its own consistency concerns. The three backend services already own all authoritative state.
+
+2. **No BFF — frontend calls services directly.** Rejected because it shifts orchestration complexity to the frontend, couples UI to internal service contracts, and requires all three services to be externally accessible.
+
+### Rationale
+A stateless BFF is the simplest architecture that solves the frontend integration problem. Every request is fulfilled by calling internal service APIs — no projections to maintain, no events to consume, no cache to invalidate. If caching is needed in the future, it is an explicit architectural decision (not incremental drift).
+
+---
+
+## AD-15: JWT Forwarding for BFF-to-Service Auth
+
+### Decision
+The BFF forwards the original JWT token from the frontend to backend services. Backend services continue to validate JWT tokens independently (defense-in-depth).
+
+### Context
+AD-03 rejected "BFF-only auth" where backend services trust all requests from the BFF. The concern was: if the BFF is bypassed or misconfigured, all backend services are unprotected.
+
+### Trade-offs
+
+| Factor | JWT forwarding (chosen) | Trusted header (X-Identity-Id) |
+|---|---|---|
+| Defense-in-depth | Maintained — services validate independently | Lost — services trust BFF blindly |
+| Latency | Double JWT validation per request | Single validation at BFF |
+| Implementation | Simple — copy Authorization header | Requires network-level trust guarantees |
+| Backend service changes | None — services already validate JWT | Must reconfigure auth on all services |
+
+### Rejected Alternatives
+
+1. **Trusted header approach.** BFF extracts IdentityId, passes via `X-Identity-Id`. Rejected because it removes defense-in-depth and requires guaranteeing that backend services are never accessible without BFF mediation (network topology constraint).
+
+### Rationale
+JWT validation is a local operation (no Keycloak round-trip). The performance cost of double validation is negligible. Backend services already have JWT validation configured and tested. Defense-in-depth is a documented principle (AD-03).
+
+---
+
+## AD-16: BFF Proxies Battle SignalR (Single Entry Point)
+
+### Decision
+The BFF proxies the Battle service's SignalR connection. The frontend connects to the BFF's `/battlehub`; the BFF relays messages bidirectionally to Battle's `/battlehub`.
+
+### Context
+Battle uses SignalR for real-time combat (turn events, action submission). The frontend needs to connect somewhere for real-time battle state.
+
+### Trade-offs
+
+| Factor | Proxy via BFF (chosen) | Direct frontend → Battle |
+|---|---|---|
+| Frontend simplicity | Single URL for everything | Must discover Battle URL, manage separate connection |
+| Auth | Single auth edge at BFF | Separate auth with Battle |
+| Contract stability | BFF can adapt/translate events | Frontend coupled to Battle's SignalR contract |
+| Network topology | Only BFF externally accessible | Battle must be externally accessible |
+| Latency | Extra hop (~1-2ms) | Lower |
+
+### Rejected Alternatives
+
+1. **Direct frontend → Battle connection.** Rejected because it requires Battle to be externally accessible, creates a second auth edge, and couples the frontend to Battle's internal SignalR contract.
+
+### Fallback
+If proxy implementation proves intractable in v1 scope (per criteria defined in the BFF architecture document Section 8), the fallback is BFF-assisted discovery: BFF returns Battle's hub URL and the frontend connects directly. This fallback changes deployment topology and requires reviewer approval.
+
+### Rationale
+For a turn-based game with 30-second turns, the ~1-2ms relay overhead is negligible. A single entry point simplifies frontend development, auth, and deployment. The proxy can translate or adapt events if Battle's internal contract evolves.
+
+---
+
+## AD-17: BFF Does Not Reference Internal Service Projects or Abstractions
+
+### Decision
+The BFF does not hold project references to any backend service project (Api, Application, Domain, Infrastructure) or to `Kombats.Abstractions`. Communication is strictly over HTTP/SignalR.
+
+### Context
+The BFF sits above the three backend services. If it references their internal projects, it gains compile-time coupling to service internals — defeating the purpose of service isolation.
+
+### Trade-offs
+
+| Factor | No internal references (chosen) | Reference Contract projects | Reference Abstractions |
+|---|---|---|---|
+| Coupling | None — HTTP boundary only | Compile-time coupling to contract types | Compile-time coupling to shared abstractions |
+| Type safety | Runtime (JSON deserialization) | Compile-time | Partial |
+| Contract evolution | BFF absorbs changes via own DTOs | BFF breaks when contracts change | N/A |
+| Simplicity | Own DTOs, own error types | Reuse existing types | Mixed patterns |
+
+### Rejected Alternatives
+
+1. **Reference Contract projects for type reuse.** Rejected for v1 because it couples BFF build to internal contract evolution. BFF defines its own response types and maps from internal service responses, providing a translation layer.
+
+2. **Reference `Kombats.Abstractions` for `Result<T>` and handler interfaces.** Rejected because those are backend-service internals. BFF defines its own error types and response patterns appropriate for a frontend-facing HTTP layer.
+
+### Rationale
+The BFF's value is as a decoupled translation layer. If it references internal projects, changes to those projects break BFF builds — the opposite of the goal. BFF-local DTOs absorb internal contract evolution without breaking the frontend.
+
+---
+
+## AD-18: BFF Interacts with Battle via SignalR Only (No HTTP for Business Flows)
+
+### Decision
+The BFF does not call Battle over HTTP for business flows. All battle interaction (join battle, submit action, receive turn events) goes through SignalR. The only HTTP call to Battle is the health check probe.
+
+### Context
+Battle's API surface is primarily real-time: turn events, action submission, battle state updates. These are naturally bidirectional and latency-sensitive — a SignalR fit, not REST.
+
+### Trade-offs
+
+| Factor | SignalR-only (chosen) | HTTP + SignalR |
+|---|---|---|
+| Protocol consistency | One protocol for all battle interaction | Mixed protocols, routing complexity |
+| Real-time events | Natural — SignalR is bidirectional | SignalR for events, HTTP for commands = split |
+| Implementation | Single connection manages all battle interaction | Two connection types to Battle |
+| Complexity | Lower — one client | Higher — HttpClient + HubConnection |
+
+### Rejected Alternatives
+
+1. **HTTP for commands (join/submit), SignalR for events only.** Rejected because it splits the battle interaction across two protocols with no clear benefit. Battle's hub already handles commands (JoinBattle, SubmitTurnAction) alongside events.
+
+### Rationale
+Battle is fundamentally a real-time service. SignalR handles both the command (client → server) and event (server → client) directions. Adding HTTP for commands would create redundant paths and complicate error handling.

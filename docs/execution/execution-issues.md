@@ -453,3 +453,116 @@ The BFF execution plan assumes backend API responses contain all fields needed b
 **Risk:** If backend responses lack needed fields, minimal backend API changes will be required during BFF-1 or BFF-2, adding cross-ticket dependencies.
 
 **Mitigation:** Implementer should verify actual response shapes at the start of BFF-1A and BFF-1B. Any backend changes should be scoped as minimal additions to existing responses (new fields, not new endpoints).
+
+## Batch BFF-0
+
+### EI-047: BFF auth inlined instead of using AddKombatsAuth from Abstractions
+**Severity:** Info
+**Status:** Resolved by design
+
+The BFF-0A execution plan wording mentions using `AddKombatsAuth` from `Kombats.Abstractions` for JWT setup. Per AD-17 (BFF does not reference internal service projects or Abstractions) and explicit implementation instructions, the JWT auth configuration was inlined directly in BFF Bootstrap `Program.cs`. The inlined code is identical in behavior to `KombatsAuthExtensions.AddKombatsAuth()` (reads `Keycloak:Authority` and `Keycloak:Audience`, configures `JwtBearerDefaults`, sets `RequireHttpsMetadata = false` and `NameClaimType = preferred_username`).
+
+This is a plan wording inconsistency, not an architecture deviation. AD-17 was approved as part of the BFF architecture spec. The execution plan's mention of Abstractions was an oversight in plan drafting that conflicted with the approved architecture decision.
+
+### EI-048: Microsoft.Extensions.Http added to Directory.Packages.props
+**Severity:** Info
+**Status:** Resolved
+
+`Microsoft.Extensions.Http` was not in the central package management file (`Directory.Packages.props`). Added at version 10.0.3 to align with other `Microsoft.Extensions.*` packages. This is a framework package included in the .NET SDK, not a new third-party dependency. Ultimately not directly referenced by BFF projects (the `FrameworkReference` to `Microsoft.AspNetCore.App` already provides it), but recorded for completeness.
+
+### EI-049: EI-044 resolved — AD-14 through AD-18 formalized
+**Severity:** Info
+**Status:** Resolved
+
+EI-044 (no existing architecture decision for BFF) is now resolved. AD-14 through AD-18 have been added to `kombats-architecture-decisions.md` during BFF-0D execution.
+
+### EI-050: Players MeResponse lacks win/loss record fields
+**Severity:** Low
+**Status:** Open — surfaces during BFF-2A (GameStateResponse composition)
+
+During BFF-0B implementation, the internal service response types were modeled from the actual Players API endpoint responses. The `MeResponse` from `GET /api/v1/me` includes: `CharacterId`, `IdentityId`, `OnboardingState`, `Name`, `Strength`, `Agility`, `Intuition`, `Vitality`, `UnspentPoints`, `Revision`, `TotalXp`, `Level`, `LevelingVersion`. It does NOT include win/loss record fields.
+
+The BFF architecture document (Section 4) says the `GameStateResponse` should include "win/loss record." This field does not exist in the current Players API response. This will surface as a gap during BFF-2A implementation.
+
+**Options:**
+1. Add win/loss fields to Players' `MeResponse` (minor backend change)
+2. Defer win/loss from `GameStateResponse` v1 and document as future enhancement
+3. Source win/loss from a different endpoint (none currently exists)
+
+This does not block BFF-0 or BFF-1. The gap will be evaluated during BFF-2A.
+
+### EI-051: AllocateStatsAsync hardcoded ExpectedRevision = 0
+**Severity:** Medium
+**Status:** Resolved in BFF-0 fix pass
+
+`PlayersClient.AllocateStatsAsync` hardcoded `ExpectedRevision = 0` in the request body instead of accepting it as a parameter. This broke the optimistic concurrency contract: the BFF-1A endpoint would have been unable to forward the frontend's expected revision value to Players, causing silent concurrency-check bypasses or failures.
+
+**Fix:** Added `int expectedRevision` as the first parameter to `IPlayersClient.AllocateStatsAsync` and `PlayersClient.AllocateStatsAsync`. The hardcoded `0` was replaced with the parameter value. Verified by unit test (`AllocateStatsAsync_SendsExpectedRevisionInBody`).
+
+### EI-052: BFF-0B unit tests were deferred to BFF-1C — now added in fix pass
+**Severity:** Medium
+**Status:** Resolved in BFF-0 fix pass
+
+The original BFF-0 implementation deferred BFF-0B unit tests (JwtForwardingHandler, error mapping, client behavior) to BFF-1C, following the execution plan's test project creation schedule. The reviewer flagged this as a gap: BFF-0B code was delivered without automated verification.
+
+**Fix:** Created `Kombats.Bff.Application.Tests` test project during the fix pass. 20 tests now cover JwtForwardingHandler (3), ErrorMapper (10), and PlayersClient (7). The BFF-1C ticket still creates `Kombats.Bff.Api.Tests` and adds MatchmakingClient tests and endpoint structure tests — that scope is unchanged.
+
+## Batch BFF-1
+
+### EI-053: OnboardingState serializes as integer from Players backend
+**Severity:** Low
+**Status:** Resolved in BFF-1
+
+The Players backend `MeResponse` includes `OnboardingState` as an enum. .NET's default JSON serializer outputs enum values as integers (0=Draft, 1=Named, 2=Ready), not strings. No `JsonStringEnumConverter` is configured on the Players service.
+
+The BFF `InternalCharacterResponse` originally declared `OnboardingState` as `string`, which would have caused deserialization failures at runtime. Corrected to `int` during BFF-1A implementation.
+
+BFF maps the integer to a human-readable string (`"Draft"`, `"Named"`, `"Ready"`) in `OnboardingStateMapper` for frontend-facing DTOs. This is intentional: the BFF owns the frontend contract and should present meaningful values, not raw enum integers.
+
+### EI-054: Matchmaking LeaveQueue returns different response shape from JoinQueue/GetQueueStatus
+**Severity:** Low
+**Status:** Documented — not a bug
+
+The Matchmaking backend's LeaveQueue endpoint (`POST /api/v1/matchmaking/queue/leave`) returns anonymous objects:
+- On 200 (success): `{ "searching": false }`
+- On 409 (already matched): `{ "searching": false, "matchId": "...", "battleId": "..." }`
+
+This differs from JoinQueue and GetQueueStatus which return `QueueStatusDto { Status, MatchId?, BattleId?, MatchState? }`.
+
+The BFF uses a separate `InternalLeaveQueueResponse(Searching, MatchId?, BattleId?)` internal model for deserialization. The BFF-owned `LeaveQueueResponse` normalizes this for the frontend as `LeaveQueueResponse(LeftQueue, MatchId?, BattleId?)`.
+
+This is not a backend bug — it reflects the domain semantics (leaving is a different operation than querying status). No backend change required.
+
+### EI-055: Matchmaking JoinQueue 409 is a valid business outcome, not an error
+**Severity:** Low
+**Status:** Documented — resolved in BFF-1B client handling
+
+The Matchmaking JoinQueue endpoint returns HTTP 409 Conflict when a player is already in a queue or already matched. The response body is a valid `QueueStatusDto` with match details. Similarly, LeaveQueue returns 409 when already matched.
+
+The original BFF `MatchmakingClient.SendAsync` treated all non-2xx responses as errors. Updated JoinQueue and LeaveQueue to handle 409 as a valid business response (not thrown as `BffServiceException`). The BFF client now returns the response body for both 200 and 409 from these endpoints, letting the endpoint layer map to the appropriate BFF response DTO.
+
+## BFF-1 Review Fix Pass
+
+### EI-056: HealthEndpoint returned 200 for degraded status
+**Severity:** Medium
+**Status:** Resolved in BFF-1 review fix pass
+
+`HealthEndpoint.cs` contained a dead assignment: `int statusCode = allHealthy ? 200 : 200;`. The status code variable was never used in the `Results.Json()` call, so both healthy and degraded states returned HTTP 200. The `anyHealthy = false` path correctly returned 503, but the `allHealthy = false && anyHealthy = true` ("degraded") path returned 200 with a `"degraded"` status label — misleading for monitoring.
+
+**Fix:** Changed to `int statusCode = allHealthy ? 200 : 503;` and passed `statusCode` to `Results.Json()`. Degraded health now returns HTTP 503 with `{ status: "degraded", services: {...} }`.
+
+### EI-057: `InternalAllocateStatsResponse` and `ServiceCallResult` were dead code
+**Severity:** Low
+**Status:** Resolved in BFF-1 review fix pass
+
+Two files had zero references outside their own definitions:
+- `InternalAllocateStatsResponse.cs` — the BFF uses `InternalCharacterResponse` for AllocateStats results, not this type
+- `ServiceCallResult.cs` — the BFF uses exception-based error flow, not Result-style wrappers
+
+Both deleted. No build or test impact.
+
+### EI-058: Scalar API reference not wired in BFF Program.cs
+**Severity:** Low
+**Status:** Resolved in BFF-1 review fix pass
+
+`Scalar.AspNetCore` was declared as a package reference in `Kombats.Bff.Bootstrap.csproj` but `app.MapScalarApiReference()` was never called. Added one-line call after `app.MapOpenApi()`. Scalar UI now available at `/scalar/v1`.

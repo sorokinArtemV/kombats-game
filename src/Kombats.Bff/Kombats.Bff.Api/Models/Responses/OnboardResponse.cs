@@ -1,0 +1,14 @@
+namespace Kombats.Bff.Api.Models.Responses;
+
+public sealed record OnboardResponse(
+    Guid CharacterId,
+    string OnboardingState,
+    string? Name,
+    int Strength,
+    int Agility,
+    int Intuition,
+    int Vitality,
+    int UnspentPoints,
+    int Revision,
+    long TotalXp,
+    int Level);
