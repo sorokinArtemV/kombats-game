@@ -279,3 +279,177 @@ When all 13 test projects run simultaneously via `dotnet test Kombats.sln`, Dock
 **Status:** Resolved
 
 `src/Kombats.Common/Kombats.Messaging/obj/Debug/net10.0/Kombats.Infrastructure.Messaging.AssemblyInfo.cs` was an auto-generated build artifact containing the old assembly name. This is a build cache artifact in `obj/` (gitignored) and will be regenerated on next clean build. No action required.
+
+## Planning / Delivery Order Decisions
+
+### EI-036: Phase 7 split into 7A (backend hardening) and 7B (product-level hardening)
+**Severity:** High (planning)
+**Status:** Open — active decision
+
+The original Phase 7 combined backend infrastructure hardening with product-level validation into a single phase. This has been split:
+- **Phase 7A**: backend/platform production hardening — in current execution scope
+- **Phase 7B**: product-level hardening — deferred until after BFF/frontend
+
+**Risk:** Phase 7A completion could be misread as full Phase 7 completion, leading to a false sense of production readiness.
+
+**Mitigation:**
+- `implementation-plan.md` explicitly states that 7A completion does NOT mean Phase 7 is complete
+- Phase 7B has explicit preconditions (BFF and frontend delivered)
+- Exit criteria for 7A are scoped to backend-only readiness
+- This issue entry serves as a persistent reminder
+
+### EI-037: Frontend must not precede BFF in delivery order
+**Severity:** High (planning)
+**Status:** Open — architectural constraint
+
+Frontend is not the correct first integration boundary for this system. BFF should come first because:
+1. BFF defines the product-facing orchestration layer and stabilizes the contracts consumed by frontend
+2. Building frontend directly against internal service APIs creates unstable UI-facing contracts
+3. Orchestration logic would be duplicated in the frontend that properly belongs in the BFF
+4. When BFF is later introduced, frontend would require rework to consume BFF contracts instead of internal APIs
+
+**Risk:** If frontend development starts before BFF exists, it will integrate against internal service APIs. This creates:
+- Coupling between UI and internal service contracts that should be hidden behind BFF
+- Orchestration logic in the wrong boundary (frontend instead of BFF)
+- Rework cost when BFF is introduced and contracts change
+
+**Mitigation:**
+- Delivery order is explicitly documented: Phase 7A → BFF → Frontend → Phase 7B
+- `implementation-plan.md` records this as a named section between 7A and 7B
+- Any future planning that proposes frontend-first must address this deviation explicitly
+
+### EI-038: References to "Phase 7" elsewhere may be ambiguous
+**Severity:** Low
+**Status:** Open — monitoring
+
+Other documents (execution-log Phase 6 verdict, execution-issues deferred items) reference "Phase 7" without the A/B qualifier. These references were written before the split decision and refer to the original undivided Phase 7.
+
+**Risk:** Ambiguity about which Phase 7 sub-phase an item belongs to.
+
+**Mitigation:** Items previously deferred to "Phase 7" should be assigned to 7A or 7B when they enter execution scope. The following items from prior entries map to Phase 7A:
+- EI-002: Redundant PropertyGroup entries (cosmetic)
+- EI-014: Profile-miss during pair-pop
+- EI-015: BattleCreated timeout worker
+- EI-016: Level-based filtering in pairing
+- EI-027: Redis integration tests
+- EI-031: Keycloak realm-export.json
+- C-C retained packages (OpenTelemetry, Serilog, Scrutor, Testcontainers.Redis)
+
+No items currently map to Phase 7B. Phase 7B items will be identified when BFF and frontend planning begins.
+
+## BFF Planning Stream
+
+### EI-039: BFF boundary ambiguity — multi-step write orchestration
+**Severity:** Medium
+**Status:** Open — requires reviewer confirmation
+
+The BFF planning document draws a boundary: BFF composes reads and forwards writes, but "multi-step write orchestration stays in backend services." However, the gameplay loop includes flows where a frontend user expects a single action to span services (e.g., "start playing" could mean ensure character + check readiness + join queue).
+
+**Risk:** If BFF implements multi-step write flows (e.g., call Players then Matchmaking in sequence), it risks becoming an orchestration dump with implicit domain logic (e.g., "only join queue if character is ready" is a domain rule that belongs in Matchmaking, not BFF).
+
+**Current position:** BFF v1 pass-through endpoints forward single calls. The composed "game state" read is the only multi-service call. No multi-step write orchestration in v1 scope.
+
+**Resolution needed:** Reviewer should confirm whether the "start playing" convenience flow (ensure + join) should be a v1 BFF endpoint or deferred. If included, the BFF must delegate readiness checking entirely to Matchmaking (which already enforces it), not re-implement the check.
+
+### EI-040: Auth propagation — JWT forwarding vs. service-to-service trust
+**Severity:** Medium
+**Status:** Open — decision made, reviewer confirmation needed
+
+The BFF planning document chooses JWT forwarding (Option A) over trusted headers (Option B), citing AD-03's rejection of "BFF-only auth." This means every internal service call from BFF carries the original JWT, and every internal service re-validates it.
+
+**Risk:** If BFF-to-service calls are frequent (especially composed reads hitting 2-3 services), the JWT validation overhead multiplies. For v1 with low traffic this is negligible, but it constrains future scaling.
+
+**Uncertainty:** AD-03 was written before BFF existed. The rejection of "BFF-only auth" was about frontend → backend trust, not BFF → backend trust. The BFF is an internal trusted component, not an external client. A trusted-header approach between BFF and backend services might be architecturally sound even though frontend → backend trust is not.
+
+**Current position:** JWT forwarding chosen for v1. Can be revisited if performance profiling shows JWT validation is a bottleneck (unlikely for v1 scale).
+
+### EI-041: SignalR proxy — connection lifecycle and scaling complexity
+**Severity:** High
+**Status:** Open — requires careful implementation in BFF-3; explicit fallback trigger defined
+
+The BFF planning document chooses to proxy Battle's SignalR connection through the BFF. This introduces significant complexity:
+
+1. **Connection lifecycle:** BFF must manage one SignalR client connection per active battle participant. If BFF restarts, all connections are lost and must be re-established. Battle's hub expects `JoinBattle` to be called before sending events — reconnection must re-join.
+
+2. **Multi-instance BFF:** If BFF scales to multiple instances, the frontend-facing SignalR hub needs a backplane (Redis). The BFF-to-Battle client connection must also be managed per-instance. This is non-trivial.
+
+3. **Error propagation:** If the BFF→Battle connection drops but the frontend→BFF connection remains, the frontend receives no battle events without explicit error signaling.
+
+**Risk:** SignalR proxy is the highest-complexity piece of the BFF. If underestimated, it could delay the entire BFF delivery.
+
+**Mitigation:** BFF-3 is isolated as a separate batch. Explicit fallback trigger criteria are now defined in the BFF planning document (Section 8): the proxy is abandoned in favor of direct frontend→Battle connection with BFF-assisted discovery if (1) connection lifecycle management exceeds ~2 person-days beyond the hub relay, (2) multi-instance BFF is required before v1, or (3) message ordering degrades. The implementer evaluates; the reviewer approves the topology change.
+
+### EI-042: BFF durable state — risk of creep
+**Severity:** Medium
+**Status:** Open — monitoring
+
+The BFF planning document states "BFF owns no durable state." This is a strong constraint that simplifies BFF significantly but may be challenged by future requirements:
+
+- **Session state:** If the frontend needs "remember my last queue variant" or "recent battles," the BFF might be pressured to cache this.
+- **Rate limiting:** Effective rate limiting typically requires shared state (Redis counters). Without state, rate limiting is per-instance only.
+- **Caching:** Frequent composed reads hitting 2-3 services per request may pressure for a response cache.
+
+**Risk:** If state creeps in without explicit design, the BFF becomes a fourth bounded context with its own consistency problems.
+
+**Current position:** No state in v1. Any future state introduction must be an explicit architecture decision with documented justification, not an incremental addition.
+
+### EI-043: Internal service endpoints not designed for BFF consumption
+**Severity:** Low
+**Status:** Open — may require minor backend changes during BFF implementation
+
+The current internal service APIs (Players, Matchmaking, Battle) were designed for direct frontend consumption, not for BFF-to-service calls. Some considerations:
+
+1. **Error response shapes:** Internal services return `Result<T>` mapped to HTTP status codes. The BFF needs to deserialize these error responses to map them to BFF error codes. The current error response shapes may not be consistent across services.
+
+2. **Missing endpoints:** BFF composed reads may need data that isn't exposed by any current endpoint. For example, "get character by identity ID" exists in Players, but "get queue status by identity ID" in Matchmaking returns a DTO that may not include all fields the BFF needs.
+
+3. **Batch/bulk endpoints:** If BFF needs to fetch data for multiple entities (future: leaderboard), current endpoints are single-entity only.
+
+**Risk:** BFF implementation may discover that backend APIs need minor additions or adjustments. These are not architectural changes but may require coordinated backend+BFF work.
+
+**Mitigation:** BFF-1 implementation will surface specific gaps. Backend changes should be minimal (adding fields to existing responses, not new architecture).
+
+### EI-044: No existing architecture decision for BFF
+**Severity:** Info
+**Status:** Open — AD formalization required during BFF-0
+
+The architecture decisions document (`kombats-architecture-decisions.md`) contains AD-01 through AD-13 covering backend service decisions. There is no AD for the BFF layer.
+
+**Risk:** BFF decisions (auth propagation, SignalR proxy, no state, HTTP communication) are documented in the planning document but not elevated to the AD format. If the planning document is amended or superseded, decisions may be lost.
+
+**Resolution plan:** The BFF planning document (Section 13) now lists 5 specific decisions that must be formalized as ADs during BFF-0:
+- AD-14: BFF as stateless orchestration/composition layer
+- AD-15: JWT forwarding for BFF-to-service auth
+- AD-16: BFF proxies Battle SignalR (single entry point)
+- AD-17: BFF does not reference internal service projects or Abstractions
+- AD-18: BFF interacts with Battle via SignalR only (no HTTP for business flows)
+
+AD formalization is included in the BFF-0 gate check. This issue closes when the ADs are written.
+
+### EI-045: BFF-3A may require splitting into sub-tickets
+**Severity:** Medium (planning)
+**Status:** Open — evaluate during BFF-3 implementation
+
+BFF-3A (SignalR relay) is scoped as a single ticket covering hub creation, connection lifecycle management, bidirectional event relay, and cleanup. The approved BFF spec identifies this as the highest-complexity batch.
+
+**Risk:** If BFF-3A exceeds reviewable ticket size (~500 lines production code), it should be split into:
+- BFF-3A1: Hub creation and basic relay (JoinBattle → downstream connect → forward)
+- BFF-3A2: Event subscription and relay (Battle server→client events forwarded to frontend)
+- BFF-3A3: Connection lifecycle and cleanup (dispose on end, disconnect handling, error propagation)
+
+**Current position:** Kept as single ticket in the execution plan because the three concerns are tightly coupled and splitting may create tickets that can't be independently tested. The implementer should evaluate during BFF-3 whether a split is needed.
+
+**Resolution:** Implementer decides at BFF-3 start. If split, update `docs/tickets/bff-execution-plan.md` before implementation begins.
+
+### EI-046: Backend API response field coverage for BFF needs — unverified
+**Severity:** Low
+**Status:** Open — surfaces during BFF-1A/1B implementation
+
+The BFF execution plan assumes backend API responses contain all fields needed by BFF DTOs. This has not been verified field-by-field. Specific concerns:
+
+1. **Players `GET /api/v1/me`**: Does the response include onboarding state, win/loss record, and all stat fields the `GameStateResponse` needs?
+2. **Matchmaking `GET /api/v1/matchmaking/queue/status`**: Does the response include `BattleId` when the match is in `BattleCreated` state?
+
+**Risk:** If backend responses lack needed fields, minimal backend API changes will be required during BFF-1 or BFF-2, adding cross-ticket dependencies.
+
+**Mitigation:** Implementer should verify actual response shapes at the start of BFF-1A and BFF-1B. Any backend changes should be scoped as minimal additions to existing responses (new fields, not new endpoints).

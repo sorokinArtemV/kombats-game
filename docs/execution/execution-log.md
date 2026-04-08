@@ -2161,3 +2161,225 @@ The project is **ready for release** at the Phase 6 completion gate:
 - Battle determinism suite passes
 
 Phase 7 (Production-Readiness Hardening) items are documented and non-blocking for functional release.
+
+---
+
+## Planning Decision: Phase 7 Split into 7A / 7B
+
+**Date:** 2026-04-08
+**Status:** Decision recorded
+
+### Decision
+
+Phase 7 (Production-Readiness Hardening) has been split into two sub-phases:
+
+- **Phase 7A — Backend/Platform Production Hardening**: backend infrastructure work that can be completed independently of product-facing layers. In current execution scope.
+- **Phase 7B — Product-Level Hardening**: end-to-end product validation and performance baselines that are only meaningful after BFF and frontend exist. Explicitly deferred.
+
+### Rationale
+
+The original Phase 7 combined backend infrastructure hardening with product-level validation. These have different preconditions:
+- Backend hardening (health checks, telemetry, Dockerfiles, recovery mechanisms) depends only on the backend services.
+- Product-level validation (E2E smoke tests, performance baselines through the full product path) depends on the BFF and frontend existing.
+
+Executing the product-level items now would produce measurements against internal service APIs — not the actual product shape. Those measurements would be invalidated when BFF is introduced.
+
+### Delivery Order (Decided)
+
+1. **Phase 7A** — backend/platform hardening (current scope)
+2. **BFF** — product-facing orchestration layer, stabilizes contracts for frontend
+3. **Frontend** — built against BFF contracts
+4. **Phase 7B** — product-level hardening after BFF/frontend exist
+
+### Scope Boundaries
+
+**Phase 7A includes:**
+- Redis Sentinel configuration for production
+- Health check endpoints (`/health/live`, `/health/ready`) with dependency probes
+- OpenTelemetry standardization
+- Serilog production sink configuration
+- CI/CD migration runner separated from application startup
+- Dockerfiles verified for production builds
+- PostgreSQL connection pool limits per service
+- Recovery mechanisms: stuck-in-Resolving watchdog, orphan sweep, timeout workers
+
+**Phase 7B includes (deferred):**
+- End-to-end topology smoke tests
+- Final performance baseline for critical product paths
+- Final production-like validation after BFF/frontend
+
+### Key Constraint
+
+- Completing Phase 7A does NOT mean Phase 7 is complete
+- Phase 7B remains open until BFF and frontend are delivered
+- Frontend must NOT precede BFF — BFF defines the product-facing contract surface
+- Frontend should not integrate directly against internal service APIs as the main target shape
+
+---
+
+## BFF Planning / Specification Stream
+
+### BFF-PLAN — BFF Architecture and Execution Plan
+
+**Date:** 2026-04-08
+**Status:** Completed (planning only — no implementation)
+**Branch:** kombats_full_refactor
+
+#### Context: Why BFF Is the Next Execution Stream
+
+The backend service replacement work (Phases 0–6) is complete. All three services — Players, Matchmaking, Battle — run from target-architecture Bootstrap composition roots with 418 passing tests and all 8 release gates met. Phase 7 has been split into 7A (backend hardening) and 7B (product-level hardening, deferred).
+
+The delivery order is explicitly documented in the implementation plan:
+
+```
+Phase 7A → BFF → Frontend → Phase 7B
+```
+
+BFF is the next major delivery stream because:
+
+1. **Frontend needs a stable contract surface.** Internal service APIs are optimized for their bounded contexts. Exposing them directly to the frontend creates unstable, service-coupled UI contracts.
+2. **Cross-service composition belongs in BFF, not frontend.** The gameplay loop spans all three services. Without BFF, the frontend must orchestrate cross-service workflows.
+3. **BFF defines the product-facing boundary.** Building frontend against BFF contracts prevents rework when the orchestration layer is later introduced.
+4. **Phase 7B (product-level hardening) requires BFF and frontend.** Performance baselines and E2E smoke tests must measure the actual product path, not internal APIs.
+
+Frontend is expected after BFF, not before it, as the main integration boundary. This is not a preference — it is an architectural constraint documented in the implementation plan and EI-037.
+
+#### Deliverable
+
+Created: `docs/architecture/kombats-bff-architecture.md`
+
+This document defines:
+- **Architecture position**: Why BFF exists and why this shape was chosen
+- **BFF role**: Read compositor, write orchestrator, contract adapter, auth edge, error normalizer, realtime mediator
+- **BFF boundary**: What belongs in BFF vs. what stays in backend services; BFF owns no durable state
+- **BFF v1 scope**: Pass-through endpoints, composed game state, SignalR battle proxy, auth edge, error normalization
+- **Target architecture**: 3-project structure (Bootstrap, Api, Application); typed HttpClients; no service project references
+- **API/contract strategy**: BFF-owned DTOs, user-intent-oriented routes, consistent error envelope
+- **Auth edge**: JWT forwarded to internal services (defense-in-depth per AD-03)
+- **Realtime position**: BFF proxies Battle SignalR connection (single entry point for frontend)
+- **Execution plan**: 5 batches (BFF-0 through BFF-4) with gate checks and reviewer checkpoints
+- **Risks and open questions**: Orchestration dump risk, domain logic leakage, SignalR proxy complexity, auth boundary, no BFF state
+
+#### Key Decisions Made
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| BFF architecture style | Thin orchestration/composition layer | Matches Kombats scale; consistent with .NET stack |
+| BFF state | Stateless — no database, no Redis | Avoids fourth bounded context; reads are always fresh |
+| Auth propagation | Forward JWT (double validation) | Defense-in-depth per AD-03 |
+| Realtime | BFF proxies SignalR (not direct) | Single entry point; Battle not externally exposed |
+| Contract ownership | BFF defines own DTOs, no Contract project refs | Decouples frontend contracts from internal evolution |
+| Communication | HTTP between BFF and services | Full isolation; no in-process coupling |
+
+#### Files Created
+- `docs/architecture/kombats-bff-architecture.md` — BFF architecture and execution plan
+
+#### Files Updated
+- `docs/execution/execution-log.md` — this entry
+- `docs/execution/execution-issues.md` — BFF-related issues (EI-039 through EI-044)
+
+#### No Code Changes
+This is planning/specification work only. No production code was created, modified, or deleted.
+
+#### Next Steps
+1. Reviewer inspects `docs/architecture/kombats-bff-architecture.md`
+2. Resolve open questions flagged in execution-issues.md
+3. Upon approval, begin BFF-0 (Foundation) implementation batch
+
+---
+
+### BFF-PLAN-FIX — Review Fix Pass
+
+**Date:** 2026-04-08
+**Status:** Completed (targeted corrections only — no redesign, no scope expansion)
+**Branch:** kombats_full_refactor
+
+#### Review Verdict: APPROVE WITH FIXES
+
+The BFF planning spec was reviewed and approved with 7 required corrections.
+
+#### Fixes Applied
+
+| # | Finding | Fix |
+|---|---|---|
+| 1 | BFF→Battle interaction model incorrectly implied HTTP client for business flows | Removed `IBattleClient` HTTP client. Battle interaction is SignalR-only for business flows, HTTP only for health check. Updated runtime shape diagram, typed client section, Application layer description, and BFF-0 deliverables. |
+| 2 | `/api/v1/game/state` implied live battle state via HTTP | Added explicit "Detail" sub-section defining exactly what comes from Players (character) vs Matchmaking (queue/match status). Stated that live battle state comes through SignalR only. Removed "active battle" language from all references. |
+| 3 | `Kombats.Abstractions` question left open | Closed as decision: BFF does not reference `Kombats.Abstractions` in v1. Added explicit decision in Dependency References section. Struck through the open question entry. |
+| 4 | No explicit SignalR proxy fallback trigger | Added "Fallback: Direct Connection with BFF-Assisted Discovery" section with 3 concrete trigger criteria (lifecycle intractability, multi-instance requirement, message ordering degradation). Defined fallback shape and decision authority. |
+| 5 | No BFF-to-backend endpoint mapping table | Added complete mapping table in Section 6 with every BFF endpoint, its backend service, exact backend path, and protocol (HTTP vs SignalR). Includes all SignalR hub methods and server→client events. |
+| 6 | Application layer deviation unacknowledged | Added explicit "Pragmatic deviation acknowledged" paragraph in Section 5: HttpClient implementations in Application is a deliberate simplification for a stateless BFF, not the standard backend service layering model. |
+| 7 | No list of decisions requiring AD formalization | Added Section 13 listing 5 proposed ADs (AD-14 through AD-18) with decision summaries and rationale. Added AD formalization to BFF-0 gate check. |
+
+#### Files Updated
+- `docs/architecture/kombats-bff-architecture.md` — all 7 fixes applied via targeted edits
+- `docs/execution/execution-log.md` — this entry
+- `docs/execution/execution-issues.md` — EI-041 updated, EI-044 updated
+
+#### No Code Changes
+This is a planning correction pass. No production code was created, modified, or deleted.
+
+#### Blocker Resolution
+All 7 review findings are resolved. The BFF planning document is now approved for implementation.
+
+---
+
+### BFF-DECOMP — BFF Execution Decomposition
+
+**Date:** 2026-04-08
+**Status:** Completed (planning/decomposition only — no implementation)
+**Branch:** kombats_full_refactor
+
+#### Context
+
+The BFF architecture/specification stream is complete and approved. This entry records the decomposition of the approved BFF spec into an execution-ready implementation plan with batches, tickets, deliverables, dependencies, tests, and gate checks.
+
+#### Work Classification
+
+The BFF stream is classified as **new-layer foundation + integration work**. It is not a replacement stream — no legacy code is superseded. It introduces a new service (Kombats.Bff) that sits above the three existing backend services and communicates with them exclusively over HTTP and SignalR.
+
+#### Deliverable
+
+Created: `docs/tickets/bff-execution-plan.md`
+
+This document defines:
+- **5 batches** (BFF-0 through BFF-4) with explicit gate checks
+- **10 implementation tickets** (BFF-0A through BFF-4A) plus 1 documentation ticket (BFF-0D)
+- Per-ticket: title, goal, scope, out of scope, file changes, dependencies, tests, acceptance criteria
+- Implementation order with dependency graph and parallelism opportunities
+- Risk register with active risks and mitigations
+- Test project structure (2 test projects: Api.Tests, Application.Tests)
+- Documentation impact matrix
+- Reviewer handoff with key review questions
+
+#### Batch Summary
+
+| Batch | Tickets | Goal |
+|---|---|---|
+| BFF-0: Foundation | BFF-0A, 0B, 0C, 0D | Project structure, clients, health, ADs |
+| BFF-1: Pass-Through | BFF-1A, 1B, 1C | 6 endpoints, error normalization, tests |
+| BFF-2: Composed Reads | BFF-2A | Game state composition, partial failure |
+| BFF-3: SignalR Proxy | BFF-3A | Bidirectional battle relay, connection lifecycle |
+| BFF-4: Integration | BFF-4A | E2E verification, Dockerfile, docker-compose |
+
+#### Key Sequencing Decisions
+
+1. BFF-0A (project creation) must come first — everything depends on it.
+2. BFF-0B, 0C, 0D can run in parallel after 0A.
+3. BFF-1A and 1B (Players and Matchmaking endpoints) can run in parallel.
+4. BFF-3A (SignalR) is strictly sequential and isolated — highest complexity piece.
+5. BFF-4A (integration) is last — requires all functionality to exist.
+
+#### Files Created
+- `docs/tickets/bff-execution-plan.md` — BFF execution decomposition
+
+#### Files Updated
+- `docs/execution/execution-log.md` — this entry
+- `docs/execution/execution-issues.md` — EI-045 added
+- `.claude/docs/implementation-bootstrap/implementation-plan.md` — BFF stream explicitly represented
+
+#### No Code Changes
+This is planning/decomposition work only. No production code was created, modified, or deleted.
+
+#### Next Steps
+1. Reviewer inspects `docs/tickets/bff-execution-plan.md`
+2. Upon approval, begin BFF-0A implementation

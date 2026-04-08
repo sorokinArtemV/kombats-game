@@ -281,9 +281,11 @@ This phase catches any remaining legacy artifacts that were missed during indivi
 
 ---
 
-## Phase 7: Production-Readiness Hardening
+## Phase 7A: Backend/Platform Production Hardening
 
-**Goal:** Address production-specific concerns that are not required for functional completeness but are required before deployment.
+**Goal:** Address backend and platform infrastructure concerns that can be completed independently of any product-facing layer (BFF, frontend). This phase delivers operational readiness for the backend services themselves — it does NOT deliver full production readiness for the product.
+
+Completing Phase 7A does NOT mean Phase 7 is complete. Phase 7B remains deferred.
 
 **Deliverables:**
 - Redis Sentinel configuration for production
@@ -292,12 +294,69 @@ This phase catches any remaining legacy artifacts that were missed during indivi
 - Serilog production sink configuration
 - CI/CD migration runner (separate from application startup)
 - Dockerfiles verified for production builds
-- Connection pool limits per service on PostgreSQL
-- Recovery mechanisms: stuck-in-Resolving watchdog, orphan sweep, timeout workers verified under failure conditions
-- End-to-end topology smoke tests
-- Performance baseline for critical paths (pairing throughput, turn resolution latency)
+- PostgreSQL connection pool limits per service
+- Recovery mechanisms verified under failure conditions:
+  - stuck-in-Resolving watchdog
+  - orphan sweep
+  - timeout workers (including BattleCreated timeout — see EI-015)
 
-**Exit criteria:** System is deployable to a production-like environment with monitoring, health checks, and recovery mechanisms operational.
+**Exit criteria:** All three services are individually deployable with health checks, structured logging, telemetry, and recovery mechanisms operational. Backend is ready to serve a BFF layer. This does NOT constitute full production readiness — Phase 7B deliverables remain.
+
+---
+
+## BFF Delivery Stream
+
+**Status:** Execution plan approved. Implementation not started.
+**Preconditions:** Phases 0–6 complete (met). Phase 7A independent — may run in parallel.
+**Architecture spec:** `docs/architecture/kombats-bff-architecture.md`
+**Execution plan:** `docs/tickets/bff-execution-plan.md`
+
+The BFF is the next major delivery stream. It introduces a new stateless service (`Kombats.Bff`) that sits above Players, Matchmaking, and Battle, providing a stable product-facing API for the frontend. BFF communicates with backend services exclusively over HTTP and SignalR (no project references, no messaging).
+
+### BFF Batches
+
+| Batch | Goal | Tickets |
+|---|---|---|
+| BFF-0: Foundation | Projects, clients, health, ADs | BFF-0A, 0B, 0C, 0D |
+| BFF-1: Pass-Through | 6 endpoints, error normalization | BFF-1A, 1B, 1C |
+| BFF-2: Composed Reads | Game state composition | BFF-2A |
+| BFF-3: SignalR Proxy | Battle realtime relay | BFF-3A |
+| BFF-4: Integration | E2E verification, Docker, docs | BFF-4A |
+
+### BFF Exit Criteria
+
+BFF v1 is complete when all 11 gates in `docs/tickets/bff-execution-plan.md` BFF-4 gate check pass. Key gates: all endpoints functional, SignalR relay works, full gameplay loop verified through BFF, Docker updated, no domain logic in BFF.
+
+### Delivery Order
+
+```
+Phase 7A (backend hardening) ──┐
+                               ├── can run in parallel
+BFF delivery ──────────────────┘
+       │
+       v
+Frontend delivery
+       │
+       v
+Phase 7B (product-level hardening)
+```
+
+Frontend must not precede BFF. The BFF defines the product-facing contract surface. Building frontend directly against internal service APIs would create unstable UI-facing contracts, duplicate orchestration logic outside its correct boundary, and require rework when BFF is introduced.
+
+---
+
+## Phase 7B: Product-Level Hardening (Deferred)
+
+**Goal:** Final product-level validation and performance baseline that can only be meaningful after the BFF and frontend exist. Deferred until after BFF and frontend are delivered.
+
+**Preconditions:** BFF delivered, frontend delivered against BFF.
+
+**Deliverables:**
+- End-to-end topology smoke tests (full product path: frontend → BFF → services)
+- Final performance baseline for critical product paths (pairing throughput, turn resolution latency, measured through BFF)
+- Final production-like validation with BFF/frontend in the loop
+
+**Exit criteria:** System is validated end-to-end through the product-facing layers with performance baselines established. Combined with Phase 7A, this constitutes full production readiness.
 
 ---
 
@@ -323,7 +382,18 @@ Phase 2        Phase 3        Phase 4
             Phase 6 (Legacy cleanup + verification)
                    │
                    v
-            Phase 7 (Hardening)
+            Phase 7A ──────────────┐
+            (Backend hardening)    │  can run in parallel
+                   │               │
+                   v               v
+               BFF delivery ◄──────┘
+            (BFF-0 → BFF-4)
+                   │
+                   v
+            Frontend delivery
+                   │
+                   v
+            Phase 7B (Product-level hardening)
 ```
 
 Phases 2, 3, and 4 can run in parallel after Phase 1 completes. However, Phase 3 (Matchmaking) consumers depend on contract definitions from Phase 1, and Phase 5 requires all three services to be functional.
