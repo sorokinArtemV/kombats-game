@@ -16,8 +16,11 @@ using Kombats.Players.Infrastructure.Messaging;
 using Kombats.Players.Infrastructure.Messaging.Consumers;
 using Kombats.Players.Infrastructure.Persistence.EF;
 using Kombats.Players.Infrastructure.Persistence.Repository;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -94,6 +97,28 @@ builder.Services.AddDbContext<PlayersDbContext>(options =>
         .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
 });
 
+// Health checks (MassTransit contributes RabbitMQ health check automatically)
+var postgresConnection = builder.Configuration.GetConnectionString("PostgresConnection")
+    ?? "Host=localhost;Port=5432;Database=kombats;Username=postgres;Password=postgres";
+builder.Services.AddHealthChecks()
+    .AddNpgSql(postgresConnection, name: "postgresql");
+
+// OpenTelemetry tracing
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("Kombats.Players"))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        string? otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
+
 // Messaging (Kombats.Messaging with transactional outbox — AD-01)
 builder.Services.AddMessaging<PlayersDbContext>(
     builder.Configuration,
@@ -120,5 +145,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapEndpoints();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+app.MapHealthChecks("/health/ready").AllowAnonymous();
 
 app.Run();

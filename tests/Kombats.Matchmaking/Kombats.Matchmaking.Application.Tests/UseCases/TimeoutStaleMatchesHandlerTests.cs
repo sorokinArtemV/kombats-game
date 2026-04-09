@@ -24,23 +24,27 @@ public sealed class TimeoutStaleMatchesHandlerTests
     {
         _matchRepo.TimeoutStaleMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(0);
+        _matchRepo.TimeoutStaleBattleCreatedMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(0);
 
-        var result = await _handler.HandleAsync(new TimeoutStaleMatchesCommand(60), CancellationToken.None);
+        var result = await _handler.HandleAsync(new TimeoutStaleMatchesCommand(60, 600), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().Be(0);
     }
 
     [Fact]
-    public async Task Handle_StaleMatchesExist_ReturnsCount()
+    public async Task Handle_StaleMatchesExist_ReturnsCombinedCount()
     {
         _matchRepo.TimeoutStaleMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(3);
+        _matchRepo.TimeoutStaleBattleCreatedMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(2);
 
-        var result = await _handler.HandleAsync(new TimeoutStaleMatchesCommand(60), CancellationToken.None);
+        var result = await _handler.HandleAsync(new TimeoutStaleMatchesCommand(60, 600), CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.Should().Be(3);
+        result.Value.Should().Be(5);
     }
 
     [Fact]
@@ -48,12 +52,46 @@ public sealed class TimeoutStaleMatchesHandlerTests
     {
         _matchRepo.TimeoutStaleMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(0);
+        _matchRepo.TimeoutStaleBattleCreatedMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(0);
 
-        await _handler.HandleAsync(new TimeoutStaleMatchesCommand(120), CancellationToken.None);
+        await _handler.HandleAsync(new TimeoutStaleMatchesCommand(120, 600), CancellationToken.None);
 
         await _matchRepo.Received(1).TimeoutStaleMatchesAsync(
             Arg.Is<DateTimeOffset>(d => d < DateTimeOffset.UtcNow.AddSeconds(-100)),
             Arg.Is<DateTimeOffset>(d => d <= DateTimeOffset.UtcNow),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_BattleCreatedTimeout_CallsRepository()
+    {
+        _matchRepo.TimeoutStaleMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(0);
+        _matchRepo.TimeoutStaleBattleCreatedMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(1);
+
+        var result = await _handler.HandleAsync(new TimeoutStaleMatchesCommand(60, 600), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(1);
+        await _matchRepo.Received(1).TimeoutStaleBattleCreatedMatchesAsync(
+            Arg.Is<DateTimeOffset>(d => d < DateTimeOffset.UtcNow.AddSeconds(-580)),
+            Arg.Is<DateTimeOffset>(d => d <= DateTimeOffset.UtcNow),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_BothTimeoutsHaveMatches_ReturnsCombinedCount()
+    {
+        _matchRepo.TimeoutStaleMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(2);
+        _matchRepo.TimeoutStaleBattleCreatedMatchesAsync(Arg.Any<DateTimeOffset>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(3);
+
+        var result = await _handler.HandleAsync(new TimeoutStaleMatchesCommand(60, 600), CancellationToken.None);
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(5);
     }
 }

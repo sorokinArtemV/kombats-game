@@ -1,0 +1,120 @@
+using Kombats.Battle.Application.Ports;
+using Kombats.Battle.Application.UseCases.Turns;
+using Kombats.Battle.Domain.Model;
+using Kombats.Battle.Domain.Results;
+using Microsoft.Extensions.Logging;
+
+namespace Kombats.Battle.Application.UseCases.Recovery;
+
+/// <summary>
+/// Orchestrates recovery of stuck and orphaned battles.
+/// Called by BattleRecoveryWorker (thin scheduler in Bootstrap).
+///
+/// Two recovery paths:
+/// 1. Stuck-in-Resolving: battle has Redis state with Phase=Resolving → re-attempt resolution
+/// 2. Orphaned: non-terminal in Postgres with no Redis state → force-end atomically (state + outbox)
+/// </summary>
+public sealed class BattleRecoveryService(
+    IBattleRecoveryRepository recoveryRepo,
+    IBattleStateStore stateStore,
+    BattleTurnAppService turnAppService,
+    IBattleEventPublisher eventPublisher,
+    ILogger<BattleRecoveryService> logger)
+{
+    /// <summary>
+    /// Scans for non-terminal battles older than the cutoff and attempts recovery.
+    /// Returns the number of battles processed (for logging).
+    /// </summary>
+    public async Task<int> ScanAndRecoverAsync(
+        DateTimeOffset cutoff,
+        int batchSize,
+        CancellationToken ct)
+    {
+        var staleBattleIds = await recoveryRepo.GetNonTerminalBattleIdsOlderThanAsync(cutoff, batchSize, ct);
+
+        if (staleBattleIds.Count == 0)
+            return 0;
+
+        logger.LogInformation(
+            "Found {Count} non-terminal battles older than cutoff for recovery check",
+            staleBattleIds.Count);
+
+        int processed = 0;
+        foreach (var battleId in staleBattleIds)
+        {
+            if (ct.IsCancellationRequested) break;
+
+            try
+            {
+                await RecoverBattleAsync(battleId, ct);
+                processed++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error recovering battle {BattleId}", battleId);
+            }
+        }
+
+        return processed;
+    }
+
+    public async Task RecoverBattleAsync(Guid battleId, CancellationToken ct)
+    {
+        var redisState = await stateStore.GetStateAsync(battleId, ct);
+
+        if (redisState is null)
+        {
+            await ForceEndOrphanedBattleAsync(battleId, ct);
+        }
+        else if (redisState.Phase == BattlePhase.Resolving)
+        {
+            logger.LogWarning("Battle {BattleId} stuck in Resolving phase, attempting recovery", battleId);
+            var resolved = await turnAppService.ResolveTurnAsync(battleId, ct);
+            logger.Log(
+                resolved ? LogLevel.Information : LogLevel.Warning,
+                resolved
+                    ? "Successfully recovered stuck battle {BattleId} from Resolving"
+                    : "Failed to recover battle {BattleId} from Resolving",
+                battleId);
+        }
+        else if (redisState.Phase == BattlePhase.Ended)
+        {
+            // Redis says ended but Postgres wasn't updated (projection lag) — skip
+            logger.LogDebug("Battle {BattleId} ended in Redis but not yet in Postgres (projection lag)", battleId);
+        }
+        // TurnOpen or ArenaOpen: battle is still active in Redis — not an orphan, just old
+    }
+
+    /// <summary>
+    /// Force-ends an orphaned battle atomically: marks ended in Postgres AND publishes
+    /// BattleCompleted to the MassTransit outbox in a single SaveChanges transaction.
+    /// This prevents event loss if the process crashes between persistence and publication.
+    /// </summary>
+    public async Task ForceEndOrphanedBattleAsync(Guid battleId, CancellationToken ct)
+    {
+        logger.LogWarning("Orphaned battle {BattleId}: no Redis state, forcing end in Postgres", battleId);
+
+        var now = DateTimeOffset.UtcNow;
+
+        // Step 1: Mark battle as ended (tracked by DbContext, NOT saved yet)
+        var info = await recoveryRepo.TryMarkOrphanedBattleEndedAsync(battleId, now, ct);
+        if (info is null)
+            return; // Already ended or doesn't exist
+
+        // Step 2: Publish to outbox (adds OutboxMessage to same DbContext, NOT saved yet)
+        await eventPublisher.PublishBattleCompletedAsync(
+            battleId,
+            info.MatchId,
+            info.PlayerAId,
+            info.PlayerBId,
+            EndBattleReason.SystemError,
+            winnerPlayerId: null,
+            now,
+            ct);
+
+        // Step 3: Atomic commit — battle state change + outbox record in one transaction
+        await recoveryRepo.CommitAsync(ct);
+
+        logger.LogWarning("Force-ended orphaned battle {BattleId} as draw and published BattleCompleted", battleId);
+    }
+}

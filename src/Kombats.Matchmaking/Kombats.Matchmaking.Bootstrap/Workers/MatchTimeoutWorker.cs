@@ -39,7 +39,7 @@ public sealed class MatchTimeoutWorker : BackgroundService
                     .GetRequiredService<ICommandHandler<TimeoutStaleMatchesCommand, int>>();
 
                 await handler.HandleAsync(
-                    new TimeoutStaleMatchesCommand(_options.TimeoutSeconds),
+                    new TimeoutStaleMatchesCommand(_options.TimeoutSeconds, _options.BattleCreatedTimeoutSeconds),
                     stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)

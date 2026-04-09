@@ -103,6 +103,22 @@ public sealed class MatchRepository : IMatchRepository
         return rows;
     }
 
+    public async Task<int> TimeoutStaleBattleCreatedMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default)
+    {
+        var rows = await _db.Matches
+            .Where(m => m.State == (int)MatchState.BattleCreated && m.UpdatedAtUtc < cutoff)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(m => m.State, (int)MatchState.TimedOut)
+                    .SetProperty(m => m.UpdatedAtUtc, now),
+                ct);
+
+        if (rows > 0)
+            _logger.LogWarning("Timed out {Count} stale BattleCreated matches", rows);
+
+        return rows;
+    }
+
     private static Match ToDomain(MatchEntity e) =>
         Match.Rehydrate(e.MatchId, e.BattleId, e.PlayerAId, e.PlayerBId, e.Variant,
             (MatchState)e.State, e.CreatedAtUtc, e.UpdatedAtUtc);

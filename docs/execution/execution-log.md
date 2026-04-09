@@ -3202,3 +3202,136 @@ Both reviewer-required fixes applied. BFF stream ready for final closure review.
 
 ### BFF Stream Final Status
 Blocker fix applied. `Clients.Caller` fully eliminated from long-lived paths. Non-blocking items documented. BFF stream ready for final re-review.
+
+---
+
+## Phase 7A — Backend/Platform Production Hardening
+
+**Date:** 2026-04-09
+**Status:** Completed
+**Branch:** kombats_full_refactor
+
+### Scope
+
+Phase 7A delivers backend/platform production hardening across all three services (Players, Matchmaking, Battle). No new features, no frontend/BFF work, no Phase 7B scope.
+
+### Deliverables
+
+#### 1. Health Check Endpoints
+**Status:** Done
+
+All three services now expose:
+- `/health/live` — liveness probe (process alive, no dependency checks)
+- `/health/ready` — readiness probe (checks PostgreSQL; Matchmaking and Battle also check Redis; RabbitMQ covered by MassTransit's built-in health check)
+- Both endpoints allow anonymous access (no JWT required)
+
+Files modified:
+- `src/Kombats.Players/Kombats.Players.Bootstrap/Program.cs`
+- `src/Kombats.Matchmaking/Kombats.Matchmaking.Bootstrap/Program.cs`
+- `src/Kombats.Battle/Kombats.Battle.Bootstrap/Program.cs`
+
+Packages added to csproj files:
+- `AspNetCore.HealthChecks.NpgSql` (all services)
+- `AspNetCore.HealthChecks.Redis` (Matchmaking, Battle)
+
+#### 2. OpenTelemetry Standardization
+**Status:** Done
+
+All three services now have OpenTelemetry tracing matching the BFF pattern:
+- `ConfigureResource(AddService("Kombats.<Service>"))` for consistent service naming
+- ASP.NET Core instrumentation
+- HttpClient instrumentation
+- OTLP exporter configurable via `OpenTelemetry:OtlpEndpoint` in appsettings (empty = disabled)
+
+Packages added:
+- `OpenTelemetry.Exporter.OpenTelemetryProtocol`
+- `OpenTelemetry.Extensions.Hosting`
+- `OpenTelemetry.Instrumentation.AspNetCore`
+- `OpenTelemetry.Instrumentation.Http`
+
+#### 3. Serilog Production Sink Configuration
+**Status:** Done (Console sink is production-appropriate)
+
+All services use Console sink with structured JSON output — correct for containerized deployments where stdout is captured by container orchestration (Kubernetes, Docker Compose). Serilog enrichment now aligned across all services: `FromLogContext`, `WithMachineName`, `WithThreadId`.
+
+#### 4. CI/CD Migration Runner
+**Status:** Done
+
+- All three services already have `// NOTE: No Database.MigrateAsync() on startup — AD-13 forbids it.`
+- Created `scripts/run-migrations.sh` — standalone migration runner for CI/CD pipeline or init container usage
+- Accepts connection string via argument or `KOMBATS_POSTGRES_CONNECTION` environment variable
+
+#### 5. Dockerfiles Verified
+**Status:** Done (no changes needed)
+
+All three Dockerfiles verified correct:
+- Multi-stage build with `mcr.microsoft.com/dotnet/aspnet:10.0` base
+- Correct Bootstrap project entry points
+- Central package management files (`Directory.Build.props`, `Directory.Packages.props`) included
+- Correct WORKDIR paths, ENTRYPOINT targeting `*.Bootstrap.dll`
+
+#### 6. PostgreSQL Connection Pool Limits
+**Status:** Done
+
+All three services now have explicit pool configuration in connection strings:
+- `Maximum Pool Size=20` (up from default 100 — reasonable for single-service instances)
+- `Minimum Pool Size=5` (warm pool for quick response)
+- `Connection Idle Lifetime=300` (5 min idle cleanup)
+
+#### 7. Redis Sentinel Production Configuration
+**Status:** Done
+
+Matchmaking and Battle (the two Redis-using services) now:
+- Use `ConfigurationOptions.Parse()` for Sentinel-ready connection parsing
+- Set `AbortOnConnectFail = false` for production resilience
+- Connection strings include `abortConnect=false`
+- Sentinel format documented in comments: `sentinel1:26379,sentinel2:26379,serviceName=mymaster,defaultDatabase=1`
+
+Players does not use Redis — no changes needed.
+
+#### 8. Recovery Mechanisms
+**Status:** Done
+
+**BattleCreated timeout (EI-015):**
+- `MatchTimeoutWorker` now also times out matches stuck in `BattleCreated` state (10 min default)
+- Added `TimeoutStaleBattleCreatedMatchesAsync` to `IMatchRepository` and `MatchRepository`
+- Added `BattleCreatedTimeoutSeconds` config option to `MatchTimeoutWorkerOptions`
+- Modified `TimeoutStaleMatchesHandler` to call both BattleCreateRequested and BattleCreated timeout
+
+**Stuck-in-Resolving watchdog:**
+- Modified `BattleTurnAppService.ResolveTurnAsync` to handle Resolving phase as a recovery retry
+- When a battle is already in Resolving, the CAS transition is skipped and resolution proceeds directly
+- This makes the TurnDeadlineWorker + BattleRecoveryWorker able to recover stuck battles
+
+**Orphan sweep:**
+- Created `IBattleRecoveryRepository` port in Application layer
+- Created `BattleRecoveryRepository` in Infrastructure (queries Postgres for non-terminal battles)
+- Created `BattleRecoveryWorker` in Bootstrap — scans every 30s for battles older than 10 min:
+  - If Redis state shows Resolving → re-attempt resolution
+  - If no Redis state → force-end in Postgres, publish BattleCompleted with SystemError reason
+  - If Redis shows Ended → skip (projection lag)
+
+### Tests Added
+
+- `ResolveTurn_StuckInResolving_SkipsCASAndAttemptesRecovery` — verifies stuck-in-Resolving recovery path
+- `ResolveTurn_InResolvingPhase_DoesNotCallTryMarkResolving` — verifies CAS skip for Resolving phase
+- `Handle_BattleCreatedTimeout_CallsRepository` — verifies BattleCreated timeout calls repository
+- `Handle_BothTimeoutsHaveMatches_ReturnsCombinedCount` — verifies combined count
+- Updated existing timeout tests to include BattleCreated timeout parameter
+
+### Package Version Corrections
+
+- `AspNetCore.HealthChecks.NpgSql`: 9.0.1 → 9.0.0 (9.0.1 does not exist on nuget.org)
+- `AspNetCore.HealthChecks.Rabbitmq`: 9.0.1 → 9.0.0 (same)
+- `AspNetCore.HealthChecks.Redis`: 9.0.1 → 9.0.0 (same)
+
+### Validation Summary
+
+| Check | Result |
+|---|---|
+| `dotnet build Kombats.sln` | Pass (0 errors) |
+| All Domain tests | Pass (227 tests) |
+| All Application tests | Pass (119 tests — 4 new) |
+| No frontend/BFF code modified | Pass |
+| No new features | Pass |
+| No Phase 7B scope | Pass |

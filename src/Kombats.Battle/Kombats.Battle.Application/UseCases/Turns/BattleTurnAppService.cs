@@ -140,30 +140,41 @@ public class BattleTurnAppService
     /// <summary>
     /// Resolves a turn for a battle.
     /// Idempotent: safe to call multiple times (CAS ensures only one resolution succeeds).
+    /// Also handles stuck-in-Resolving recovery: if a battle is already in Resolving phase
+    /// (e.g., previous resolution attempt failed mid-way), re-attempts resolution directly.
     ///
     /// Flow:
     /// 1. Load and validate state (phase, turn index, idempotency)
-    /// 2. CAS transition to Resolving phase
+    /// 2. CAS transition to Resolving phase (skipped if already Resolving)
     /// 3. Load actions, convert to domain, run engine
     /// 4. Dispatch result (battle ended or turn continues)
     /// </summary>
     public async Task<bool> ResolveTurnAsync(Guid battleId, CancellationToken cancellationToken = default)
     {
         // Phase 1: Load and validate state
-        var state = await LoadAndValidateStateForResolution(battleId, cancellationToken);
+        var (state, alreadyResolving) = await LoadAndValidateStateForResolution(battleId, cancellationToken);
         if (state == null)
             return false;
 
         var turnIndex = state.TurnIndex;
 
-        // Phase 2: Atomic CAS transition to Resolving
-        var markedResolving = await _stateStore.TryMarkTurnResolvingAsync(battleId, turnIndex, cancellationToken);
-        if (!markedResolving)
+        // Phase 2: Atomic CAS transition to Resolving (skip if already in Resolving — recovery path)
+        if (!alreadyResolving)
         {
-            _logger.LogWarning(
-                "Failed to mark turn {TurnIndex} as Resolving for BattleId: {BattleId}. May be duplicate or invalid state.",
-                turnIndex, battleId);
-            return false;
+            var markedResolving = await _stateStore.TryMarkTurnResolvingAsync(battleId, turnIndex, cancellationToken);
+            if (!markedResolving)
+            {
+                _logger.LogWarning(
+                    "Failed to mark turn {TurnIndex} as Resolving for BattleId: {BattleId}. May be duplicate or invalid state.",
+                    turnIndex, battleId);
+                return false;
+            }
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Retrying resolution for BattleId: {BattleId} stuck in Resolving phase at TurnIndex: {TurnIndex}",
+                battleId, turnIndex);
         }
 
         // Phase 3: Load actions and run domain engine
@@ -177,9 +188,11 @@ public class BattleTurnAppService
 
     /// <summary>
     /// Loads battle state and validates preconditions for turn resolution.
-    /// Returns null if resolution should not proceed (idempotent/invalid state).
+    /// Returns (null, false) if resolution should not proceed (idempotent/invalid state).
+    /// Returns (state, true) if the battle is stuck in Resolving and should be retried.
+    /// Returns (state, false) if the battle is in TurnOpen and ready for normal resolution.
     /// </summary>
-    private async Task<BattleSnapshot?> LoadAndValidateStateForResolution(
+    private async Task<(BattleSnapshot? State, bool AlreadyResolving)> LoadAndValidateStateForResolution(
         Guid battleId,
         CancellationToken cancellationToken)
     {
@@ -187,7 +200,7 @@ public class BattleTurnAppService
         if (state == null)
         {
             _logger.LogWarning("Battle state not found for BattleId: {BattleId}", battleId);
-            return null;
+            return (null, false);
         }
 
         var turnIndex = state.TurnIndex;
@@ -198,35 +211,33 @@ public class BattleTurnAppService
             _logger.LogInformation(
                 "Turn {TurnIndex} already resolved (LastResolvedTurnIndex: {LastResolvedTurnIndex}) for BattleId: {BattleId}",
                 turnIndex, state.LastResolvedTurnIndex, battleId);
-            return null;
+            return (null, false);
         }
 
-        // State machine validation: must be TurnOpen and turnIndex must match
-        if (state.Phase != BattlePhase.TurnOpen || state.TurnIndex != turnIndex)
+        if (state.Phase == BattlePhase.Ended)
         {
-            if (state.Phase == BattlePhase.Ended)
-            {
-                _logger.LogInformation(
-                    "Battle {BattleId} already ended, ignoring ResolveTurn for TurnIndex: {TurnIndex}",
-                    battleId, turnIndex);
-                return null;
-            }
+            _logger.LogInformation(
+                "Battle {BattleId} already ended, ignoring ResolveTurn for TurnIndex: {TurnIndex}",
+                battleId, turnIndex);
+            return (null, false);
+        }
 
-            if (state.Phase == BattlePhase.Resolving && state.TurnIndex == turnIndex)
-            {
-                _logger.LogInformation(
-                    "Turn {TurnIndex} already being resolved for BattleId: {BattleId}",
-                    turnIndex, battleId);
-                return null;
-            }
+        // Stuck-in-Resolving recovery: if battle is in Resolving phase, allow retry
+        if (state.Phase == BattlePhase.Resolving && state.TurnIndex == turnIndex)
+        {
+            return (state, true);
+        }
 
+        // Normal path: must be TurnOpen
+        if (state.Phase != BattlePhase.TurnOpen)
+        {
             _logger.LogError(
                 "Invalid state for ResolveTurn: BattleId: {BattleId}, TurnIndex: {TurnIndex}, State.Phase: {Phase}, State.TurnIndex: {StateTurnIndex}",
                 battleId, turnIndex, state.Phase, state.TurnIndex);
-            return null;
+            return (null, false);
         }
 
-        return state;
+        return (state, false);
     }
 
     /// <summary>

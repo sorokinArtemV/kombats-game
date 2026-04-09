@@ -20,9 +20,12 @@ using Kombats.Matchmaking.Infrastructure.Repositories;
 using Kombats.Messaging.DependencyInjection;
 using Kombats.Players.Contracts;
 using Kombats.Battle.Contracts.Battle;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Serilog;
 using StackExchange.Redis;
 
@@ -95,9 +98,11 @@ builder.Services.AddScoped<IPlayerCombatProfileRepository, PlayerCombatProfileRe
 builder.Services.AddScoped<IUnitOfWork, EfUnitOfWork>();
 builder.Services.AddScoped<ICreateBattlePublisher, MassTransitCreateBattlePublisher>();
 
-// Infrastructure — Redis
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnectionString));
+// Infrastructure — Redis (Sentinel-ready: use "sentinel1:26379,sentinel2:26379,serviceName=mymaster,defaultDatabase=1" for production)
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false";
+var redisConfig = ConfigurationOptions.Parse(redisConnectionString);
+redisConfig.AbortOnConnectFail = false;
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfig));
 
 builder.Services.Configure<MatchmakingRedisOptions>(
     builder.Configuration.GetSection(MatchmakingRedisOptions.SectionName));
@@ -139,6 +144,29 @@ builder.Services.AddMessaging<MatchmakingDbContext>(
         messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
 
+// Health checks (MassTransit contributes RabbitMQ health check automatically)
+var postgresConnection = builder.Configuration.GetConnectionString("PostgresConnection")
+    ?? "Host=localhost;Port=5432;Database=kombats;Username=postgres;Password=postgres";
+builder.Services.AddHealthChecks()
+    .AddNpgSql(postgresConnection, name: "postgresql")
+    .AddRedis(redisConnectionString, name: "redis");
+
+// OpenTelemetry tracing
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("Kombats.Matchmaking"))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        string? otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
+
 // Background workers
 builder.Services.AddHostedService<MatchmakingPairingWorker>();
 builder.Services.AddHostedService<MatchTimeoutWorker>();
@@ -159,5 +187,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapEndpoints();
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+app.MapHealthChecks("/health/ready").AllowAnonymous();
 
 app.Run();

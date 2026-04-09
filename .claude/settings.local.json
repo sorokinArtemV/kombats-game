@@ -76,7 +76,8 @@
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Endpoints/Health)",
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Extensions)",
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Models/Requests)",
-      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Models/Responses)"
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Models/Responses)",
+      "Bash(chmod +x D:\\\\1\\\\tmp\\\\kombats-game\\\\scripts\\\\run-migrations.sh)"
     ]
   }
 }

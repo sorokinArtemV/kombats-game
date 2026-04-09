@@ -124,15 +124,13 @@ Acceptable for now because profile miss is an edge case (join validates profile 
 
 ### EI-015: Single timeout worker covers only BattleCreateRequested state
 **Severity:** Low
-**Status:** Open — accepted deviation
+**Status:** Resolved — Phase 7A
 
 The implementation plan specifies two timeout concerns:
 - `BattleCreateRequestedTimeoutWorker` (60s) — matches waiting for Battle service to acknowledge
 - `BattleCreatedTimeoutWorker` (10min) — battles created but never completed
 
-The implementation has a single `MatchTimeoutWorker` that only times out `BattleCreateRequested` matches (MatchRepository line 93: `WHERE State == BattleCreateRequested`). Matches stuck in `BattleCreated` state are not timed out by any worker.
-
-In practice, the Battle service is responsible for completing battles (including inactivity termination), so `BattleCreated` timeout is a safety net, not a primary mechanism. Acceptable for Phase 3 scope. Should be added before production hardening (Phase 7).
+**Resolution:** `MatchTimeoutWorker` now handles both states. Added `TimeoutStaleBattleCreatedMatchesAsync` to `IMatchRepository` and `MatchRepository`. `MatchTimeoutWorkerOptions.BattleCreatedTimeoutSeconds` defaults to 600 (10 min). Handler calls both timeout methods per scan cycle.
 
 ### EI-016: Level-based filtering not implemented in pairing
 **Severity:** Low

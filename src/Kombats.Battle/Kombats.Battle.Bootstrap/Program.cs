@@ -6,6 +6,7 @@ using Kombats.Battle.Api.Endpoints;
 using Kombats.Battle.Api.Extensions;
 using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Application.UseCases.Lifecycle;
+using Kombats.Battle.Application.UseCases.Recovery;
 using Kombats.Battle.Application.UseCases.Turns;
 using Kombats.Battle.Bootstrap.Workers;
 using Kombats.Battle.Contracts.Battle;
@@ -20,8 +21,11 @@ using Kombats.Battle.Infrastructure.Rules;
 using Kombats.Battle.Infrastructure.State.Redis;
 using Kombats.Battle.Infrastructure.Time;
 using Kombats.Messaging.DependencyInjection;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Serilog;
 using StackExchange.Redis;
 
@@ -72,6 +76,7 @@ builder.Services.AddScoped<IBattleEngine, BattleEngine>();
 builder.Services.AddScoped<IActionIntake, ActionIntakeService>();
 builder.Services.AddScoped<BattleLifecycleAppService>();
 builder.Services.AddScoped<BattleTurnAppService>();
+builder.Services.AddScoped<BattleRecoveryService>();
 
 // Infrastructure — persistence
 builder.Services.AddDbContext<BattleDbContext>(options =>
@@ -84,9 +89,11 @@ builder.Services.AddDbContext<BattleDbContext>(options =>
         .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
 });
 
-// Infrastructure — Redis
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379";
-builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnectionString));
+// Infrastructure — Redis (Sentinel-ready: use "sentinel1:26379,sentinel2:26379,serviceName=mymaster" for production)
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false";
+var redisConfig = ConfigurationOptions.Parse(redisConnectionString);
+redisConfig.AbortOnConnectFail = false;
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConfig));
 
 // Infrastructure — options
 builder.Services.Configure<BattleRedisOptions>(
@@ -99,6 +106,7 @@ builder.Services.AddOptions<BattleRulesetsOptions>()
     .ValidateOnStart();
 
 // Infrastructure — ports
+builder.Services.AddScoped<IBattleRecoveryRepository, BattleRecoveryRepository>();
 builder.Services.AddScoped<IBattleStateStore, RedisBattleStateStore>();
 builder.Services.AddScoped<IBattleRealtimeNotifier, SignalRBattleRealtimeNotifier>();
 builder.Services.AddScoped<IBattleEventPublisher, MassTransitBattleEventPublisher>();
@@ -125,10 +133,37 @@ builder.Services.AddMessaging<BattleDbContext>(
         messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
 
+// Health checks (MassTransit contributes RabbitMQ health check automatically)
+var postgresConnection = builder.Configuration.GetConnectionString("PostgresConnection")
+    ?? "Host=localhost;Port=5432;Database=kombats;Username=postgres;Password=postgres";
+builder.Services.AddHealthChecks()
+    .AddNpgSql(postgresConnection, name: "postgresql")
+    .AddRedis(redisConnectionString, name: "redis");
+
+// OpenTelemetry tracing
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("Kombats.Battle"))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        string? otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
+
 // Background workers
 builder.Services.Configure<TurnDeadlineWorkerOptions>(
     builder.Configuration.GetSection("Battle:TurnDeadlineWorker"));
 builder.Services.AddHostedService<TurnDeadlineWorker>();
+
+builder.Services.Configure<BattleRecoveryWorkerOptions>(
+    builder.Configuration.GetSection("Battle:RecoveryWorker"));
+builder.Services.AddHostedService<BattleRecoveryWorker>();
 
 var app = builder.Build();
 
@@ -148,5 +183,8 @@ app.UseAuthorization();
 
 app.MapEndpoints();
 app.MapHub<BattleHub>("/battlehub");
+
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+app.MapHealthChecks("/health/ready").AllowAnonymous();
 
 app.Run();
