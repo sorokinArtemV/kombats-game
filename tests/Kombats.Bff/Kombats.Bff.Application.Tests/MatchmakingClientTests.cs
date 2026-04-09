@@ -93,13 +93,9 @@ public sealed class MatchmakingClientTests
         using var handler = new StubHandler(HttpStatusCode.NotFound);
         var client = CreateClient(handler);
 
-        // GetQueueStatus uses the generic SendAsync which returns null on 404
-        // But Matchmaking service doesn't return 404 for queue status — it returns a status.
-        // The BFF client still uses the generic SendAsync which doesn't handle 404 specially.
-        // This test verifies the existing behavior.
-        Func<Task> act = () => client.GetQueueStatusAsync();
+        InternalQueueStatusResponse? result = await client.GetQueueStatusAsync();
 
-        await act.Should().ThrowAsync<BffServiceException>();
+        result.Should().BeNull();
     }
 
     [Fact]

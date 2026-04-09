@@ -1,66 +1,57 @@
-# Implementer Mode
+# Implementer Mode — Hardening
 
-You are implementing approved work in the Kombats repository. You write code, create files, and run tests. You follow the approved plan exactly.
+You are implementing scoped fixes in the Kombats repository. You write code and run tests. You follow the approved plan exactly.
+
+**The system is in post-implementation hardening.** Only issue-driven fixes and Phase 7 tasks are permitted. No new features, no speculative refactors, no architectural redesign.
 
 ## Before Implementing
 
-1. Confirm the plan is approved
-2. Read the implementation guardrails
+1. Confirm the plan is approved and references a specific issue (EI-xxx) or Phase 7 task
+2. Read `.claude/rules/hardening-mode.md`
 3. Read existing code in the affected area
-4. Understand what legacy code exists and how it relates to the plan
+4. If there is no issue or Phase 7 reference, **stop and ask**
 
 ## Implementation Rules
 
-### Scope
-- Implement the assigned scope. Nothing more.
-- Do not refactor adjacent code unless the plan includes it
-- Do not add features not in the plan
+### Scope — Hardening Discipline
+- Implement the approved fix. Nothing more.
+- Do not refactor adjacent code
+- Do not add features
 - Do not add comments, docs, or type annotations to code you didn't change
-- Do not introduce new packages without explicit approval
-- Do not introduce new abstractions without explicit approval
+- Do not introduce new packages unless required for Phase 7A observability
+- Do not introduce new abstractions
+- Do not create new endpoints, contracts, or domain entities
+- **Every change must trace back to the issue or Phase 7 task**
 
 ### Architecture Compliance
 
-Every change must respect:
+Existing architecture rules still apply. Every change must respect:
 
 | Rule | Check |
 |---|---|
 | Dependency direction | Every `using` and project reference respects layer hierarchy |
 | Service isolation | No references to another service's internals — Contracts only |
 | Outbox for all publication | Every `Publish()`/`Send()` through transactional outbox |
-| Consumer idempotency | Every consumer has idempotency test |
 | MassTransit 8.3.0 | No other version |
-| No auto-migration on startup | No `Database.MigrateAsync()` in `Program.cs` |
-| Minimal APIs only (new code) | No controllers, no MVC |
 | Bootstrap is composition root | No `DependencyInjection.cs` in Infrastructure |
-| No legacy shared code | No references to `Kombats.Shared` from new code |
-
-### Legacy Posture
-- Do not preserve legacy structure automatically
-- Do not extend legacy patterns for consistency with old code
-- Do not reference `Kombats.Shared` from new code
-- Mark temporary compatibility code: `// TEMPORARY: Remove when [condition]. See ticket [ref].`
-- Report coexistence state in implementation summary
-- Identify follow-up removal work if legacy code is superseded but not deleted
 
 ### Tests
-- Required tests ship with the code — not in a follow-up
+- Tests for the fix are required — not in a follow-up
+- Tests must verify the specific fix, not expand test coverage for unrelated areas
 - Tests follow the test strategy (see `.claude/rules/testing-and-definition-of-done.md`)
 
-### Architectural Questions
-If an uncovered architectural question arises during implementation:
-- Stop
-- State the question explicitly
-- Do not make the decision silently
-- Do not default to "whatever the old code does"
+### Scope Questions
+If you discover an issue adjacent to your fix:
+- Log it to `docs/execution/execution-issues.md` as a new issue
+- Do NOT fix it in the current change
+- Continue with the approved scope only
 
 ## After Implementing
 
-Report using the implementation summary format from CLAUDE.md:
-- Implemented (with file references)
-- Tests added
-- Legacy code removed
-- Legacy code superseded (removal pending)
-- Coexistence state
-- Intentionally not changed
-- Discovered issues
+Report using the hardening summary format from CLAUDE.md:
+- Issue/Task reference
+- Root cause
+- Fix applied (with file references)
+- Tests added or verified
+- Scope verification (no unrelated changes)
+- Discovered issues (logged separately)

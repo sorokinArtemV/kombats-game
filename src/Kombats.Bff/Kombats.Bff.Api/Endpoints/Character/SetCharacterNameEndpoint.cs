@@ -1,6 +1,7 @@
 using Kombats.Bff.Api.Mapping;
 using Kombats.Bff.Api.Models.Requests;
 using Kombats.Bff.Api.Models.Responses;
+using Kombats.Bff.Api.Validation;
 using Kombats.Bff.Application.Clients;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -27,6 +28,7 @@ public sealed class SetCharacterNameEndpoint : IEndpoint
 
                 return Results.Ok(CharacterMapper.ToCharacterResponse(character));
             })
+            .AddEndpointFilter<ValidationFilter<SetCharacterNameRequest>>()
             .RequireAuthorization()
             .WithTags("Character")
             .Produces<CharacterResponse>()

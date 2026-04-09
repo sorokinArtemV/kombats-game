@@ -1,10 +1,12 @@
-# CLAUDE.md — Kombats Implementation Mode
+# CLAUDE.md — Kombats Hardening Mode
 
 ## Operating Mode
 
-This repository is in **active implementation**. The architecture package (`.claude/docs/architecture/`) is authoritative. The implementation bootstrap (`.claude/docs/implementation-bootstrap/`) defines execution constraints.
+This repository is in **post-implementation hardening**. All implementation phases (0–6) and BFF delivery are functionally complete. The architecture package (`.claude/docs/architecture/`) remains authoritative. The implementation bootstrap (`.claude/docs/implementation-bootstrap/`) is reference material, not active execution guidance.
 
-Old code is evidence, not authority. New code follows the target architecture. Replacement is preferred over patching. No silent architecture drift.
+**No new features. No speculative refactors. No architectural redesign.**
+
+Only issue-driven fixes and Phase 7 (production hardening) work is permitted. See `.claude/rules/hardening-mode.md` for the full hardening discipline.
 
 ---
 
@@ -16,9 +18,9 @@ Kombats is a .NET 10.0 backend monorepo. Three services:
 - **Matchmaking** — queue, pairing, match lifecycle orchestration
 - **Battle** — deterministic 1v1 turn-based combat execution
 
-Services communicate exclusively via async messaging (RabbitMQ/MassTransit 8.3.0). Single PostgreSQL instance with schema-per-service (`players`, `matchmaking`, `battle`). Redis for Battle (DB 0) and Matchmaking (DB 1).
+Services communicate exclusively via async messaging (RabbitMQ/MassTransit 8.3.0). Single PostgreSQL instance with schema-per-service (`players`, `matchmaking`, `battle`). Redis for Battle (DB 0) and Matchmaking (DB 1). BFF service provides the product-facing API layer above all three services.
 
-Out of scope unless explicitly requested: BFF, frontend, platform rewrites.
+All services and BFF are functionally complete. Current work is limited to hardening, bug fixes, and production readiness.
 
 ---
 
@@ -200,44 +202,43 @@ Namespace prefix: `Kombats` (not `Combats`).
 
 ## Workflow Modes
 
+All modes operate under hardening constraints. See `.claude/rules/hardening-mode.md`.
+
 ### Planner Mode
-Read architecture + guardrails → propose changes, deps, tests, sequencing → identify legacy impact → do not implement. See `.claude/prompts/planner.md`.
+Only plans issue resolution (EI-xxx) or Phase 7A/7B tasks. Must reference the specific issue or deliverable. No new features, no speculative improvements. See `.claude/prompts/planner.md`.
 
 ### Implementer Mode
-Implement approved scope only → required tests included → no scope expansion → no architecture drift → legacy coexistence called out → report implementation summary. See `.claude/prompts/implementer.md`.
+Only implements scoped fixes tied to an issue or Phase 7 task. Minimal changes only. No scope expansion, no adjacent refactoring. See `.claude/prompts/implementer.md`.
 
 ### Reviewer Mode
-Check architecture compliance, boundary violations, test completeness, contract safety, legacy posture → verdict. See `.claude/prompts/reviewer.md`.
+Enforces no scope creep and no feature expansion. Rejects changes not tied to an issue or Phase 7 task. Rejects "while I'm here" improvements. See `.claude/prompts/reviewer.md`.
 
 ---
 
-## Implementation Summary Format
+## Hardening Summary Format
 
-After completing implementation:
+After completing hardening work:
 
 ```
-## Implementation Summary
+## Hardening Summary
 
-### Implemented
-- [what was done, file references]
+### Issue/Task
+- [EI-xxx reference or Phase 7 deliverable]
 
-### Tests Added
-- [test classes, what they cover]
+### Root Cause
+- [What was wrong]
 
-### Legacy Code Removed
-- [what old code was deleted]
+### Fix Applied
+- [Minimal change, file references]
 
-### Legacy Code Superseded (Removal Pending)
-- [what old code is now superseded, removal ticket reference]
+### Tests
+- [Tests added or verified]
 
-### Coexistence State
-- [old/new coexistence, cutover timeline]
-
-### Intentionally Not Changed
-- [out-of-scope items]
+### Scope Verification
+- [Confirmation that no unrelated changes were made]
 
 ### Discovered Issues
-- [problems outside current scope]
+- [New problems found — log to docs/execution/execution-issues.md]
 ```
 
 ---

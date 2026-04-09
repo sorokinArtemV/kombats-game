@@ -1,88 +1,76 @@
-# Planner Mode
+# Planner Mode — Hardening
 
-You are planning implementation work for the Kombats repository. You do not write code. You produce a reviewable plan.
+You are planning hardening work for the Kombats repository. You do not write code. You produce a reviewable plan.
+
+**The system is in post-implementation hardening.** Only issue-driven fixes and Phase 7 tasks are permitted. No new features, no speculative refactors, no architectural redesign.
 
 ## Before Planning
 
-Read:
-1. The relevant architecture docs (`.claude/docs/architecture/`)
-2. The implementation guardrails (`.claude/docs/implementation-bootstrap/implementation-guardrails.md`)
-3. The repo structure target (`.claude/docs/implementation-bootstrap/repo-structure.md`)
-4. The existing code for the area being planned
+1. Read `.claude/rules/hardening-mode.md` — understand what work is allowed
+2. Identify the specific issue (EI-xxx from `docs/execution/execution-issues.md`) or Phase 7 deliverable being addressed
+3. Read the existing code in the affected area
+4. If the request does not map to an issue or Phase 7 task, **reject it**
 
 ## Plan Requirements
 
 Your plan must include:
 
+### Issue/Task Reference
+- The specific EI-xxx issue number, or Phase 7A/7B deliverable
+- If no reference exists, the plan must explain why this is a legitimate hardening concern and log it as a new issue
+
 ### Work Classification
-- State whether this is: foundation, replacement, migration/cutover, legacy-removal, or integration-verification work
-- If replacement: identify which legacy code is affected and what happens to it
+- State whether this is: bug-fix, issue-resolution, Phase 7A deliverable, Phase 7B deliverable, or test-gap
+- **No other classifications are valid in hardening mode**
 
-### File Changes
-- Files to create (with target project and layer)
-- Files to modify
-- Files to delete (legacy removal)
-- New project references needed
+### Root Cause (for bug fixes / issues)
+- What is wrong and why
+- Evidence from code, logs, or tests
 
-### Dependencies
-- What must exist before this work can start
-- What this work unblocks
-
-### Legacy Impact
-- What legacy code is superseded by this work
-- Whether coexistence is required and for how long
-- Cutover point (when traffic moves from old to new)
-- Removal plan (same ticket, paired ticket, or follow-up)
+### Minimal Fix
+- Files to modify (prefer modification over creation)
+- The smallest change that resolves the issue
+- No adjacent refactoring, no "while I'm here" improvements
 
 ### Test Plan
-- Required tests by category (domain, application, infrastructure, API)
-- Specific test cases for correctness-critical behavior
-- Battle determinism tests if combat-related
+- Tests that verify the fix or deliverable
+- Tests for the specific issue, not general area coverage
 
-### Sequencing
-- If the work should be split into multiple tickets, propose the split
-- Order tickets by dependency (domain → application → infrastructure → API → cutover → removal)
-
-### Risks and Ambiguities
-- Architectural questions not covered by the docs
-- Areas where the legacy code behavior is unclear
-- Migration/compatibility concerns
+### Risks
+- Could this fix introduce regressions?
+- What existing tests cover the affected area?
 
 ## Plan Must Not
 
+- Propose new features, endpoints, contracts, or domain entities
+- Propose speculative refactoring or "improvements"
+- Expand scope beyond the immediate issue or Phase 7 task
+- Propose architectural changes
 - Write code or create files
-- Make architectural decisions not covered by the architecture package
-- Assume legacy code is correct — read and assess
-- Propose extending legacy patterns
-- Propose solutions that violate the implementation guardrails
-- Propose scope beyond what was requested
 
 ## Output Format
 
 ```
 ## Plan: [Title]
 
+### Issue/Task
+[EI-xxx or Phase 7 deliverable reference]
+
 ### Type
-[foundation / replacement / migration / removal / integration]
+[bug-fix / issue-resolution / phase-7a / phase-7b / test-gap]
 
-### Scope
-[What this plan covers]
+### Root Cause
+[What is wrong and evidence]
 
-### Prerequisites
-[What must exist first]
-
-### Changes
-[File-by-file breakdown]
-
-### Legacy Impact
-[Superseded code, coexistence, cutover, removal]
+### Minimal Fix
+[File-by-file breakdown — smallest change needed]
 
 ### Tests
-[Required test cases]
+[Required test cases for the fix]
 
-### Sequencing
-[Ticket split if applicable]
+### Regression Risk
+[What could break]
 
-### Risks
-[Ambiguities and open questions]
+### Scope Check
+[Explicit confirmation: no features, no refactors, no scope expansion]
 ```

@@ -1,11 +1,16 @@
 using System.Reflection;
+using FluentValidation;
 using Kombats.Bff.Api.Extensions;
 using Kombats.Bff.Api.Hubs;
+using Kombats.Bff.Api.Middleware;
 using Kombats.Bff.Application.Clients;
 using Kombats.Bff.Application.Composition;
-using Kombats.Bff.Application.Errors;
 using Kombats.Bff.Application.Relay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Http.Resilience;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
+using Polly;
 using Scalar.AspNetCore;
 using Serilog;
 
@@ -53,6 +58,25 @@ builder.Services.AddAuthorization();
 Assembly apiAssembly = typeof(Kombats.Bff.Api.Endpoints.IEndpoint).Assembly;
 builder.Services.AddEndpoints(apiAssembly);
 
+// Request validation
+builder.Services.AddValidatorsFromAssembly(apiAssembly);
+
+// OpenTelemetry tracing
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(resource => resource.AddService("Kombats.Bff"))
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation();
+
+        string? otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+        if (!string.IsNullOrEmpty(otlpEndpoint))
+        {
+            tracing.AddOtlpExporter(options => options.Endpoint = new Uri(otlpEndpoint));
+        }
+    });
+
 // API Documentation
 builder.Services.AddOpenApi("v1");
 
@@ -91,6 +115,11 @@ builder.Services.AddCors(options =>
 // Service options
 builder.Services.Configure<ServicesOptions>(builder.Configuration.GetSection("Services"));
 
+// Resilience options
+ResilienceOptions resilienceOptions = builder.Configuration
+    .GetSection("Resilience")
+    .Get<ResilienceOptions>() ?? new ResilienceOptions();
+
 // HttpContext accessor (required by JwtForwardingHandler)
 builder.Services.AddHttpContextAccessor();
 
@@ -103,7 +132,37 @@ builder.Services.AddHttpClient<IPlayersClient, PlayersClient>(client =>
     string baseUrl = builder.Configuration["Services:Players:BaseUrl"]
         ?? throw new InvalidOperationException("Services:Players:BaseUrl is required.");
     client.BaseAddress = new Uri(baseUrl);
-}).AddHttpMessageHandler<JwtForwardingHandler>();
+})
+.AddHttpMessageHandler<JwtForwardingHandler>()
+.AddResilienceHandler("players", (pipeline, _) =>
+{
+    pipeline
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.TotalRequestTimeoutSeconds))
+        .AddRetry(new HttpRetryStrategyOptions
+        {
+            MaxRetryAttempts = resilienceOptions.RetryMaxAttempts,
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(500),
+            ShouldHandle = args =>
+            {
+                // Only retry idempotent GET requests
+                if (args.Outcome.Result?.RequestMessage?.Method != HttpMethod.Get)
+                {
+                    return ValueTask.FromResult(false);
+                }
+
+                return new HttpRetryStrategyOptions().ShouldHandle(args);
+            }
+        })
+        .AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds),
+            MinimumThroughput = resilienceOptions.CircuitBreakerFailureThreshold,
+            BreakDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds)
+        })
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.AttemptTimeoutSeconds));
+});
 
 // Typed HttpClients — Matchmaking
 builder.Services.AddHttpClient<IMatchmakingClient, MatchmakingClient>(client =>
@@ -111,7 +170,37 @@ builder.Services.AddHttpClient<IMatchmakingClient, MatchmakingClient>(client =>
     string baseUrl = builder.Configuration["Services:Matchmaking:BaseUrl"]
         ?? throw new InvalidOperationException("Services:Matchmaking:BaseUrl is required.");
     client.BaseAddress = new Uri(baseUrl);
-}).AddHttpMessageHandler<JwtForwardingHandler>();
+})
+.AddHttpMessageHandler<JwtForwardingHandler>()
+.AddResilienceHandler("matchmaking", (pipeline, _) =>
+{
+    pipeline
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.TotalRequestTimeoutSeconds))
+        .AddRetry(new HttpRetryStrategyOptions
+        {
+            MaxRetryAttempts = resilienceOptions.RetryMaxAttempts,
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(500),
+            ShouldHandle = args =>
+            {
+                // Only retry idempotent GET requests
+                if (args.Outcome.Result?.RequestMessage?.Method != HttpMethod.Get)
+                {
+                    return ValueTask.FromResult(false);
+                }
+
+                return new HttpRetryStrategyOptions().ShouldHandle(args);
+            }
+        })
+        .AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds),
+            MinimumThroughput = resilienceOptions.CircuitBreakerFailureThreshold,
+            BreakDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds)
+        })
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.AttemptTimeoutSeconds));
+});
 
 // SignalR — frontend-facing hub
 builder.Services.AddSignalR();
@@ -122,6 +211,9 @@ builder.Services.AddSingleton<IFrontendBattleSender, HubContextBattleSender>();
 
 // Battle hub relay — manages per-connection downstream SignalR connections to Battle
 builder.Services.AddSingleton<IBattleHubRelay, BattleHubRelay>();
+
+// Game state composer — aggregates data from Players + Matchmaking
+builder.Services.AddScoped<GameStateComposer>();
 
 WebApplication app = builder.Build();
 
@@ -138,26 +230,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // Global error handler for BFF exceptions
-app.Use(async (context, next) =>
-{
-    try
-    {
-        await next();
-    }
-    catch (BffServiceException ex)
-    {
-        context.Response.StatusCode = (int)ex.StatusCode;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new BffErrorResponse(ex.Error));
-    }
-    catch (ServiceUnavailableException ex)
-    {
-        context.Response.StatusCode = 503;
-        context.Response.ContentType = "application/json";
-        await context.Response.WriteAsJsonAsync(new BffErrorResponse(
-            new BffError(BffErrorCode.ServiceUnavailable, ex.Message)));
-    }
-});
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.MapEndpoints();
 

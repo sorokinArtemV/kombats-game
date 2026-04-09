@@ -1,5 +1,6 @@
 using Kombats.Bff.Api.Models.Requests;
 using Kombats.Bff.Api.Models.Responses;
+using Kombats.Bff.Api.Validation;
 using Kombats.Bff.Application.Clients;
 using Kombats.Bff.Application.Models.Internal;
 using Microsoft.AspNetCore.Builder;
@@ -32,6 +33,7 @@ public sealed class AllocateStatsEndpoint : IEndpoint
 
                 return Results.Ok(MapToResponse(result));
             })
+            .AddEndpointFilter<ValidationFilter<AllocateStatsRequest>>()
             .RequireAuthorization()
             .WithTags("Character")
             .Produces<AllocateStatsResponse>()
