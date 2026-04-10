@@ -7,7 +7,7 @@ namespace Kombats.Players.Application.IntegrationEvents;
 /// Factory for building the canonical <see cref="PlayerCombatProfileChanged"/> integration event
 /// from a domain Character entity.
 /// </summary>
-public static class PlayerCombatProfileChangedFactory
+internal static class PlayerCombatProfileChangedFactory
 {
     public static PlayerCombatProfileChanged FromCharacter(Character character)
     {

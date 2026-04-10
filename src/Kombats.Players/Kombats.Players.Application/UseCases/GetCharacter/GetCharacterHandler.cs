@@ -3,7 +3,7 @@ using Kombats.Players.Application.Abstractions;
 
 namespace Kombats.Players.Application.UseCases.GetCharacter;
 
-public sealed class GetCharacterHandler : IQueryHandler<GetCharacterQuery, CharacterStateResult>
+internal sealed class GetCharacterHandler : IQueryHandler<GetCharacterQuery, CharacterStateResult>
 {
     private readonly ICharacterRepository _characters;
 

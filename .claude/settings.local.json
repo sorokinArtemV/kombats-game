@@ -77,7 +77,9 @@
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Extensions)",
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Models/Requests)",
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Bff/Kombats.Bff.Api/Models/Responses)",
-      "Bash(chmod +x D:\\\\1\\\\tmp\\\\kombats-game\\\\scripts\\\\run-migrations.sh)"
+      "Bash(chmod +x D:\\\\1\\\\tmp\\\\kombats-game\\\\scripts\\\\run-migrations.sh)",
+      "Bash(curl -s -X POST http://localhost:5000/api/v1/players/me/stats/allocate -H \"Content-Type: application/json\" -d '{\"ExpectedRevision\":1,\"Str\":-1,\"Agi\":0,\"Intuition\":0,\"Vit\":0}')",
+      "Bash(kill %1)"
     ]
   }
 }

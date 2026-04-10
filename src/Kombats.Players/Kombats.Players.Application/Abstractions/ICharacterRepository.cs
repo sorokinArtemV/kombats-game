@@ -2,7 +2,7 @@ using Kombats.Players.Domain.Entities;
 
 namespace Kombats.Players.Application.Abstractions;
 
-public interface ICharacterRepository
+internal interface ICharacterRepository
 {
     Task<Character?> GetByIdentityIdAsync(Guid identityId, CancellationToken ct);
     Task<Character?> GetByIdAsync(Guid characterId, CancellationToken ct);

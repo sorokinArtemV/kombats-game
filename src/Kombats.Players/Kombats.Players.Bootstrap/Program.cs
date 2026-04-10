@@ -19,6 +19,7 @@ using Kombats.Players.Infrastructure.Persistence.Repository;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Kombats.Players.Api.Middleware;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
@@ -92,7 +93,10 @@ builder.Services.AddDbContext<PlayersDbContext>(options =>
 {
     options
         .UseNpgsql(builder.Configuration.GetConnectionString("PostgresConnection"), npgsql =>
-            npgsql.MigrationsHistoryTable("__ef_migrations_history", PlayersDbContext.Schema))
+        {
+            npgsql.MigrationsHistoryTable("__ef_migrations_history", PlayersDbContext.Schema);
+            npgsql.EnableRetryOnFailure();
+        })
         .UseSnakeCaseNamingConvention()
         .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
 });
@@ -110,7 +114,8 @@ builder.Services.AddOpenTelemetry()
     {
         tracing
             .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+            .AddHttpClientInstrumentation()
+            .AddSource("Npgsql");
 
         string? otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
         if (!string.IsNullOrEmpty(otlpEndpoint))
@@ -133,6 +138,8 @@ var app = builder.Build();
 // NOTE: No Database.MigrateAsync() on startup — AD-13 forbids it.
 // Migrations are applied via CI/CD pipeline.
 
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 app.UseApiDocumentation();
 
 app.UseHttpsRedirection();
@@ -150,3 +157,7 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready").AllowAnonymous();
 
 app.Run();
+
+// Required for WebApplicationFactory<Program> in API tests.
+public partial class Program;
+

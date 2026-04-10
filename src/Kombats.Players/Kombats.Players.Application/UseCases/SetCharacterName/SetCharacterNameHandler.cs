@@ -5,7 +5,7 @@ using Kombats.Players.Domain.Exceptions;
 
 namespace Kombats.Players.Application.UseCases.SetCharacterName;
 
-public sealed class SetCharacterNameHandler
+internal sealed class SetCharacterNameHandler
     : ICommandHandler<SetCharacterNameCommand, CharacterStateResult>
 {
     private readonly IUnitOfWork _uow;
@@ -61,12 +61,15 @@ public sealed class SetCharacterNameHandler
             };
         }
 
+        // Publish before SaveChanges so outbox entries are committed atomically
+        // with domain changes (AD-01). With MassTransit outbox configured,
+        // IPublishEndpoint.Publish() writes to outbox tables in the DbContext.
+        await _profilePublisher.PublishAsync(
+            PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
+
         try
         {
             await _uow.SaveChangesAsync(ct);
-
-            await _profilePublisher.PublishAsync(
-                PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }

@@ -5,7 +5,7 @@ using Npgsql;
 
 namespace Kombats.Players.Infrastructure.Persistence.EF;
 
-public sealed class EfUnitOfWork : IUnitOfWork
+internal sealed class EfUnitOfWork : IUnitOfWork
 {
     private const string UniqueViolationSqlState = "23505";
 

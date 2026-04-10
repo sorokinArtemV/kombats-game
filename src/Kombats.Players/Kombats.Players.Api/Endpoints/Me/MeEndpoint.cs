@@ -73,17 +73,21 @@ internal sealed class MeEndpoint : IEndpoint
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
-        // GET /api/me/claims — development: dump JWT claims
-        app.MapGet("api/v1/me/claims", (HttpContext httpContext) =>
-            {
-                var user = httpContext.User;
-                var claims = user.Claims.Select(c => new ClaimDto(c.Type, c.Value)).ToArray();
-                return Results.Ok(new { subject = user.FindFirst("sub")?.Value, claims });
-            })
-            .RequireAuthorization()
-            .WithTags(Tags.Account)
-            .WithSummary("Current claims (dev)")
-            .WithDescription("Returns the current JWT claims. For development or debugging.")
-            .Produces<object>();
+        // GET /api/me/claims — development only: dump JWT claims
+        var env = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        if (env.IsDevelopment())
+        {
+            app.MapGet("api/v1/me/claims", (HttpContext httpContext) =>
+                {
+                    var user = httpContext.User;
+                    var claims = user.Claims.Select(c => new ClaimDto(c.Type, c.Value)).ToArray();
+                    return Results.Ok(new { subject = user.FindFirst("sub")?.Value, claims });
+                })
+                .RequireAuthorization()
+                .WithTags(Tags.Account)
+                .WithSummary("Current claims (dev)")
+                .WithDescription("Returns the current JWT claims. For development or debugging.")
+                .Produces<object>();
+        }
     }
 }

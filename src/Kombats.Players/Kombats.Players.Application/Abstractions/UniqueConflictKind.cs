@@ -1,6 +1,6 @@
 namespace Kombats.Players.Application.Abstractions;
 
-public enum UniqueConflictKind
+internal enum UniqueConflictKind
 {
     Unknown,
     IdentityId,

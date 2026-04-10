@@ -9,13 +9,13 @@ namespace Kombats.Players.Application.Battles;
 /// Command to handle the canonical BattleCompleted integration event.
 /// Supports no-winner outcomes (WinnerIdentityId/LoserIdentityId may be null).
 /// </summary>
-public sealed record HandleBattleCompletedCommand(
+internal sealed record HandleBattleCompletedCommand(
     Guid MessageId,
     Guid? WinnerIdentityId,
     Guid? LoserIdentityId,
     string Reason) : ICommand;
 
-public sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattleCompletedCommand>
+internal sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattleCompletedCommand>
 {
     private const long WinnerXp = 10;
     private const long LoserXp = 5;

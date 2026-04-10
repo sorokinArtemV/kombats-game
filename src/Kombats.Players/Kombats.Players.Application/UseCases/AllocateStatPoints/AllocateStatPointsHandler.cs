@@ -5,7 +5,7 @@ using Kombats.Players.Domain.Exceptions;
 
 namespace Kombats.Players.Application.UseCases.AllocateStatPoints;
 
-public sealed class AllocateStatPointsHandler
+internal sealed class AllocateStatPointsHandler
     : ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult>
 {
     private readonly IUnitOfWork _uow;
@@ -70,6 +70,12 @@ public sealed class AllocateStatPointsHandler
             };
         }
 
+        // Publish before SaveChanges so outbox entries are committed atomically
+        // with domain changes (AD-01). With MassTransit outbox configured,
+        // IPublishEndpoint.Publish() writes to outbox tables in the DbContext.
+        await _profilePublisher.PublishAsync(
+            PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
+
         try
         {
             await _uow.SaveChangesAsync(ct);
@@ -81,9 +87,6 @@ public sealed class AllocateStatPointsHandler
                     "AllocateStatPoints.ConcurrentUpdate",
                     "Character was modified by another request. Reload and retry."));
         }
-
-        await _profilePublisher.PublishAsync(
-            PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
         return Result.Success(new AllocateStatPointsResult(
             Strength: character.Strength,

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Kombats.Players.Infrastructure.Configuration;
 
-public sealed class CharacterConfig : IEntityTypeConfiguration<Character>
+internal sealed class CharacterConfig : IEntityTypeConfiguration<Character>
 {
     public void Configure(EntityTypeBuilder<Character> b)
     {

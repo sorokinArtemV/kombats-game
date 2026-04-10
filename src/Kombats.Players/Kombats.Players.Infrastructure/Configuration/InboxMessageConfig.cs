@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Kombats.Players.Infrastructure.Configuration;
 
-public sealed class InboxMessageConfig : IEntityTypeConfiguration<InboxMessage>
+internal sealed class InboxMessageConfig : IEntityTypeConfiguration<InboxMessage>
 {
     public void Configure(EntityTypeBuilder<InboxMessage> b)
     {

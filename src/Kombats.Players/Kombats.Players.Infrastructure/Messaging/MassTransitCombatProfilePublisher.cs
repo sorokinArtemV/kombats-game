@@ -10,7 +10,7 @@ namespace Kombats.Players.Infrastructure.Messaging;
 /// tables in the DbContext rather than directly to RabbitMQ, ensuring atomicity with domain changes.
 /// Callers must invoke PublishAsync before SaveChanges for correct outbox semantics.
 /// </summary>
-public sealed class MassTransitCombatProfilePublisher : ICombatProfilePublisher
+internal sealed class MassTransitCombatProfilePublisher : ICombatProfilePublisher
 {
     private readonly IPublishEndpoint _publishEndpoint;
 

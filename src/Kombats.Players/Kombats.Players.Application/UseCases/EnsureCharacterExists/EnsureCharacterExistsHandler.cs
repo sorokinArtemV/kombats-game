@@ -5,7 +5,7 @@ using Kombats.Players.Domain.Entities;
 
 namespace Kombats.Players.Application.UseCases.EnsureCharacterExists;
 
-public sealed class EnsureCharacterExistsHandler
+internal sealed class EnsureCharacterExistsHandler
     : ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult>
 {
     private readonly IUnitOfWork _uow;
@@ -33,12 +33,15 @@ public sealed class EnsureCharacterExistsHandler
         var character = Character.CreateDraft(cmd.IdentityId, DateTimeOffset.UtcNow);
         await _characters.AddAsync(character, ct);
 
+        // Publish before SaveChanges so outbox entries are committed atomically
+        // with domain changes (AD-01). With MassTransit outbox configured,
+        // IPublishEndpoint.Publish() writes to outbox tables in the DbContext.
+        await _profilePublisher.PublishAsync(
+            PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
+
         try
         {
             await _uow.SaveChangesAsync(ct);
-
-            await _profilePublisher.PublishAsync(
-                PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
 
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }

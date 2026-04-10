@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kombats.Players.Infrastructure.Persistence.Repository;
 
-public sealed class InboxRepository : IInboxRepository
+internal sealed class InboxRepository : IInboxRepository
 {
     private readonly PlayersDbContext _db;
 
