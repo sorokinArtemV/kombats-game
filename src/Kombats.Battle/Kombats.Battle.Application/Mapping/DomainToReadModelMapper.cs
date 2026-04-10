@@ -6,7 +6,7 @@ namespace Kombats.Battle.Application.Mapping;
 /// <summary>
 /// Mapper from Domain models to Application read models.
 /// </summary>
-public static class DomainToReadModelMapper
+internal static class DomainToReadModelMapper
 {
     public static BattleSnapshot ToSnapshot(BattleDomainState domainState, DateTime deadlineUtc, int version)
     {

@@ -41,6 +41,9 @@ builder.Services.AddKombatsAuth(builder.Configuration);
 // API Documentation
 builder.Services.AddOpenApi();
 
+// Global error handling — RFC 7807 ProblemDetails
+builder.Services.AddProblemDetails();
+
 // Endpoints
 var apiAssembly = typeof(IEndpoint).Assembly;
 builder.Services.AddEndpoints(apiAssembly);
@@ -84,7 +87,8 @@ builder.Services.AddDbContext<BattleDbContext>(options =>
     var connectionString = builder.Configuration.GetConnectionString("PostgresConnection")
                            ?? throw new InvalidOperationException("PostgresConnection connection string is required.");
     options.UseNpgsql(connectionString, npgsql =>
-            npgsql.MigrationsHistoryTable("__ef_migrations_history", BattleDbContext.Schema))
+            npgsql.MigrationsHistoryTable("__ef_migrations_history", BattleDbContext.Schema)
+                .EnableRetryOnFailure())
         .UseSnakeCaseNamingConvention()
         .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
 });
@@ -146,6 +150,7 @@ builder.Services.AddOpenTelemetry()
     .WithTracing(tracing =>
     {
         tracing
+            .AddSource("Npgsql")
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation();
 
@@ -169,6 +174,9 @@ var app = builder.Build();
 
 // NOTE: No Database.MigrateAsync() on startup — AD-13 forbids it.
 
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
 app.MapOpenApi();
 app.MapScalarApiReference();
 
@@ -188,3 +196,6 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => fa
 app.MapHealthChecks("/health/ready").AllowAnonymous();
 
 app.Run();
+
+// Expose for WebApplicationFactory<Program> in integration tests
+public partial class Program;

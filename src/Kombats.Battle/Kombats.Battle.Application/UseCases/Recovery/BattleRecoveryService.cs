@@ -1,4 +1,5 @@
 using Kombats.Battle.Application.Ports;
+using Kombats.Battle.Application.ReadModels;
 using Kombats.Battle.Application.UseCases.Turns;
 using Kombats.Battle.Domain.Model;
 using Kombats.Battle.Domain.Results;
@@ -10,11 +11,12 @@ namespace Kombats.Battle.Application.UseCases.Recovery;
 /// Orchestrates recovery of stuck and orphaned battles.
 /// Called by BattleRecoveryWorker (thin scheduler in Bootstrap).
 ///
-/// Two recovery paths:
+/// Three recovery paths:
 /// 1. Stuck-in-Resolving: battle has Redis state with Phase=Resolving → re-attempt resolution
-/// 2. Orphaned: non-terminal in Postgres with no Redis state → force-end atomically (state + outbox)
+/// 2. Redis-Ended: Redis state Phase=Ended but Postgres non-terminal → force-end atomically (state + outbox)
+/// 3. Orphaned: non-terminal in Postgres with no Redis state → force-end atomically (state + outbox)
 /// </summary>
-public sealed class BattleRecoveryService(
+internal sealed class BattleRecoveryService(
     IBattleRecoveryRepository recoveryRepo,
     IBattleStateStore stateStore,
     BattleTurnAppService turnAppService,
@@ -79,8 +81,10 @@ public sealed class BattleRecoveryService(
         }
         else if (redisState.Phase == BattlePhase.Ended)
         {
-            // Redis says ended but Postgres wasn't updated (projection lag) — skip
-            logger.LogDebug("Battle {BattleId} ended in Redis but not yet in Postgres (projection lag)", battleId);
+            // Redis says ended but Postgres is still non-terminal.
+            // The process likely crashed after Redis committed Phase=Ended but before
+            // BattleCompleted was written to the outbox. Force-end atomically.
+            await ForceEndRedisEndedBattleAsync(battleId, redisState, ct);
         }
         // TurnOpen or ArenaOpen: battle is still active in Redis — not an orphan, just old
     }
@@ -102,6 +106,8 @@ public sealed class BattleRecoveryService(
             return; // Already ended or doesn't exist
 
         // Step 2: Publish to outbox (adds OutboxMessage to same DbContext, NOT saved yet)
+        // TurnCount=0, RulesetVersion=0: no Redis state available for orphaned battles
+        int durationMs = (int)(now - info.CreatedAt).TotalMilliseconds;
         await eventPublisher.PublishBattleCompletedAsync(
             battleId,
             info.MatchId,
@@ -110,11 +116,60 @@ public sealed class BattleRecoveryService(
             EndBattleReason.SystemError,
             winnerPlayerId: null,
             now,
+            turnCount: 0,
+            durationMs: Math.Max(0, durationMs),
+            rulesetVersion: 0,
             ct);
 
         // Step 3: Atomic commit — battle state change + outbox record in one transaction
         await recoveryRepo.CommitAsync(ct);
 
         logger.LogWarning("Force-ended orphaned battle {BattleId} as draw and published BattleCompleted", battleId);
+    }
+
+    /// <summary>
+    /// Handles the case where Redis state is Ended but Postgres is still non-terminal.
+    /// This occurs when the process crashed after Redis committed Phase=Ended but before
+    /// BattleCompleted was written to the outbox. Uses the same atomic pattern as orphan recovery:
+    /// mark ended in Postgres + publish to outbox in a single transaction.
+    /// </summary>
+    private async Task ForceEndRedisEndedBattleAsync(
+        Guid battleId,
+        BattleSnapshot redisState,
+        CancellationToken ct)
+    {
+        logger.LogWarning(
+            "Battle {BattleId} ended in Redis (Phase=Ended) but Postgres non-terminal — recovering",
+            battleId);
+
+        var now = DateTimeOffset.UtcNow;
+
+        var info = await recoveryRepo.TryMarkOrphanedBattleEndedAsync(battleId, now, ct);
+        if (info is null)
+            return; // Already ended (race with projection consumer) or doesn't exist
+
+        // Use available metadata from Redis state for the event
+        int turnCount = redisState.LastResolvedTurnIndex;
+        int rulesetVersion = redisState.Ruleset?.Version ?? 0;
+        int durationMs = Math.Max(0, (int)(now - info.CreatedAt).TotalMilliseconds);
+
+        await eventPublisher.PublishBattleCompletedAsync(
+            battleId,
+            info.MatchId,
+            info.PlayerAId,
+            info.PlayerBId,
+            EndBattleReason.SystemError,
+            winnerPlayerId: null,
+            now,
+            turnCount: turnCount,
+            durationMs: durationMs,
+            rulesetVersion: rulesetVersion,
+            ct);
+
+        await recoveryRepo.CommitAsync(ct);
+
+        logger.LogWarning(
+            "Force-ended Redis-Ended battle {BattleId} as SystemError and published BattleCompleted (TurnCount={TurnCount})",
+            battleId, turnCount);
     }
 }

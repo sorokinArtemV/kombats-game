@@ -14,7 +14,7 @@ namespace Kombats.Battle.Application.UseCases.Turns;
 /// Application service for battle turn operations: submitting actions and resolving turns.
 /// Orchestrates turn resolution with proper idempotency and state machine enforcement.
 /// </summary>
-public class BattleTurnAppService
+public sealed class BattleTurnAppService
 {
     private readonly IBattleStateStore _stateStore;
     private readonly IBattleEngine _battleEngine;
@@ -345,6 +345,7 @@ public class BattleTurnAppService
                 cancellationToken);
 
             // Publish canonical BattleCompleted (consumed by Players, Matchmaking, and Battle projection)
+            // DurationMs=0: battle CreatedAt is not available in Redis state; deferred to future enhancement
             await _eventPublisher.PublishBattleCompletedAsync(
                 battleId,
                 state.MatchId,
@@ -353,6 +354,9 @@ public class BattleTurnAppService
                 battleEnded.Reason,
                 battleEnded.WinnerPlayerId,
                 battleEnded.OccurredAt,
+                turnCount: battleEnded.FinalTurnIndex,
+                durationMs: 0,
+                rulesetVersion: state.Ruleset.Version,
                 cancellationToken);
 
             _logger.LogInformation(

@@ -292,7 +292,9 @@ public class BattleTurnAppServiceTests
         await _publisher.Received(1).PublishBattleCompletedAsync(
             _battleId, resolvingSnapshot.MatchId, _playerAId, _playerBId,
             EndBattleReason.Normal, _playerAId,
-            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
 
         // Client notified
         await _notifier.Received(1).NotifyBattleEndedAsync(

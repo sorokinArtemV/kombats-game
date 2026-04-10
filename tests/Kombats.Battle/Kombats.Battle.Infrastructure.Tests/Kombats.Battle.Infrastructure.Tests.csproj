@@ -15,15 +15,19 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Redis" />
+    <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="MassTransit" />
     <PackageReference Include="MassTransit.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Infrastructure\Kombats.Battle.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Contracts\Kombats.Battle.Contracts.csproj" />
     <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Application\Kombats.Battle.Application.csproj" />
     <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Domain\Kombats.Battle.Domain.csproj" />
   </ItemGroup>

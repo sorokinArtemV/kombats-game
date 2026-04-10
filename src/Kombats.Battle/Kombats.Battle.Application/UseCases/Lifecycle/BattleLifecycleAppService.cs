@@ -11,7 +11,7 @@ namespace Kombats.Battle.Application.UseCases.Lifecycle;
 /// Application service for battle lifecycle operations.
 /// Orchestrates battle initialization and turn opening.
 /// </summary>
-public class BattleLifecycleAppService
+public sealed class BattleLifecycleAppService
 {
     private readonly IBattleStateStore _stateStore;
     private readonly IBattleRealtimeNotifier _notifier;

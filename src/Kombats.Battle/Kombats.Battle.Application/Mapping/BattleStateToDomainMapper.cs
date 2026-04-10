@@ -7,7 +7,7 @@ namespace Kombats.Battle.Application.Mapping;
 /// <summary>
 /// Mapper between Application read models and Domain models.
 /// </summary>
-public static class BattleStateToDomainMapper
+internal static class BattleStateToDomainMapper
 {
     /// <summary>
     /// Maps Application BattleSnapshot to Domain BattleDomainState.

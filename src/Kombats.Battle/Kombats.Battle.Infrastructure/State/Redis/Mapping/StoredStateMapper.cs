@@ -7,7 +7,7 @@ namespace Kombats.Battle.Infrastructure.State.Redis.Mapping;
 /// Mapper between Infrastructure stored state (Redis schema) and Domain/Application models.
 /// Infrastructure layer owns this mapping (persistence schema <-> domain/read models).
 /// </summary>
-public static class StoredStateMapper
+internal static class StoredStateMapper
 {
     /// <summary>
     /// Maps Infrastructure BattleState to Application BattleSnapshot (read model).

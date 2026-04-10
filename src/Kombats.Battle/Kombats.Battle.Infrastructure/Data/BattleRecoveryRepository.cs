@@ -7,7 +7,7 @@ namespace Kombats.Battle.Infrastructure.Data;
 /// <summary>
 /// Infrastructure implementation: queries and updates Postgres for battle recovery.
 /// </summary>
-public sealed class BattleRecoveryRepository(BattleDbContext dbContext) : IBattleRecoveryRepository
+internal sealed class BattleRecoveryRepository(BattleDbContext dbContext) : IBattleRecoveryRepository
 {
     public async Task<IReadOnlyList<Guid>> GetNonTerminalBattleIdsOlderThanAsync(
         DateTimeOffset cutoff,
@@ -37,7 +37,7 @@ public sealed class BattleRecoveryRepository(BattleDbContext dbContext) : IBattl
         battle.EndedAt = endedAt;
         battle.EndReason = "OrphanRecovery";
 
-        return new OrphanedBattleInfo(battle.MatchId, battle.PlayerAId, battle.PlayerBId);
+        return new OrphanedBattleInfo(battle.MatchId, battle.PlayerAId, battle.PlayerBId, battle.CreatedAt);
     }
 
     public Task CommitAsync(CancellationToken ct = default) => dbContext.SaveChangesAsync(ct);

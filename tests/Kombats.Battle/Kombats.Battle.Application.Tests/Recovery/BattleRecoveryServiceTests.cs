@@ -89,7 +89,7 @@ public class BattleRecoveryServiceTests
         _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
             .Returns((BattleSnapshot?)null);
 
-        var orphanInfo = new OrphanedBattleInfo(_matchId, _playerAId, _playerBId);
+        var orphanInfo = new OrphanedBattleInfo(_matchId, _playerAId, _playerBId, DateTimeOffset.UtcNow.AddMinutes(-5));
         _recoveryRepo.TryMarkOrphanedBattleEndedAsync(_battleId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(orphanInfo);
 
@@ -103,7 +103,9 @@ public class BattleRecoveryServiceTests
         await _eventPublisher.Received(1).PublishBattleCompletedAsync(
             _battleId, _matchId, _playerAId, _playerBId,
             EndBattleReason.SystemError, null,
-            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+            Arg.Any<DateTimeOffset>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
 
         await _recoveryRepo.Received(1).CommitAsync(Arg.Any<CancellationToken>());
     }
@@ -115,7 +117,7 @@ public class BattleRecoveryServiceTests
         _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
             .Returns((BattleSnapshot?)null);
 
-        var orphanInfo = new OrphanedBattleInfo(_matchId, _playerAId, _playerBId);
+        var orphanInfo = new OrphanedBattleInfo(_matchId, _playerAId, _playerBId, DateTimeOffset.UtcNow.AddMinutes(-5));
         _recoveryRepo.TryMarkOrphanedBattleEndedAsync(_battleId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(orphanInfo);
 
@@ -123,6 +125,7 @@ public class BattleRecoveryServiceTests
         _eventPublisher.PublishBattleCompletedAsync(
                 Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
                 Arg.Any<EndBattleReason>(), Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask)
             .AndDoes(_ => callOrder.Add("publish"));
@@ -161,25 +164,58 @@ public class BattleRecoveryServiceTests
             Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
-    // ========== Battle with Redis state Ended is skipped ==========
+    // ========== Battle with Redis state Ended triggers recovery ==========
 
     [Fact]
-    public async Task RecoverBattle_RedisStateEnded_SkipsRecovery()
+    public async Task RecoverBattle_RedisStateEnded_ForceEndsAndPublishesBattleCompleted()
     {
-        // Arrange: Redis shows Ended (projection lag — Postgres not updated yet)
-        var endedSnapshot = CreateSnapshot(phase: BattlePhase.Ended);
+        // Arrange: Redis shows Ended but Postgres is non-terminal (crash after Redis commit)
+        var endedSnapshot = CreateSnapshot(phase: BattlePhase.Ended, lastResolved: 3);
         _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
             .Returns(endedSnapshot);
+
+        var orphanInfo = new OrphanedBattleInfo(_matchId, _playerAId, _playerBId, DateTimeOffset.UtcNow.AddMinutes(-5));
+        _recoveryRepo.TryMarkOrphanedBattleEndedAsync(_battleId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(orphanInfo);
 
         // Act
         await _service.RecoverBattleAsync(_battleId, CancellationToken.None);
 
-        // Assert: no force-end, no resolution, no commit
-        await _recoveryRepo.DidNotReceive().TryMarkOrphanedBattleEndedAsync(
-            Arg.Any<Guid>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        // Assert: battle marked ended, event published with Redis metadata, then committed
+        await _recoveryRepo.Received(1).TryMarkOrphanedBattleEndedAsync(
+            _battleId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+
+        await _eventPublisher.Received(1).PublishBattleCompletedAsync(
+            _battleId, _matchId, _playerAId, _playerBId,
+            EndBattleReason.SystemError, null,
+            Arg.Any<DateTimeOffset>(),
+            3, Arg.Any<int>(), 1,
+            Arg.Any<CancellationToken>());
+
+        await _recoveryRepo.Received(1).CommitAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RecoverBattle_RedisStateEnded_AlreadyEndedInPostgres_NoOp()
+    {
+        // Arrange: Redis shows Ended, but Postgres already shows Ended (race with projection)
+        var endedSnapshot = CreateSnapshot(phase: BattlePhase.Ended);
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(endedSnapshot);
+
+        _recoveryRepo.TryMarkOrphanedBattleEndedAsync(_battleId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns((OrphanedBattleInfo?)null);
+
+        // Act
+        await _service.RecoverBattleAsync(_battleId, CancellationToken.None);
+
+        // Assert: no event published, no commit
+        await _eventPublisher.DidNotReceive().PublishBattleCompletedAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
+            Arg.Any<EndBattleReason>(), Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
         await _recoveryRepo.DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
-        await _stateStore.DidNotReceive().TryMarkTurnResolvingAsync(
-            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
     }
 
     // ========== Active battle (TurnOpen) is not force-ended ==========
@@ -220,6 +256,7 @@ public class BattleRecoveryServiceTests
         await _eventPublisher.DidNotReceive().PublishBattleCompletedAsync(
             Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
             Arg.Any<EndBattleReason>(), Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
             Arg.Any<CancellationToken>());
         await _recoveryRepo.DidNotReceive().CommitAsync(Arg.Any<CancellationToken>());
     }

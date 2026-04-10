@@ -21,5 +21,8 @@ public interface IBattleEventPublisher
         EndBattleReason reason,
         Guid? winnerPlayerId,
         DateTimeOffset occurredAt,
+        int turnCount,
+        int durationMs,
+        int rulesetVersion,
         CancellationToken cancellationToken = default);
 }

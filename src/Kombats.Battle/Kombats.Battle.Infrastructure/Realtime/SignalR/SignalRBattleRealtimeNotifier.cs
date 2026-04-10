@@ -12,7 +12,7 @@ namespace Kombats.Battle.Infrastructure.Realtime.SignalR;
 /// Maps Application parameters to typed SignalR contracts.
 /// Uses IHubContext&lt;BattleHub&gt; to reference the hub type directly.
 /// </summary>
-public class SignalRBattleRealtimeNotifier : IBattleRealtimeNotifier
+internal sealed class SignalRBattleRealtimeNotifier : IBattleRealtimeNotifier
 {
     private readonly IHubContext<BattleHub> _hubContext;
     private readonly ILogger<SignalRBattleRealtimeNotifier> _logger;

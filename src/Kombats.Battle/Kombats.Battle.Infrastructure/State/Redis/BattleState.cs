@@ -18,7 +18,7 @@ namespace Kombats.Battle.Infrastructure.State.Redis;
 /// Redis TryOpenTurn Lua script relies on this convention.
 /// Do NOT change this value without updating the Lua gate conditions.
 /// </remarks>
-public class BattleState
+internal sealed class BattleState
 {
     public Guid BattleId { get; set; }
     public Guid PlayerAId { get; set; }

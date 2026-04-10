@@ -82,7 +82,9 @@
       "Bash(kill %1)",
       "Bash(wc:*)",
       "Bash(awk '{sum+=$1} END {print \"Total lines:\", sum}')",
-      "Bash(head -5 UseCases/*/*.cs Abstractions/*.cs)"
+      "Bash(head -5 UseCases/*/*.cs Abstractions/*.cs)",
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Battle/Kombats.Battle.Infrastructure/Properties)",
+      "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Battle/Kombats.Battle.Application/Properties)"
     ]
   }
 }

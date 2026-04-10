@@ -18,11 +18,17 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Redis" />
+    <PackageReference Include="Testcontainers.RabbitMq" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Api\Kombats.Battle.Api.csproj" />
     <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Infrastructure\Kombats.Battle.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Bootstrap\Kombats.Battle.Bootstrap.csproj" />
   </ItemGroup>
 
 </Project>

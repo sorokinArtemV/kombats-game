@@ -18,7 +18,7 @@ namespace Kombats.Battle.Infrastructure.State.Redis;
 /// Production scheduling: TurnDeadlineWorker uses ClaimDueBattlesAsync in a tick loop with adaptive backoff.
 /// Do not use legacy methods (GetNextDeadlineUtcAsync, GetDueBattlesAsync) for production code.
 /// </summary>
-public class RedisBattleStateStore : IBattleStateStore
+internal sealed class RedisBattleStateStore : IBattleStateStore
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisBattleStateStore> _logger;

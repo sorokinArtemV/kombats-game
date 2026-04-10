@@ -2,7 +2,7 @@ using Kombats.Battle.Infrastructure.Rules;
 
 namespace Kombats.Battle.Infrastructure.Configuration;
 
-public static class RulesetsOptionsValidator
+internal static class RulesetsOptionsValidator
 {
     public static bool Validate(BattleRulesetsOptions options)
     {

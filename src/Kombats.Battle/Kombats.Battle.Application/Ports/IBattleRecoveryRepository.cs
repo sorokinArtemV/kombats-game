@@ -3,7 +3,7 @@ namespace Kombats.Battle.Application.Ports;
 /// <summary>
 /// Holds the minimal info needed to publish BattleCompleted for an orphaned battle.
 /// </summary>
-public sealed record OrphanedBattleInfo(Guid MatchId, Guid PlayerAId, Guid PlayerBId);
+public sealed record OrphanedBattleInfo(Guid MatchId, Guid PlayerAId, Guid PlayerBId, DateTimeOffset CreatedAt);
 
 /// <summary>
 /// Port for querying and recovering battle records (orphan sweep, stuck detection).

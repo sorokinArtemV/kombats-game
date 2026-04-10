@@ -11,7 +11,7 @@ namespace Kombats.Battle.Infrastructure.Messaging.Publisher;
 /// Publishes integration events via MassTransit (with outbox support).
 /// Maps domain EndBattleReason to Contracts BattleEndReason.
 /// </summary>
-public class MassTransitBattleEventPublisher : IBattleEventPublisher
+internal sealed class MassTransitBattleEventPublisher : IBattleEventPublisher
 {
     private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<MassTransitBattleEventPublisher> _logger;
@@ -32,6 +32,9 @@ public class MassTransitBattleEventPublisher : IBattleEventPublisher
         EndBattleReason reason,
         Guid? winnerPlayerId,
         DateTimeOffset occurredAt,
+        int turnCount,
+        int durationMs,
+        int rulesetVersion,
         CancellationToken cancellationToken = default)
     {
         var contractReason = MapReason(reason);
@@ -51,6 +54,9 @@ public class MassTransitBattleEventPublisher : IBattleEventPublisher
             WinnerIdentityId = winnerPlayerId,
             LoserIdentityId = loserPlayerId,
             Reason = contractReason,
+            TurnCount = turnCount,
+            DurationMs = durationMs,
+            RulesetVersion = rulesetVersion,
             OccurredAt = occurredAt,
             Version = 1
         };
