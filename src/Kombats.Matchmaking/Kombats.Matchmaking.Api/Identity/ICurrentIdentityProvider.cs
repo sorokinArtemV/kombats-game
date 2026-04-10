@@ -2,7 +2,7 @@ using Kombats.Abstractions;
 
 namespace Kombats.Matchmaking.Api.Identity;
 
-public interface ICurrentIdentityProvider
+internal interface ICurrentIdentityProvider
 {
     Result<Guid> GetRequiredSubject();
 }

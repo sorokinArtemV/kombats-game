@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Kombats.Matchmaking.Application.UseCases.LeaveQueue;
 
-public sealed class LeaveQueueHandler : ICommandHandler<LeaveQueueCommand, LeaveQueueResult>
+internal sealed class LeaveQueueHandler : ICommandHandler<LeaveQueueCommand, LeaveQueueResult>
 {
     private readonly IMatchRepository _matchRepository;
     private readonly IMatchQueueStore _queueStore;

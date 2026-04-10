@@ -10,7 +10,7 @@ namespace Kombats.Matchmaking.Infrastructure.Repositories;
 /// <summary>
 /// Infrastructure implementation of IMatchRepository using EF Core.
 /// </summary>
-public sealed class MatchRepository : IMatchRepository
+internal sealed class MatchRepository : IMatchRepository
 {
     private readonly MatchmakingDbContext _db;
     private readonly ILogger<MatchRepository> _logger;
@@ -87,8 +87,17 @@ public sealed class MatchRepository : IMatchRepository
         return rows > 0;
     }
 
-    public async Task<int> TimeoutStaleMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default)
+    public async Task<List<(Guid PlayerAId, Guid PlayerBId)>> TimeoutStaleMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default)
     {
+        // Query affected player IDs before updating state
+        var affected = await _db.Matches
+            .Where(m => m.State == (int)MatchState.BattleCreateRequested && m.UpdatedAtUtc < cutoff)
+            .Select(m => new { m.PlayerAId, m.PlayerBId })
+            .ToListAsync(ct);
+
+        if (affected.Count == 0)
+            return [];
+
         var rows = await _db.Matches
             .Where(m => m.State == (int)MatchState.BattleCreateRequested && m.UpdatedAtUtc < cutoff)
             .ExecuteUpdateAsync(
@@ -100,11 +109,20 @@ public sealed class MatchRepository : IMatchRepository
         if (rows > 0)
             _logger.LogWarning("Timed out {Count} stale matches", rows);
 
-        return rows;
+        return affected.Select(a => (a.PlayerAId, a.PlayerBId)).ToList();
     }
 
-    public async Task<int> TimeoutStaleBattleCreatedMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default)
+    public async Task<List<(Guid PlayerAId, Guid PlayerBId)>> TimeoutStaleBattleCreatedMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default)
     {
+        // Query affected player IDs before updating state
+        var affected = await _db.Matches
+            .Where(m => m.State == (int)MatchState.BattleCreated && m.UpdatedAtUtc < cutoff)
+            .Select(m => new { m.PlayerAId, m.PlayerBId })
+            .ToListAsync(ct);
+
+        if (affected.Count == 0)
+            return [];
+
         var rows = await _db.Matches
             .Where(m => m.State == (int)MatchState.BattleCreated && m.UpdatedAtUtc < cutoff)
             .ExecuteUpdateAsync(
@@ -116,7 +134,7 @@ public sealed class MatchRepository : IMatchRepository
         if (rows > 0)
             _logger.LogWarning("Timed out {Count} stale BattleCreated matches", rows);
 
-        return rows;
+        return affected.Select(a => (a.PlayerAId, a.PlayerBId)).ToList();
     }
 
     private static Match ToDomain(MatchEntity e) =>

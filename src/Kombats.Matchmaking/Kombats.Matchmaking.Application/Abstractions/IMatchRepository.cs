@@ -5,7 +5,7 @@ namespace Kombats.Matchmaking.Application.Abstractions;
 /// <summary>
 /// Port for match repository operations (Postgres source of truth).
 /// </summary>
-public interface IMatchRepository
+internal interface IMatchRepository
 {
     /// <summary>
     /// Gets the latest active match for a player (by PlayerAId or PlayerBId).
@@ -42,15 +42,15 @@ public interface IMatchRepository
 
     /// <summary>
     /// Bulk timeout: transitions all BattleCreateRequested matches older than threshold to TimedOut.
-    /// Returns count of affected rows.
+    /// Returns player ID pairs for each timed-out match (for Redis status cleanup).
     /// </summary>
-    Task<int> TimeoutStaleMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default);
+    Task<List<(Guid PlayerAId, Guid PlayerBId)>> TimeoutStaleMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
     /// Bulk timeout: transitions all BattleCreated matches older than threshold to TimedOut.
     /// Covers the gap where Battle service accepted but never completed a battle. See EI-015.
-    /// Returns count of affected rows.
+    /// Returns player ID pairs for each timed-out match (for Redis status cleanup).
     /// </summary>
-    Task<int> TimeoutStaleBattleCreatedMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default);
+    Task<List<(Guid PlayerAId, Guid PlayerBId)>> TimeoutStaleBattleCreatedMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default);
 }
 

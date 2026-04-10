@@ -11,7 +11,7 @@ namespace Kombats.Matchmaking.Infrastructure.Messaging.Consumers;
 /// Advances match state from BattleCreateRequested to BattleCreated.
 /// Uses CAS to ensure idempotent, race-free state transition.
 /// </summary>
-public sealed class BattleCreatedConsumer : IConsumer<BattleCreated>
+internal sealed class BattleCreatedConsumer : IConsumer<BattleCreated>
 {
     private readonly IMatchRepository _matchRepository;
     private readonly ILogger<BattleCreatedConsumer> _logger;

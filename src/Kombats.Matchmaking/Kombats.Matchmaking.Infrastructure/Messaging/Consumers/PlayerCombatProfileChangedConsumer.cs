@@ -9,7 +9,7 @@ namespace Kombats.Matchmaking.Infrastructure.Messaging.Consumers;
 /// Thin integration consumer for player combat profile change events from Players service.
 /// Consumes the canonical PlayerCombatProfileChanged contract from Kombats.Players.Contracts.
 /// </summary>
-public sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerCombatProfileChanged>
+internal sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerCombatProfileChanged>
 {
     private readonly IPlayerCombatProfileRepository _repository;
     private readonly ILogger<PlayerCombatProfileChangedConsumer> _logger;

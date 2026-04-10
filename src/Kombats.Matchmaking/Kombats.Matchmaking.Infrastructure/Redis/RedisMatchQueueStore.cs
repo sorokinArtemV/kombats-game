@@ -10,7 +10,7 @@ namespace Kombats.Matchmaking.Infrastructure.Redis;
 /// Infrastructure implementation of IMatchQueueStore using Redis.
 /// Uses Lua scripts for atomic operations.
 /// </summary>
-public class RedisMatchQueueStore : IMatchQueueStore
+internal sealed class RedisMatchQueueStore : IMatchQueueStore
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisMatchQueueStore> _logger;
@@ -50,15 +50,14 @@ public class RedisMatchQueueStore : IMatchQueueStore
                 [playerIdStr, nowEpochSeconds, cancelTtlSeconds]);
 
             var added = (int)result == 1;
-            
-            // Diagnostic logging: log queue sizes after join attempt
-            var queueLength = await db.ListLengthAsync(queueKey);
-            var queuedSetSize = await db.SetLengthAsync(queuedKey);
-            
-            _logger.LogInformation(
-                "Queue join attempt: PlayerId={PlayerId}, Variant={Variant}, AddedToQueue={AddedToQueue}, QueueLength={QueueLength}, QueuedSetSize={QueuedSetSize}, DatabaseIndex={DatabaseIndex}",
-                playerId, variant, added, queueLength, queuedSetSize, _options.DatabaseIndex);
-            
+
+            if (added)
+            {
+                _logger.LogInformation(
+                    "Player joined queue: PlayerId={PlayerId}, Variant={Variant}",
+                    playerId, variant);
+            }
+
             return added;
         }
         catch (Exception ex)
@@ -152,6 +151,33 @@ public class RedisMatchQueueStore : IMatchQueueStore
             _logger.LogError(ex,
                 "Error in TryPopPairAsync for Variant: {Variant}",
                 variant);
+            throw;
+        }
+    }
+
+    public async Task TryRequeueAsync(string variant, Guid playerId, CancellationToken cancellationToken = default)
+    {
+        var db = GetDatabase();
+        var queueKey = GetQueueKey(variant);
+        var queuedKey = GetQueuedSetKey(variant);
+        var playerIdStr = playerId.ToString();
+
+        try
+        {
+            await db.ScriptEvaluateAsync(
+                RedisScripts.RequeueScript,
+                [queueKey, queuedKey],
+                [playerIdStr]);
+
+            _logger.LogInformation(
+                "Player re-queued after failed match: PlayerId={PlayerId}, Variant={Variant}",
+                playerId, variant);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error in TryRequeueAsync for PlayerId: {PlayerId}, Variant: {Variant}",
+                playerId, variant);
             throw;
         }
     }

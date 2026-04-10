@@ -10,7 +10,7 @@ namespace Kombats.Matchmaking.Infrastructure.Repositories;
 /// Infrastructure implementation of IPlayerCombatProfileRepository using EF Core.
 /// Enforces revision monotonicity to prevent stale event overwrites.
 /// </summary>
-public sealed class PlayerCombatProfileRepository : IPlayerCombatProfileRepository
+internal sealed class PlayerCombatProfileRepository : IPlayerCombatProfileRepository
 {
     private readonly MatchmakingDbContext _dbContext;
     private readonly ILogger<PlayerCombatProfileRepository> _logger;

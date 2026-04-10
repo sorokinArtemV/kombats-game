@@ -17,8 +17,8 @@ public sealed class MatchmakingDbContext : DbContext
     {
     }
 
-    public DbSet<MatchEntity> Matches => Set<MatchEntity>();
-    public DbSet<PlayerCombatProfileEntity> PlayerCombatProfiles => Set<PlayerCombatProfileEntity>();
+    internal DbSet<MatchEntity> Matches => Set<MatchEntity>();
+    internal DbSet<PlayerCombatProfileEntity> PlayerCombatProfiles => Set<PlayerCombatProfileEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Kombats.Matchmaking.Api.Endpoints;
-using Kombats.Matchmaking.Api.Endpoints.Health;
 using Kombats.Matchmaking.Api.Endpoints.Queue;
 using Xunit;
 
@@ -34,13 +33,6 @@ public sealed class EndpointStructureTests
     }
 
     [Fact]
-    public void HealthEndpoint_ImplementsIEndpoint()
-    {
-        var endpoint = new HealthEndpoint();
-        endpoint.Should().BeAssignableTo<IEndpoint>();
-    }
-
-    [Fact]
     public void AllEndpoints_AreDiscoverableViaAssemblyScanning()
     {
         var endpointTypes = typeof(IEndpoint).Assembly
@@ -48,10 +40,9 @@ public sealed class EndpointStructureTests
             .Where(t => !t.IsAbstract && !t.IsInterface && typeof(IEndpoint).IsAssignableFrom(t))
             .ToList();
 
-        endpointTypes.Should().HaveCount(4, "JoinQueue, LeaveQueue, GetQueueStatus, Health");
+        endpointTypes.Should().HaveCount(3, "JoinQueue, LeaveQueue, GetQueueStatus");
         endpointTypes.Should().Contain(t => t.Name == "JoinQueueEndpoint");
         endpointTypes.Should().Contain(t => t.Name == "LeaveQueueEndpoint");
         endpointTypes.Should().Contain(t => t.Name == "GetQueueStatusEndpoint");
-        endpointTypes.Should().Contain(t => t.Name == "HealthEndpoint");
     }
 }

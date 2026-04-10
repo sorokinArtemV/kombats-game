@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Kombats.Matchmaking.Infrastructure.Data;
 
-public class MatchmakingDesignTimeDbContextFactory : IDesignTimeDbContextFactory<MatchmakingDbContext>
+public sealed class MatchmakingDesignTimeDbContextFactory : IDesignTimeDbContextFactory<MatchmakingDbContext>
 {
     public MatchmakingDbContext CreateDbContext(string[] args)
     {

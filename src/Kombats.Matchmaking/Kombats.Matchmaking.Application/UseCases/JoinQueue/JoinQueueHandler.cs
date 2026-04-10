@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Kombats.Matchmaking.Application.UseCases.JoinQueue;
 
-public sealed class JoinQueueHandler : ICommandHandler<JoinQueueCommand, JoinQueueResult>
+internal sealed class JoinQueueHandler : ICommandHandler<JoinQueueCommand, JoinQueueResult>
 {
     private readonly IMatchRepository _matchRepository;
     private readonly IPlayerCombatProfileRepository _profileRepository;

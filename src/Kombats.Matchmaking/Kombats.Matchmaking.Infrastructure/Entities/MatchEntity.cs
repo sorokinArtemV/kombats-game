@@ -3,7 +3,7 @@ namespace Kombats.Matchmaking.Infrastructure.Entities;
 /// <summary>
 /// EF Core entity for Match storage.
 /// </summary>
-public class MatchEntity
+internal sealed class MatchEntity
 {
     public Guid MatchId { get; set; }
     public Guid BattleId { get; set; }

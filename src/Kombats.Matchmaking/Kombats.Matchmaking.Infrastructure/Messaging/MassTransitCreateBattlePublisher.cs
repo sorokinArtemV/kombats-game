@@ -9,7 +9,7 @@ namespace Kombats.Matchmaking.Infrastructure.Messaging;
 /// When the EF Core outbox is configured, Publish() writes to the outbox table
 /// instead of sending directly — atomicity is guaranteed by SaveChanges.
 /// </summary>
-public sealed class MassTransitCreateBattlePublisher : ICreateBattlePublisher
+internal sealed class MassTransitCreateBattlePublisher : ICreateBattlePublisher
 {
     private readonly IPublishEndpoint _publishEndpoint;
 

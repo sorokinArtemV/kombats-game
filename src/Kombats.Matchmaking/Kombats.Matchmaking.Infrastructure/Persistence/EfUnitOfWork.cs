@@ -7,7 +7,7 @@ namespace Kombats.Matchmaking.Infrastructure.Persistence;
 /// EF Core UnitOfWork implementation.
 /// SaveChangesAsync also flushes MassTransit outbox messages atomically.
 /// </summary>
-public sealed class EfUnitOfWork : IUnitOfWork
+internal sealed class EfUnitOfWork : IUnitOfWork
 {
     private readonly MatchmakingDbContext _db;
 

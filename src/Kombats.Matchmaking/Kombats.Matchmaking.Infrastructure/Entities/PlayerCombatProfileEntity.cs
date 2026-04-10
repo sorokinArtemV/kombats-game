@@ -5,7 +5,7 @@ namespace Kombats.Matchmaking.Infrastructure.Entities;
 /// Projected from Players service integration events.
 /// Used for queue eligibility and future battle handoff.
 /// </summary>
-public class PlayerCombatProfileEntity
+internal sealed class PlayerCombatProfileEntity
 {
     public Guid IdentityId { get; set; }
     public Guid CharacterId { get; set; }

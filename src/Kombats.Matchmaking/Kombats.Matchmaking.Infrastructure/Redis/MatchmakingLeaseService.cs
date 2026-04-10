@@ -6,7 +6,7 @@ namespace Kombats.Matchmaking.Infrastructure.Redis;
 /// Infrastructure service that executes a callback under lease protection.
 /// Owns: lease acquisition, renewal loop, release, and cancellation coordination.
 /// </summary>
-public sealed class MatchmakingLeaseService
+internal sealed class MatchmakingLeaseService
 {
     private readonly RedisLeaseLock _leaseLock;
     private readonly InstanceIdService _instanceIdService;

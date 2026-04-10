@@ -11,7 +11,7 @@ namespace Kombats.Matchmaking.Infrastructure.Redis;
 /// Infrastructure implementation of IPlayerMatchStatusStore using Redis.
 /// Stores player status as JSON strings with TTL.
 /// </summary>
-public class RedisPlayerMatchStatusStore : IPlayerMatchStatusStore
+internal sealed class RedisPlayerMatchStatusStore : IPlayerMatchStatusStore
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisPlayerMatchStatusStore> _logger;

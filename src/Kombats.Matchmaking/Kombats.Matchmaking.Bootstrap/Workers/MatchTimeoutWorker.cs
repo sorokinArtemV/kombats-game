@@ -8,7 +8,7 @@ namespace Kombats.Matchmaking.Bootstrap.Workers;
 /// <summary>
 /// Background service that scans for stale matches and marks them as timed out.
 /// </summary>
-public sealed class MatchTimeoutWorker : BackgroundService
+internal sealed class MatchTimeoutWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MatchTimeoutWorker> _logger;

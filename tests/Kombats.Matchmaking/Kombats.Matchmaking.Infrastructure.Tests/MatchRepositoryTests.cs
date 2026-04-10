@@ -152,8 +152,8 @@ public sealed class MatchRepositoryTests
 
         await using var db2 = _fixture.CreateDbContext();
         var repo2 = new MatchRepository(db2, NullLogger<MatchRepository>.Instance);
-        var count = await repo2.TimeoutStaleMatchesAsync(cutoff, now);
-        count.Should().BeGreaterThanOrEqualTo(1);
+        var affected = await repo2.TimeoutStaleMatchesAsync(cutoff, now);
+        affected.Should().NotBeEmpty();
 
         await using var db3 = _fixture.CreateDbContext();
         var repo3 = new MatchRepository(db3, NullLogger<MatchRepository>.Instance);

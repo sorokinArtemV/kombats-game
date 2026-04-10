@@ -15,6 +15,8 @@
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="Testcontainers.PostgreSql" />
+    <PackageReference Include="Testcontainers.Redis" />
+    <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="EFCore.NamingConventions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
@@ -26,6 +28,8 @@
     <ProjectReference Include="..\..\..\src\Kombats.Matchmaking\Kombats.Matchmaking.Infrastructure\Kombats.Matchmaking.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Kombats.Matchmaking\Kombats.Matchmaking.Application\Kombats.Matchmaking.Application.csproj" />
     <ProjectReference Include="..\..\..\src\Kombats.Matchmaking\Kombats.Matchmaking.Domain\Kombats.Matchmaking.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Players\Kombats.Players.Contracts\Kombats.Players.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Contracts\Kombats.Battle.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

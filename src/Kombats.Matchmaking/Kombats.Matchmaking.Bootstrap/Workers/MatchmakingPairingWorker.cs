@@ -10,7 +10,7 @@ namespace Kombats.Matchmaking.Bootstrap.Workers;
 /// <summary>
 /// Background service that runs matchmaking ticks under lease protection.
 /// </summary>
-public sealed class MatchmakingPairingWorker : BackgroundService
+internal sealed class MatchmakingPairingWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly MatchmakingLeaseService _leaseService;

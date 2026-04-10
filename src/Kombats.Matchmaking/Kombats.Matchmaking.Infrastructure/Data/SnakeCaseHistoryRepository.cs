@@ -6,7 +6,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Migrations.Internal;
 namespace Kombats.Matchmaking.Infrastructure.Data;
 
 #pragma warning disable EF1001 // Internal EF Core API usage — extending NpgsqlHistoryRepository is the standard pattern
-public class SnakeCaseHistoryRepository : NpgsqlHistoryRepository
+public sealed class SnakeCaseHistoryRepository : NpgsqlHistoryRepository
 {
     public SnakeCaseHistoryRepository(HistoryRepositoryDependencies dependencies)
         : base(dependencies)

@@ -92,7 +92,7 @@ public sealed class ExecuteMatchmakingTickHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ProfileMissing_ReturnsNoMatch()
+    public async Task Handle_ProfileMissing_ReturnsNoMatchAndRequeuesBothPlayers()
     {
         var playerA = Guid.NewGuid();
         var playerB = Guid.NewGuid();
@@ -106,6 +106,10 @@ public sealed class ExecuteMatchmakingTickHandlerTests
         result.IsSuccess.Should().BeTrue();
         result.Value.MatchCreated.Should().BeFalse();
         _matchRepo.DidNotReceiveWithAnyArgs().Add(Arg.Any<Match>());
+
+        // Both players must be re-queued to prevent silent loss (EI-014)
+        await _queueStore.Received(1).TryRequeueAsync("default", playerA, Arg.Any<CancellationToken>());
+        await _queueStore.Received(1).TryRequeueAsync("default", playerB, Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -4,16 +4,19 @@ using Microsoft.Extensions.Logging;
 
 namespace Kombats.Matchmaking.Application.UseCases.TimeoutStaleMatches;
 
-public sealed class TimeoutStaleMatchesHandler : ICommandHandler<TimeoutStaleMatchesCommand, int>
+internal sealed class TimeoutStaleMatchesHandler : ICommandHandler<TimeoutStaleMatchesCommand, int>
 {
     private readonly IMatchRepository _matchRepository;
+    private readonly IPlayerMatchStatusStore _statusStore;
     private readonly ILogger<TimeoutStaleMatchesHandler> _logger;
 
     public TimeoutStaleMatchesHandler(
         IMatchRepository matchRepository,
+        IPlayerMatchStatusStore statusStore,
         ILogger<TimeoutStaleMatchesHandler> logger)
     {
         _matchRepository = matchRepository;
+        _statusStore = statusStore;
         _logger = logger;
     }
 
@@ -23,26 +26,43 @@ public sealed class TimeoutStaleMatchesHandler : ICommandHandler<TimeoutStaleMat
 
         // Timeout BattleCreateRequested matches (60s default)
         var cutoff = now.AddSeconds(-cmd.TimeoutSeconds);
-        var affected = await _matchRepository.TimeoutStaleMatchesAsync(cutoff, now, ct);
+        var affectedPlayers = await _matchRepository.TimeoutStaleMatchesAsync(cutoff, now, ct);
 
-        if (affected > 0)
+        if (affectedPlayers.Count > 0)
         {
             _logger.LogWarning(
                 "Timed out {Count} stale BattleCreateRequested matches older than {TimeoutSeconds}s",
-                affected, cmd.TimeoutSeconds);
+                affectedPlayers.Count, cmd.TimeoutSeconds);
+
+            await ClearPlayerStatusAsync(affectedPlayers, ct);
         }
 
         // Timeout BattleCreated matches (10min default — EI-015)
         var battleCreatedCutoff = now.AddSeconds(-cmd.BattleCreatedTimeoutSeconds);
-        var battleCreatedAffected = await _matchRepository.TimeoutStaleBattleCreatedMatchesAsync(battleCreatedCutoff, now, ct);
+        var battleCreatedPlayers = await _matchRepository.TimeoutStaleBattleCreatedMatchesAsync(battleCreatedCutoff, now, ct);
 
-        if (battleCreatedAffected > 0)
+        if (battleCreatedPlayers.Count > 0)
         {
             _logger.LogWarning(
                 "Timed out {Count} stale BattleCreated matches older than {BattleCreatedTimeoutSeconds}s",
-                battleCreatedAffected, cmd.BattleCreatedTimeoutSeconds);
+                battleCreatedPlayers.Count, cmd.BattleCreatedTimeoutSeconds);
+
+            await ClearPlayerStatusAsync(battleCreatedPlayers, ct);
         }
 
-        return affected + battleCreatedAffected;
+        return affectedPlayers.Count + battleCreatedPlayers.Count;
+    }
+
+    private async Task ClearPlayerStatusAsync(List<(Guid PlayerAId, Guid PlayerBId)> players, CancellationToken ct)
+    {
+        foreach (var (playerAId, playerBId) in players)
+        {
+            await _statusStore.RemoveStatusAsync(playerAId, ct);
+            await _statusStore.RemoveStatusAsync(playerBId, ct);
+
+            _logger.LogInformation(
+                "Cleared Redis match status for timed-out match players: PlayerA={PlayerAId}, PlayerB={PlayerBId}",
+                playerAId, playerBId);
+        }
     }
 }

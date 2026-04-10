@@ -3,7 +3,7 @@ namespace Kombats.Matchmaking.Infrastructure.Options;
 /// <summary>
 /// Configuration options for MatchTimeoutWorker.
 /// </summary>
-public class MatchTimeoutWorkerOptions
+internal sealed class MatchTimeoutWorkerOptions
 {
     public const string SectionName = "Matchmaking:TimeoutWorker";
 

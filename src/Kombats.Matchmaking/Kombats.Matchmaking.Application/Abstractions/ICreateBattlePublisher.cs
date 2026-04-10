@@ -5,7 +5,7 @@ namespace Kombats.Matchmaking.Application.Abstractions;
 /// The implementation uses IPublishEndpoint backed by EF Core outbox —
 /// the message is written atomically with the DbContext SaveChanges.
 /// </summary>
-public interface ICreateBattlePublisher
+internal interface ICreateBattlePublisher
 {
     /// <summary>
     /// Publishes a CreateBattle command with participant snapshots.
@@ -17,7 +17,7 @@ public interface ICreateBattlePublisher
 /// <summary>
 /// Application-level request for creating a battle. Maps to Battle.Contracts.CreateBattle.
 /// </summary>
-public sealed record CreateBattleRequest(
+internal sealed record CreateBattleRequest(
     Guid BattleId,
     Guid MatchId,
     DateTimeOffset RequestedAt,
@@ -27,7 +27,7 @@ public sealed record CreateBattleRequest(
 /// <summary>
 /// Participant snapshot sent with CreateBattle.
 /// </summary>
-public sealed record ParticipantSnapshot(
+internal sealed record ParticipantSnapshot(
     Guid IdentityId,
     Guid CharacterId,
     string? Name,

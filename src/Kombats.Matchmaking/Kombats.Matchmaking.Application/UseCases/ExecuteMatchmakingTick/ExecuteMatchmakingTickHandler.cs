@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Kombats.Matchmaking.Application.UseCases.ExecuteMatchmakingTick;
 
-public sealed class ExecuteMatchmakingTickHandler
+internal sealed class ExecuteMatchmakingTickHandler
     : ICommandHandler<ExecuteMatchmakingTickCommand, MatchmakingTickResult>
 {
     private readonly IMatchQueueStore _queueStore;
@@ -53,9 +53,13 @@ public sealed class ExecuteMatchmakingTickHandler
         if (profileA == null || profileB == null)
         {
             _logger.LogError(
-                "Combat profile missing for matched players. PlayerA={PlayerAId} (found={AFound}), PlayerB={PlayerBId} (found={BFound})",
+                "Combat profile missing for matched players. PlayerA={PlayerAId} (found={AFound}), PlayerB={PlayerBId} (found={BFound}). Re-queuing both players.",
                 playerAId, profileA != null, playerBId, profileB != null);
-            // Return players to indicate no match — profiles missing is an error state
+
+            // Restore both players to queue head so they are not silently lost (EI-014)
+            await _queueStore.TryRequeueAsync(cmd.Variant, playerAId, ct);
+            await _queueStore.TryRequeueAsync(cmd.Variant, playerBId, ct);
+
             return new MatchmakingTickResult(false);
         }
 

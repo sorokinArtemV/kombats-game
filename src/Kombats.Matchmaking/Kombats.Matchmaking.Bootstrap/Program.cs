@@ -88,7 +88,8 @@ builder.Services.AddDbContext<MatchmakingDbContext>(options =>
     var connectionString = builder.Configuration.GetConnectionString("PostgresConnection")
                            ?? throw new InvalidOperationException("PostgresConnection connection string is required.");
     options.UseNpgsql(connectionString, npgsql =>
-            npgsql.MigrationsHistoryTable("__ef_migrations_history", MatchmakingDbContext.Schema))
+            npgsql.MigrationsHistoryTable("__ef_migrations_history", MatchmakingDbContext.Schema)
+                  .EnableRetryOnFailure())
         .UseSnakeCaseNamingConvention()
         .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
 });
@@ -158,7 +159,8 @@ builder.Services.AddOpenTelemetry()
     {
         tracing
             .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation();
+            .AddHttpClientInstrumentation()
+            .AddSource("Npgsql");
 
         string? otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
         if (!string.IsNullOrEmpty(otlpEndpoint))
@@ -171,9 +173,14 @@ builder.Services.AddOpenTelemetry()
 builder.Services.AddHostedService<MatchmakingPairingWorker>();
 builder.Services.AddHostedService<MatchTimeoutWorker>();
 
+// Global exception handling — RFC 7807 ProblemDetails
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
 
 // NOTE: No Database.MigrateAsync() on startup — AD-13 forbids it.
+
+app.UseExceptionHandler();
 
 app.UseMatchmakingApiDocumentation();
 

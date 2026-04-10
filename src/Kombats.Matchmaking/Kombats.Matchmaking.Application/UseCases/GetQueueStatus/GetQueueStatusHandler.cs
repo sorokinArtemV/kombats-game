@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Kombats.Matchmaking.Application.UseCases.GetQueueStatus;
 
-public sealed class GetQueueStatusHandler : IQueryHandler<GetQueueStatusQuery, QueueStatusResult>
+internal sealed class GetQueueStatusHandler : IQueryHandler<GetQueueStatusQuery, QueueStatusResult>
 {
     private readonly IMatchRepository _matchRepository;
     private readonly IPlayerMatchStatusStore _statusStore;

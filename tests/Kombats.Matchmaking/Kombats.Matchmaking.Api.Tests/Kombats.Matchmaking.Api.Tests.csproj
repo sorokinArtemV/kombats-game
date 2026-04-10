@@ -18,10 +18,13 @@
     </PackageReference>
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="NSubstitute" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Kombats.Matchmaking\Kombats.Matchmaking.Api\Kombats.Matchmaking.Api.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Matchmaking\Kombats.Matchmaking.Bootstrap\Kombats.Matchmaking.Bootstrap.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Matchmaking\Kombats.Matchmaking.Application\Kombats.Matchmaking.Application.csproj" />
   </ItemGroup>
 
 </Project>

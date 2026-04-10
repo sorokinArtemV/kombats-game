@@ -171,8 +171,32 @@ internal static class RedisScripts
         
         -- Both players found - remove from queued set and return pair
         redis.call('SREM', queuedKey, firstPlayer, secondPlayer)
-        
+
         return {firstPlayer, secondPlayer}
+    ";
+
+    /// <summary>
+    /// Atomically re-adds a player to the head of the queue (idempotent).
+    /// Used to restore queue state after a failed match attempt (e.g., missing combat profile).
+    /// KEYS[1] = queue list key (mm:queue:{variant})
+    /// KEYS[2] = queued set key (mm:queued:{variant})
+    /// ARGV[1] = playerId (string GUID)
+    /// Returns: 1 if re-added, 0 if already in queued set (idempotent)
+    /// </summary>
+    internal const string RequeueScript = @"
+        local queueKey = KEYS[1]
+        local queuedKey = KEYS[2]
+        local playerId = ARGV[1]
+
+        -- SADD returns 1 if added, 0 if already exists
+        local added = redis.call('SADD', queuedKey, playerId)
+
+        if added == 1 then
+            -- Re-add to HEAD of queue (LPUSH for priority restoration)
+            redis.call('LPUSH', queueKey, playerId)
+        end
+
+        return added
     ";
 }
 
