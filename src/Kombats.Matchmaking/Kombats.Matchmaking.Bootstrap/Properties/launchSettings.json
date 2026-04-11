@@ -9,7 +9,7 @@
       "dotnetRunMessages": true,
       "launchBrowser": true,
       "launchUrl": "scalar/v1",
-      "applicationUrl": "http://localhost:5001"
+      "applicationUrl": "http://localhost:5002"
     }
   }
 }

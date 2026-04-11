@@ -3335,3 +3335,466 @@ Players does not use Redis — no changes needed.
 | No frontend/BFF code modified | Pass |
 | No new features | Pass |
 | No Phase 7B scope | Pass |
+
+---
+
+## Developer Test Client — Frontend Test Harness
+
+**Date:** 2026-04-11
+**Status:** Completed
+**Location:** `tools/test-client/index.html`
+
+### Purpose
+
+Minimal developer-facing test harness for manually verifying BFF and Battle realtime flows. Not a production frontend — a disposable debug/test tool.
+
+### What Was Implemented
+
+Single-file React app (via CDN, no build step) with:
+
+- **Auth**: Keycloak resource-owner password grant login (direct token fetch from `POST /realms/kombats/protocol/openid-connect/token`)
+- **Character management**: Onboard, get game state, set character name via BFF endpoints
+- **Matchmaking**: Join queue, get queue status, leave queue via BFF endpoints
+- **Battle realtime**: SignalR connection to BFF's `/battlehub`, join battle, submit turn actions
+- **Battle UI layout**: Symmetrical player panels (HP bars, IDs), center action panel (attack zone + block zone radio selectors), bottom event log
+- **Debug panels**: State inspector (JSON), last response viewer, scrollable event log with timestamps and color-coded entries
+
+### Supported Scenarios
+
+| Flow | Status | Notes |
+|---|---|---|
+| Keycloak login | Supported | Resource-owner password grant against `client_id=account` |
+| Onboard character | Supported | `POST api/v1/game/onboard` |
+| Get game state | Supported | `GET api/v1/game/state` |
+| Set character name | Supported | `POST api/v1/character/name` |
+| Join queue | Supported | `POST api/v1/queue/join` |
+| Get queue status | Supported | `GET api/v1/queue/status` |
+| Leave queue | Supported | `POST api/v1/queue/leave` |
+| Connect to battle hub | Supported | SignalR WebSocket to `/battlehub` with JWT |
+| Join battle | Supported | `JoinBattle(battleId)` hub invocation |
+| Submit turn action | Supported | `SubmitTurnAction` with attack zone + block pair (5 zones, 5 valid adjacent block pairs) |
+| Receive battle events | Supported | BattleReady, TurnOpened, TurnResolved, PlayerDamaged, BattleStateUpdated, BattleEnded, BattleConnectionLost |
+
+### Limitations and Assumptions
+
+- **Keycloak realm setup required**: The Keycloak realm `kombats` must exist with direct-grant enabled on the `account` client. The repo's `infra/keycloak/realm-export.json` directory is empty — realm must be configured manually or the export must be provided.
+- **No stat allocation UI**: `POST api/v1/character/stats` (AllocateStatsRequest) is not exposed in the UI. Can be tested via the browser console or curl.
+- **Player identity**: The test client cannot determine which player (A or B) is "you" from the battle snapshot alone (no identity claim exposed in the hub snapshot). Both panels show IDs; developer must match manually.
+- **No auto-polling**: Queue status does not auto-refresh. Developer must click "Status" to check for match/battle assignment.
+- **Single browser tab = single player**: Testing a full battle requires two browser tabs with two different Keycloak users.
+- **HP max unknown**: The initial max HP is not provided in the battle snapshot. HP bar assumes the first observed HP value is near max.
+- **CORS required**: BFF must have CORS configured for the origin serving the test client (in Development mode, BFF allows all origins).
+
+### How to Run
+
+1. Start infrastructure: `docker-compose up -d` (Postgres, RabbitMQ, Redis, Keycloak)
+2. Ensure Keycloak realm `kombats` exists with at least two test users and `account` client with direct-grant enabled
+3. Start backend services (Players, Matchmaking, Battle) and BFF
+4. Open `tools/test-client/index.html` directly in a browser (file:// or serve via any static server)
+5. Configure BFF URL (default `http://localhost:5000`) and Keycloak URL (default `http://localhost:8080`)
+6. Login with a Keycloak user, onboard, set name, join queue
+7. Open a second tab, login as a different user, repeat, and observe match/battle creation
+8. When a battleId appears in queue status, click "Connect Battle" to join the SignalR hub
+
+### Files Created
+
+- `tools/test-client/index.html` — single-file test harness (HTML + CSS + React/Babel)
+
+---
+
+## Developer Test Client — Stat Allocation Integration
+
+**Date:** 2026-04-11
+**Status:** Completed
+**Location:** `tools/test-client/index.html`
+
+### What Changed
+
+Extended the existing test client with character stat allocation support via `POST api/v1/character/stats`.
+
+### Endpoint Used
+
+- **Route**: `POST api/v1/character/stats` (BFF `AllocateStatsEndpoint`)
+- **Request**: `AllocateStatsRequest { ExpectedRevision: int, Strength: int, Agility: int, Intuition: int, Vitality: int }` — all fields >= 0
+- **Response**: `AllocateStatsResponse { Strength, Agility, Intuition, Vitality, UnspentPoints, Revision }`
+- **Validation**: FluentValidation enforces non-negative values on all fields
+
+### UI Added
+
+- Collapsible "Character Stats" panel between auth row and queue row
+- Shows current stats (STR, AGI, INT, VIT, Level, Revision) from game state
+- Shows unspent points count with visual indicator
+- Number inputs for allocating points to each stat
+- Live spending counter with over-budget warning (red text if allocating more than available)
+- Allocate button disabled when: no token, no character, zero allocation, or over-budget
+- On successful allocation, resets inputs and refreshes game state
+
+### Flow Now Unblocked
+
+The full pre-game character setup flow is now testable:
+1. Login → 2. Onboard → 3. Set Name → 4. Allocate Stats → 5. Join Queue
+
+Previously step 4 was missing, meaning characters could not be properly prepared for matchmaking.
+
+### Remaining Limitations
+
+- The client sends the stat _deltas_ (points to add), not absolute values. This matches the backend contract.
+- `ExpectedRevision` is automatically taken from the current character's revision (optimistic concurrency).
+- If the backend rejects with 409 (concurrency conflict), the error surfaces in the log. User must refresh game state and retry.
+
+---
+
+## Local Developer Infrastructure Compose File
+
+**Date:** 2026-04-11
+**Status:** Completed
+**Location:** `docker-compose.local.yml`
+
+### What Changed
+
+Added `docker-compose.local.yml` at the repo root: an infra-only Docker Compose stack for developers running Kombats services from the IDE or `dotnet run` on the host. The file intentionally contains no Kombats application services.
+
+### Services Included
+
+| Service | Image | Host Ports | Credentials / Defaults |
+|---|---|---|---|
+| `postgres` | `postgres:16-alpine` | `5432:5432` | user `postgres`, password `postgres`, db `kombats` |
+| `rabbitmq` | `rabbitmq:3.13-management` | `5672`, `15672` | user `guest`, password `guest`, vhost `/` |
+| `redis` | `redis:7-alpine` | `6379:6379` | no auth, AOF enabled |
+| `keycloak-db` | `postgres:16-alpine` | `5433:5432` | user `keycloak`, password `keycloak`, db `keycloak` |
+| `keycloak` | `quay.io/keycloak/keycloak:26.0` | `8080:8080` | admin `admin` / `admin`, realm `kombats` (see manual step) |
+
+All connection targets match the default `appsettings.json` of Players, Matchmaking, Battle, and BFF (`Host=localhost;Port=5432`, `localhost:6379`, `localhost:5672`, `http://localhost:8080/realms/kombats`), so services launched from the IDE connect with no overrides.
+
+### What This File Does NOT Run
+
+- No `bff` service (unlike `docker-compose.yml`)
+- No Players / Matchmaking / Battle services — these run on the host from the IDE
+- No test-client, no observability stack, no migration runners
+
+### Keycloak Realm — Manual Step Required
+
+Keycloak is started with `start-dev --import-realm` and mounts `./infra/keycloak` into `/opt/keycloak/data/import`. The repo ships that directory empty (`infra/keycloak/realm-export.json` exists but contains no files), so **no realm is imported automatically**. Developers must either:
+
+1. Place a valid `kombats-realm.json` (or any Keycloak realm export) into `infra/keycloak/` and restart the `keycloak` container, OR
+2. Log in to the Keycloak admin console at http://localhost:8080 (admin/admin), create a realm named `kombats`, create an `account` client with direct-grant enabled, and create test users manually.
+
+This matches the pre-existing expectation documented in the test client section above.
+
+### How to Start / Stop
+
+```bash
+# Start (detached)
+docker compose -f docker-compose.local.yml up -d
+
+# Tail logs
+docker compose -f docker-compose.local.yml logs -f
+
+# Stop
+docker compose -f docker-compose.local.yml down
+
+# Stop and wipe volumes (fresh state)
+docker compose -f docker-compose.local.yml down -v
+```
+
+The stack uses the Compose project name `kombats-local` and container names prefixed with `kombats_local_`, so it is isolated from the main `docker-compose.yml` stack. Only one of the two stacks should run at a time because they bind the same host ports.
+
+### Files Created / Changed
+
+- **Created**: `docker-compose.local.yml`
+- **Changed**: `docs/execution/execution-log.md` (this entry)
+
+No service code, no `appsettings*.json`, and no existing compose files were modified.
+
+### Intentionally Deferred
+
+- Automated Keycloak realm bootstrap (requires a committed realm export JSON that the repo does not yet provide).
+- Seed data for Postgres beyond what `infra/postgres/init` already contains (currently empty).
+- Observability infrastructure (OTLP collector, Jaeger, Prometheus, Grafana) — out of scope for local-dev infra-only setup.
+
+---
+
+## Local Development Runbook — Documentation
+
+**Date:** 2026-04-11
+**Status:** Completed
+**Branch:** kombats_full_refactor
+**Type:** Documentation (hardening — no code changes)
+
+### Summary
+
+Added a detailed developer runbook for running the Kombats backend locally against the infra-only Docker Compose stack (`docker-compose.local.yml`). The document walks through prerequisites, infrastructure startup, configuration, Keycloak bootstrap, migrations, IDE/CLI service startup, smoke testing, and troubleshooting, and explicitly calls out which steps are currently automated vs. manual in the repo state as of 2026-04-11.
+
+### Document
+
+- **Path:** `docs/runbooks/local-development-setup.md`
+- **Audience:** Developers running Players / Matchmaking / Battle / BFF from an IDE or `dotnet run` against containerized infrastructure
+- **Scope:** Infra-in-Docker, services-on-host workflow (not the fully-containerized `docker-compose.yml` stack)
+
+### Sections
+
+1. Prerequisites — .NET 10.0 SDK, Docker Compose v2, `dotnet-ef` 10.0.3, IDE and OS notes
+2. Local infrastructure startup — `docker-compose.local.yml` usage, services brought up, ports, credentials, health verification
+3. Configuration and environment — per-service `appsettings.json` defaults, connection strings, RabbitMQ, Redis, Keycloak, override approach
+4. Keycloak setup — explicit manual realm bootstrap procedure, token flow description, known limitations
+5. Database and migrations — schema layout, the `scripts/run-migrations.sh` helper and the equivalent `dotnet ef database update` calls, current committed migrations, verification queries
+6. Running services locally — bootstrap-project startup rule, BFF-expected ports (5000/5001/5002/5003), the launchSettings repo-state caveat (only Players ships one, using 5007), and the recommended `ASPNETCORE_URLS` pattern
+7. Local verification / smoke testing — health endpoints, OpenAPI/Scalar URLs, token-grant smoke test, RabbitMQ/Redis/Postgres sanity commands
+8. Troubleshooting — common failure points: infra down, missing migrations, 401 auth failures, RabbitMQ/Redis/BFF connectivity, port conflicts, realm wipe, topology drift
+9. Current limitations and manual steps — explicit list of the ten known local-dev gaps (realm bootstrap, missing launchSettings, manual migrations, etc.)
+10. Appendices — quick-start cheat sheet and consolidated port reference
+
+### Repo-State Facts Documented (not invented)
+
+- `docker-compose.local.yml` is the infra-only compose file (project name `kombats-local`)
+- `infra/keycloak/realm-export.json` is an **empty directory** — Compose mounts it but no realm is imported; manual bootstrap is required the first time
+- `infra/postgres/init/` is empty — schemas come from EF migrations, not init SQL
+- `scripts/run-migrations.sh` applies Players → Matchmaking → Battle migrations against the default dev connection string
+- `Program.cs` for all three backend services explicitly comments that `Database.MigrateAsync()` is forbidden at startup (AD-13)
+- Players is the only service with a committed `launchSettings.json` (HTTP `:5007`, HTTPS `:7035`)
+- BFF `appsettings.json` hard-codes downstream URLs at `localhost:5001/5002/5003` — mismatched with Players's shipped launchSettings port
+- Players / Matchmaking / Battle `Program.cs` register `/health/live` and `/health/ready`; BFF `Program.cs` does not register health endpoints
+- Committed migrations: Players (Baseline + AddOutboxEntities), Matchmaking (Baseline + RemoveLegacyCustomOutboxTable), Battle (Baseline)
+- Keycloak realm name is `kombats`, audience is `account`, authority `http://localhost:8080/realms/kombats`
+
+### Assumptions Made
+
+- Developers use `docker compose` (v2 plugin), not legacy `docker-compose`
+- Git Bash / WSL / macOS / Linux shell for the POSIX commands shown; Windows users translate as needed
+- The shipped `kombats-backend` client name used in the README is still a reasonable choice for a local test client; the runbook recreates it because the realm itself is not imported automatically
+- Developers will either set `ASPNETCORE_URLS` or add their own (uncommitted) launchSettings; the runbook does not prescribe adding committed launchSettings as that would be a code change beyond documentation scope
+
+### Manual Steps Still Required (unchanged by this document)
+
+1. Creating the `kombats` Keycloak realm, `testuser`, and `kombats-backend` client the first time or after `down -v`
+2. Running `scripts/run-migrations.sh` on each fresh database
+3. Setting `ASPNETCORE_URLS` for Matchmaking, Battle, and BFF (no committed launchSettings)
+4. Overriding Players's `5007` default if running against BFF (which expects `5001`)
+
+### Inconsistencies Discovered in Repo/Docs
+
+- **`infra/keycloak/realm-export.json` is a directory, not a file.** `docker-compose.yml` (the fully-containerized stack) mounts it as `:ro` expecting a file, which will fail at runtime or produce an empty mount. `docker-compose.local.yml` already works around this by mounting the parent directory (`./infra/keycloak`).
+- **Port mismatch:** Players's committed `launchSettings.json` defaults to HTTP `:5007`, but BFF's committed `appsettings.json` expects Players on `:5001`. Neither is updated to match the other.
+- **No `launchSettings.json` for Matchmaking, Battle, or BFF.** Contrast with Players which ships one.
+- **BFF has no health-check endpoints** in `Program.cs`, while the other three services do. Not necessarily a defect, but worth noting for Phase 7A observability work.
+- **Two compose files bind identical host ports** (`docker-compose.yml` and `docker-compose.local.yml`), so only one may run at a time. This is intentional and documented, but warrants the explicit warning in the runbook.
+
+None of these were modified by this documentation task — only recorded. If any should become execution issues, they belong in `docs/execution/execution-issues.md`, not here.
+
+### Files Created / Changed
+
+- **Created:** `docs/runbooks/local-development-setup.md`
+- **Changed:** `docs/execution/execution-log.md` (this entry)
+
+No code, configuration, or compose files were modified.
+
+---
+
+## Local Keycloak Realm Bootstrap (Automatic)
+
+**Date:** 2026-04-11
+**Status:** Completed
+**Location:** `infra/keycloak/kombats-realm.json`
+
+### What Changed
+
+Replaced the previously-empty `infra/keycloak/realm-export.json` directory with a real, committed realm import JSON and wired it into both Compose stacks. On a fresh `keycloak_db` volume, Keycloak now boots with the `kombats` realm, an `account` client configured for Direct Access Grants, and four local test users — zero admin-console clicking required. This closes the "Keycloak realm bootstrap is 100% manual" gap listed in the prior local-development runbook entry.
+
+### Files Changed
+
+- **Created**: `infra/keycloak/kombats-realm.json`
+- **Updated**: `docker-compose.yml` — keycloak volume mount switched from `./infra/keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro` (broken — Docker had silently created an empty directory there) to `./infra/keycloak:/opt/keycloak/data/import:ro`.
+- **Updated**: `docker-compose.local.yml` — comment on the keycloak service now reflects that the realm is actually imported.
+- **Updated**: `docs/runbooks/local-development-setup.md` — section 4 rewritten from "manual bootstrap" to "automatic import" with the client/user table, self-registration procedure, and re-import caveat. Section 7 token sample, section 8 troubleshooting entries, section 9 limitations, and the cheat sheet in Appendix A updated to match.
+- **Removed**: the empty `infra/keycloak/realm-export.json` directory (untracked artifact; `git ls-files infra/keycloak/` was empty).
+
+### Realm Summary
+
+| Aspect | Value |
+|---|---|
+| Realm name | `kombats` |
+| `sslRequired` | `none` (local only) |
+| `registrationAllowed` | `true` (self-registration enabled) |
+| `rememberMe` / `resetPasswordAllowed` / `loginWithEmailAllowed` | `true` |
+| `verifyEmail` | `false` (no SMTP) |
+
+### Clients
+
+Only one client — the built-in Keycloak `account` client, overridden by the import:
+
+| Setting | Value |
+|---|---|
+| `clientId` | `account` |
+| `publicClient` | `true` (no secret) |
+| `standardFlowEnabled` | `true` (OIDC code flow, used for the self-registration redirect) |
+| `directAccessGrantsEnabled` | `true` (ROPC, used by `tools/test-client/index.html`) |
+| `redirectUris` | `/realms/kombats/account/*`, `http://localhost:5000/*`, `http://localhost:5173/*`, `http://localhost:3000/*`, `http://127.0.0.1:5500/*` |
+| `webOrigins` | `+`, the above hosts, and `*` (dev only) |
+
+**Why the built-in `account` client and not a new `kombats-backend` client?** `tools/test-client/index.html` hard-codes `client_id: 'account'`, and every service's `appsettings.json` sets `"Keycloak:Audience": "account"`. Tokens issued against the `account` client naturally carry `aud=account` because all Keycloak users have default `account` client roles, which is exactly what `Kombats.Abstractions.Auth.KombatsAuthExtensions` validates. Introducing a new client would require matching changes in every service's config and in the test client — out of scope for local-dev bootstrap. The import overrides the built-in client only to enable Direct Access Grants (off by default) and to add the local-dev redirect URIs / web origins needed for self-registration.
+
+### Grant Types / Login Flows Supported
+
+- **Direct Access Grants (ROPC)** — used by the test client and `curl`-based smoke tests. `grant_type=password`, `client_id=account`.
+- **Standard flow (OIDC authorization code)** — used when a developer opens a Keycloak-hosted login page (Account Console) to self-register.
+
+### Test Users
+
+All four users are imported with password **`password`** (plaintext, non-temporary, email verified). **Strictly local-dev only** — these credentials must never appear in any non-local environment.
+
+| Username | Email |
+|---|---|
+| `artem`  | `artem@kombats.local`  |
+| `polina` | `polina@kombats.local` |
+| `alice`  | `alice@kombats.local`  |
+| `jun`    | `jun@kombats.local`    |
+
+User IDs are Keycloak-generated UUIDs, which means the JWT `sub` claim parses as a `Guid` — the shape `IdentityIdExtensions.GetIdentityId` expects.
+
+### Self-Registration — Enabled
+
+Self-registration at the Keycloak level is **enabled** (`registrationAllowed: true`). This directly addresses the requirement to avoid manual admin user management.
+
+How it works:
+
+1. Developer opens a Keycloak-hosted login page for the `account` client — easiest entry point is the Account Console at http://localhost:8080/realms/kombats/account/ → **Sign in**.
+2. The Keycloak login screen shows a **Register** link (visible only because `registrationAllowed: true`).
+3. Developer fills in username / email / first+last / password. No email verification, no admin approval.
+4. The new user can immediately obtain a token via the direct-grant endpoint:
+   ```bash
+   curl -s -X POST "http://localhost:8080/realms/kombats/protocol/openid-connect/token" \
+     -d "client_id=account" -d "grant_type=password" \
+     -d "username=<new-user>" -d "password=<new-password>"
+   ```
+5. Then log in through `tools/test-client/index.html` as normal.
+
+The test client itself is not modified — it still only drives the direct-grant endpoint. Exposing a Register button inside the test client would be a code change beyond the scope of this task. Self-registration happens on Keycloak's hosted page; once the user exists, the test client works normally.
+
+### Assumptions (from repo inspection)
+
+1. **Audience = `account` is intentional and load-bearing.** Every `appsettings.json` (`Battle`, `Matchmaking`, `Players`, `BFF`) sets `"Keycloak:Audience": "account"`, and `KombatsAuthExtensions` unconditionally reads it. The cheapest correct local bootstrap is to issue tokens whose `aud` includes `account`, which means using the built-in `account` client.
+2. **ROPC is the intended local-dev grant.** The committed test client uses `grant_type=password`; no browser OIDC flow is wired anywhere else in the repo.
+3. **`sub` must parse as a GUID** — enforced by `IdentityIdExtensions.GetIdentityId`. Keycloak user IDs are UUIDs by default, so no custom ID mapper is needed.
+4. **The previous `infra/keycloak/realm-export.json` empty directory was an accident**, not a curated placeholder. `git ls-files infra/keycloak/` returns empty. The main `docker-compose.yml` mount targeted it as a file; Docker silently created the empty directory on first `up`. Safe to delete.
+
+### Compose Wiring
+
+- `docker-compose.local.yml` already mounted `./infra/keycloak` as `/opt/keycloak/data/import:ro`. Adding `kombats-realm.json` into that directory is all that was required for the local stack.
+- `docker-compose.yml` previously mounted only the broken `realm-export.json` path. It has been corrected to mount the same directory. Both stacks now behave identically with respect to Keycloak bootstrap.
+
+### Re-Import Caveat
+
+Keycloak only imports a realm when that realm does not already exist. Editing `kombats-realm.json` after the first successful boot has **no effect** on the running stack. To pick up realm changes in local dev, wipe the Keycloak volume:
+
+```bash
+docker compose -f docker-compose.local.yml down -v
+docker compose -f docker-compose.local.yml up -d
+```
+
+Documented in section 4 of the runbook.
+
+### Verification Status
+
+- [x] `kombats-realm.json` follows the Keycloak 26 realm export shape (realm, clients, users, credentials).
+- [x] Compose mount paths are correct and consistent between `docker-compose.yml` and `docker-compose.local.yml`.
+- [x] Audience / client ID / grant type / `sub`-as-GUID match existing service config and test-client expectations (verified by grepping `appsettings.json`, `KombatsAuthExtensions.cs`, `IdentityIdExtensions.cs`, and `tools/test-client/index.html`).
+- [ ] Not yet executed: live `docker compose up` and token acquisition smoke test. User should run `docker compose -f docker-compose.local.yml down -v && docker compose -f docker-compose.local.yml up -d`, wait ~60s for Keycloak to boot, then:
+  ```bash
+  curl -s -X POST "http://localhost:8080/realms/kombats/protocol/openid-connect/token" \
+    -d "client_id=account" -d "grant_type=password" \
+    -d "username=artem" -d "password=password"
+  ```
+  and confirm an `access_token` comes back.
+
+### Remaining Manual Steps
+
+None for auth. The only manual action related to Keycloak is the volume-wipe re-import workflow described above, which is an inherent property of `--import-realm` semantics, not a gap in this bootstrap.
+
+---
+
+## Bootstrap launchSettings.json — Committed for All Services
+
+**Date:** 2026-04-11
+**Status:** Completed
+**Type:** Local-dev ergonomics (no backend logic changes)
+
+### What Changed
+
+Every Bootstrap project in the repo now ships a committed `Properties/launchSettings.json` with a single `http` profile, `ASPNETCORE_ENVIRONMENT=Development`, and the port that the rest of the system already expects. Running `dotnet run` or the IDE's Run button binds each service to the port BFF's `Services:<Name>:BaseUrl` is pointing at — no `ASPNETCORE_URLS` override, no launchSettings drift, no `5007 vs 5001` mismatch.
+
+### Bootstrap Projects Changed
+
+| Project | applicationUrl | Change |
+|---|---|---|
+| `src/Kombats.Players/Kombats.Players.Bootstrap` | `http://localhost:5001` | **Updated** — was `http://localhost:5007` with an extra `https` profile on `:7035` |
+| `src/Kombats.Matchmaking/Kombats.Matchmaking.Bootstrap` | `http://localhost:5002` | **Created** |
+| `src/Kombats.Battle/Kombats.Battle.Bootstrap` | `http://localhost:5003` | **Created** |
+| `src/Kombats.Bff/Kombats.Bff.Bootstrap` | `http://localhost:5000` | **Created** |
+
+All four profiles share the same shape:
+
+```jsonc
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "environmentVariables": { "ASPNETCORE_ENVIRONMENT": "Development" },
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "launchUrl": "scalar/v1",
+      "applicationUrl": "http://localhost:<port>"
+    }
+  }
+}
+```
+
+Only a single `http` profile is committed — no `https`, no `IIS Express`, no alternate environment profiles — to keep the launch surface minimal and predictable.
+
+### Evidence for Each Port (repo-aligned, not invented)
+
+- **BFF → `5000`**: `tools/test-client/index.html` line 126 hard-codes `const [bffUrl, setBffUrl] = useState('http://localhost:5000')`. `docs/runbooks/local-development-setup.md` lists BFF on `5000`. `docker-compose.yml` maps the containerized BFF to host `5000:8080`.
+- **Players → `5001`**: `src/Kombats.Bff/Kombats.Bff.Bootstrap/appsettings.json` sets `Services:Players:BaseUrl = "http://localhost:5001"`. `local-development-setup.md` section 6.
+- **Matchmaking → `5002`**: `src/Kombats.Bff/Kombats.Bff.Bootstrap/appsettings.json` sets `Services:Matchmaking:BaseUrl = "http://localhost:5002"`. `local-development-setup.md` section 6.
+- **Battle → `5003`**: `src/Kombats.Bff/Kombats.Bff.Bootstrap/appsettings.json` sets `Services:Battle:BaseUrl = "http://localhost:5003"`. `local-development-setup.md` section 6.
+- **Scalar `launchUrl: "scalar/v1"`**: Every Bootstrap (Battle/Matchmaking/Players) and BFF calls `app.MapScalarApiReference()`, whose default route is `/scalar/v1`. Matches the pre-existing Players launchSettings.
+
+### Assumptions
+
+1. **HTTP-only locally.** Every `Services:*:BaseUrl` in BFF config is `http://`, and every appsettings example in the runbook uses `http://`. No HTTPS profile is committed. Developers who need HTTPS locally can add their own uncommitted profile.
+2. **The existing Players `5007 / 7035` defaults were an outdated placeholder**, not an intentional choice — they mismatched BFF's `Services:Players:BaseUrl = 5001`, and the runbook already documented this as a defect (now removed). Overwriting them with `5001` aligns Players with the rest of the system.
+3. **Scalar at `/scalar/v1`** is the correct landing page for "did the service come up?" — opening Scalar on launch is the same convention the original Players profile used, and `MapScalarApiReference` uses this route by default in all four services.
+4. **No per-developer profile differentiation needed.** All four Bootstrap projects get the same minimal shape; any developer-specific overrides belong in an uncommitted profile or environment variables.
+
+### Related Doc Updates
+
+`docs/runbooks/local-development-setup.md`:
+- Section 6 — "Repo state caveat — launchSettings.json" replaced with a positive table documenting the committed profiles.
+- Section 8 — "Unable to find port 5001/5002/5003" troubleshooting entry replaced with an `ASPNETCORE_URLS` override hint.
+- Section 9 — limitation #2 rewritten from "no launchSettings" gap to "committed for all four".
+- Appendix B — stale `7035 Players HTTPS` port entry removed.
+
+### Files Changed
+
+- **Updated**: `src/Kombats.Players/Kombats.Players.Bootstrap/Properties/launchSettings.json`
+- **Created**: `src/Kombats.Matchmaking/Kombats.Matchmaking.Bootstrap/Properties/launchSettings.json`
+- **Created**: `src/Kombats.Battle/Kombats.Battle.Bootstrap/Properties/launchSettings.json`
+- **Created**: `src/Kombats.Bff/Kombats.Bff.Bootstrap/Properties/launchSettings.json`
+- **Updated**: `docs/runbooks/local-development-setup.md` (sections 6, 8, 9, Appendix B)
+- **Updated**: `docs/execution/execution-log.md` (this entry)
+
+No code, appsettings, compose files, or scripts were modified.
+
+### Verification Status
+
+- [x] Ports cross-referenced against BFF `appsettings.json`, test client, and runbook — all four match.
+- [x] `launchUrl: "scalar/v1"` verified via `app.MapScalarApiReference()` calls in each Bootstrap `Program.cs`.
+- [x] JSON shape matches the pre-existing Players file (single `http` profile, same field set).
+- [ ] Not yet executed: live `dotnet run --project <Bootstrap>` per service. User should run each Bootstrap once and confirm:
+  - banner reports `Now listening on: http://localhost:<expected-port>`
+  - `ASPNETCORE_ENVIRONMENT` is `Development`
+  - `http://localhost:<port>/scalar/v1` opens.
+
+### Remaining Manual Steps
+
+None. The local-dev flow no longer requires `ASPNETCORE_URLS` exports or Rider run-configuration tweaks for the default happy path.

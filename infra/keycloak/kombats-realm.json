@@ -1,0 +1,118 @@
+{
+  "realm": "kombats",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": false,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": false,
+  "accessTokenLifespan": 3600,
+  "accessTokenLifespanForImplicitFlow": 3600,
+  "ssoSessionIdleTimeout": 36000,
+  "ssoSessionMaxLifespan": 36000,
+  "defaultSignatureAlgorithm": "RS256",
+  "clients": [
+    {
+      "clientId": "account",
+      "name": "${client_account}",
+      "rootUrl": "${authBaseUrl}",
+      "baseUrl": "/realms/kombats/account/",
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "redirectUris": [
+        "/realms/kombats/account/*",
+        "http://localhost:5000/*",
+        "http://localhost:5173/*",
+        "http://localhost:3000/*",
+        "http://127.0.0.1:5500/*"
+      ],
+      "webOrigins": [
+        "+",
+        "http://localhost:5000",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5500",
+        "*"
+      ],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "publicClient": true,
+      "frontchannelLogout": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "post.logout.redirect.uris": "+"
+      },
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "artem",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "artem@kombats.local",
+      "firstName": "Artem",
+      "lastName": "Dev",
+      "credentials": [
+        { "type": "password", "value": "password", "temporary": false }
+      ]
+    },
+    {
+      "username": "polina",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "polina@kombats.local",
+      "firstName": "Polina",
+      "lastName": "Dev",
+      "credentials": [
+        { "type": "password", "value": "password", "temporary": false }
+      ]
+    },
+    {
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "alice@kombats.local",
+      "firstName": "Alice",
+      "lastName": "Dev",
+      "credentials": [
+        { "type": "password", "value": "password", "temporary": false }
+      ]
+    },
+    {
+      "username": "jun",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "jun@kombats.local",
+      "firstName": "Jun",
+      "lastName": "Dev",
+      "credentials": [
+        { "type": "password", "value": "password", "temporary": false }
+      ]
+    }
+  ]
+}
