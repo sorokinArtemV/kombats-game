@@ -374,8 +374,16 @@ function App() {
   // --- Derived state ---
   const char = gameState?.character;
   const phaseNames = ['ArenaOpen', 'TurnOpen', 'Resolving', 'Ended'];
-  const currentPhase = battleState ? (phaseNames[battleState.phase] || `Unknown(${battleState.phase})`) : null;
-  const isTurnOpen = battleState?.phase === 1;
+  // Battle's SignalR hub uses JsonStringEnumConverter, so Phase arrives as a string
+  // (e.g. "TurnOpen") in the JoinBattle snapshot and BattleStateUpdated events. The
+  // local TurnOpened/TurnResolved/BattleEnded handlers set phase numerically. Accept both.
+  const phaseIndex = battleState
+    ? (typeof battleState.phase === 'number' ? battleState.phase : phaseNames.indexOf(battleState.phase))
+    : -1;
+  const currentPhase = battleState
+    ? (phaseIndex >= 0 ? phaseNames[phaseIndex] : `Unknown(${battleState.phase})`)
+    : null;
+  const isTurnOpen = phaseIndex === 1;
   const hasBattle = queueStatus?.battleId || battleState;
   const battleId = battleState?.battleId || queueStatus?.battleId;
 

@@ -1,6 +1,8 @@
 using System.Reflection;
 using Kombats.Abstractions;
+using Kombats.Battle.Contracts.Battle;
 using Kombats.Messaging.DependencyInjection;
+using Kombats.Players.Contracts;
 using Kombats.Abstractions.Auth;
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Application;
@@ -131,6 +133,11 @@ builder.Services.AddMessaging<PlayersDbContext>(
     configureConsumers: bus =>
     {
         bus.AddConsumer<BattleCompletedConsumer>();
+    },
+    configure: messagingBuilder =>
+    {
+        messagingBuilder.Map<PlayerCombatProfileChanged>("PlayerCombatProfileChanged");
+        messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
 
 var app = builder.Build();

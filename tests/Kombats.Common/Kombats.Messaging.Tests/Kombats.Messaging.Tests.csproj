@@ -27,6 +27,20 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Kombats.Common\Kombats.Messaging\Kombats.Messaging.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Players\Kombats.Players.Contracts\Kombats.Players.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Contracts\Kombats.Battle.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\src\Kombats.Players\Kombats.Players.Bootstrap\appsettings.json" Link="ServiceAppsettings\players.appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\src\Kombats.Matchmaking\Kombats.Matchmaking.Bootstrap\appsettings.json" Link="ServiceAppsettings\matchmaking.appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\..\src\Kombats.Battle\Kombats.Battle.Bootstrap\appsettings.json" Link="ServiceAppsettings\battle.appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

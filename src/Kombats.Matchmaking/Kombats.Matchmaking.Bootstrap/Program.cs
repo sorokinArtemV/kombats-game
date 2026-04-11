@@ -141,6 +141,7 @@ builder.Services.AddMessaging<MatchmakingDbContext>(
     configure: messagingBuilder =>
     {
         messagingBuilder.Map<PlayerCombatProfileChanged>("PlayerCombatProfileChanged");
+        messagingBuilder.Map<CreateBattle>("CreateBattle");
         messagingBuilder.Map<BattleCreated>("BattleCreated");
         messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
