@@ -8,6 +8,7 @@ using Kombats.Bff.Application.Composition;
 using Kombats.Bff.Application.Relay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Http.Resilience;
+using Microsoft.OpenApi;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Polly;
@@ -77,8 +78,44 @@ builder.Services.AddOpenTelemetry()
         }
     });
 
-// API Documentation
-builder.Services.AddOpenApi("v1");
+// API Documentation — registers a Bearer security scheme and a global security
+// requirement so Scalar's "Authorize" flow works against Keycloak-issued JWTs,
+// matching the pattern used by Players/Matchmaking/Battle Api projects.
+builder.Services.AddOpenApi("v1", options =>
+{
+    options.AddDocumentTransformer((document, context, ct) =>
+    {
+        document.Info = new OpenApiInfo
+        {
+            Title = "Kombats BFF",
+            Version = "v1",
+            Description = "Kombats Backend-for-Frontend"
+        };
+
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+
+        document.Components.SecuritySchemes[JwtBearerDefaults.AuthenticationScheme] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = JwtBearerDefaults.AuthenticationScheme,
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Enter the JWT access token"
+        };
+
+        document.Security ??= [];
+        document.Security.Add(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, document),
+                []
+            }
+        });
+
+        return Task.CompletedTask;
+    });
+});
 
 // CORS
 builder.Services.AddCors(options =>

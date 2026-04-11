@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
 using Kombats.Abstractions.Auth;
 using Kombats.Battle.Infrastructure.Configuration;
-using Scalar.AspNetCore;
 using Kombats.Battle.Api.Endpoints;
 using Kombats.Battle.Api.Extensions;
 using Kombats.Battle.Application.Ports;
@@ -38,8 +37,9 @@ builder.Host.UseSerilog((context, loggerConfig) =>
 // Authentication & Authorization
 builder.Services.AddKombatsAuth(builder.Configuration);
 
-// API Documentation
-builder.Services.AddOpenApi();
+// API Documentation — registers a Bearer security scheme and global security
+// requirement so Scalar's "Authorize" flow works against Keycloak-issued JWTs.
+builder.Services.AddBattleApiDocumentation();
 
 // Global error handling — RFC 7807 ProblemDetails
 builder.Services.AddProblemDetails();
@@ -177,8 +177,7 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-app.MapOpenApi();
-app.MapScalarApiReference();
+app.UseBattleApiDocumentation();
 
 app.UseHttpsRedirection();
 
