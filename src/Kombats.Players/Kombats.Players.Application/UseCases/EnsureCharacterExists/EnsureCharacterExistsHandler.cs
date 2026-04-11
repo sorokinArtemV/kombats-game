@@ -2,6 +2,7 @@ using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Players.Application.UseCases.EnsureCharacterExists;
 
@@ -11,15 +12,18 @@ internal sealed class EnsureCharacterExistsHandler
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
     private readonly ICombatProfilePublisher _profilePublisher;
+    private readonly ILogger<EnsureCharacterExistsHandler> _logger;
 
     public EnsureCharacterExistsHandler(
         IUnitOfWork uow,
         ICharacterRepository characters,
-        ICombatProfilePublisher profilePublisher)
+        ICombatProfilePublisher profilePublisher,
+        ILogger<EnsureCharacterExistsHandler> logger)
     {
         _uow = uow;
         _characters = characters;
         _profilePublisher = profilePublisher;
+        _logger = logger;
     }
 
     public async Task<Result<CharacterStateResult>> HandleAsync(EnsureCharacterExistsCommand cmd, CancellationToken ct)
@@ -43,6 +47,10 @@ internal sealed class EnsureCharacterExistsHandler
         {
             await _uow.SaveChangesAsync(ct);
 
+            _logger.LogInformation(
+                "Character created (draft) for IdentityId={IdentityId}, CharacterId={CharacterId}, OnboardingState={OnboardingState}",
+                cmd.IdentityId, character.Id, character.OnboardingState);
+
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }
         catch (UniqueConstraintConflictException ex) when (ex.ConflictKind == UniqueConflictKind.IdentityId)
@@ -50,6 +58,9 @@ internal sealed class EnsureCharacterExistsHandler
             var race = await _characters.GetByIdentityIdAsync(cmd.IdentityId, ct);
             if (race is not null)
             {
+                _logger.LogWarning(
+                    "EnsureCharacter concurrent-create race resolved for IdentityId={IdentityId}, CharacterId={CharacterId}",
+                    cmd.IdentityId, race.Id);
                 return Result.Success(CharacterStateResult.FromCharacter(race));
             }
 

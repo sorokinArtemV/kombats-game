@@ -44,7 +44,7 @@ public static class HttpClientHelper
             return null;
         }
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, serviceName, cancellationToken);
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, serviceName, logger, cancellationToken);
         throw new BffServiceException(response.StatusCode, error);
     }
 }

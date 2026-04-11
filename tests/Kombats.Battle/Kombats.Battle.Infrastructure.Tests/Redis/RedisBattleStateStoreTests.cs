@@ -2,6 +2,7 @@ using FluentAssertions;
 using Kombats.Battle.Application.Models;
 using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Domain.Model;
+using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Domain.Rules;
 using Kombats.Battle.Infrastructure.State.Redis;
 using Kombats.Battle.Infrastructure.Tests.Fixtures;
@@ -45,6 +46,9 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
 
     public Task InitializeAsync() => _fixture.FlushAsync();
     public Task DisposeAsync() => Task.CompletedTask;
+
+    private static BattleEndOutcome DefaultOutcome(Guid? winner = null) =>
+        new(winner, EndBattleReason.Normal, FinalTurnIndex: 1, OccurredAt: DateTimeOffset.UtcNow);
 
     private BattleDomainState CreateDomainState(
         BattlePhase phase = BattlePhase.ArenaOpen,
@@ -219,7 +223,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
 
-        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100);
+        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100, DefaultOutcome());
 
         result.Should().Be(EndBattleCommitResult.EndedNow);
         var snapshot = await _store.GetStateAsync(_battleId);
@@ -233,11 +237,66 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
         await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
-        await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100);
+        await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100, DefaultOutcome());
 
         // Second call — idempotent
-        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100);
+        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100, DefaultOutcome());
         result.Should().Be(EndBattleCommitResult.AlreadyEnded);
+    }
+
+    [Fact]
+    public async Task EndBattle_EnrichedOutcome_PersistsAndReloadsTerminalFields()
+    {
+        // Prove that the terminal outcome passed to EndBattleAndMarkResolvedAsync round-trips
+        // through Redis: the Lua script must persist winner/reason/final turn/ended-at and
+        // StoredStateMapper must project them back onto BattleSnapshot. This is the data
+        // BattleRecoveryService relies on to avoid the data-less OrphanRecovery fallback
+        // when the process crashes between Redis end-commit and the outbox flush.
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
+        await _store.TryMarkTurnResolvingAsync(_battleId, 1);
+
+        var occurredAt = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var outcome = new BattleEndOutcome(
+            WinnerPlayerId: _playerAId,
+            Reason: EndBattleReason.Normal,
+            FinalTurnIndex: 7,
+            OccurredAt: occurredAt);
+
+        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100, outcome);
+        result.Should().Be(EndBattleCommitResult.EndedNow);
+
+        var snapshot = await _store.GetStateAsync(_battleId);
+        snapshot.Should().NotBeNull();
+        snapshot!.Phase.Should().Be(BattlePhase.Ended);
+        snapshot.EndWinnerPlayerId.Should().Be(_playerAId);
+        snapshot.EndReason.Should().Be(EndBattleReason.Normal);
+        snapshot.EndFinalTurnIndex.Should().Be(7);
+        snapshot.EndedAt.Should().Be(occurredAt);
+    }
+
+    [Fact]
+    public async Task EndBattle_EnrichedOutcome_NullWinner_RoundTripsAsDraw()
+    {
+        // Draws and system-level terminations carry a null WinnerPlayerId. The Lua script
+        // uses cjson.null for this case; the snapshot must deserialize back to a null Guid?.
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
+        await _store.TryMarkTurnResolvingAsync(_battleId, 1);
+
+        var outcome = new BattleEndOutcome(
+            WinnerPlayerId: null,
+            Reason: EndBattleReason.DoubleForfeit,
+            FinalTurnIndex: 3,
+            OccurredAt: DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+
+        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 0, outcome);
+        result.Should().Be(EndBattleCommitResult.EndedNow);
+
+        var snapshot = await _store.GetStateAsync(_battleId);
+        snapshot!.EndWinnerPlayerId.Should().BeNull();
+        snapshot.EndReason.Should().Be(EndBattleReason.DoubleForfeit);
+        snapshot.EndFinalTurnIndex.Should().Be(3);
     }
 
     [Fact]
@@ -247,7 +306,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
 
         // Phase is TurnOpen, not Resolving
-        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100);
+        var result = await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100, DefaultOutcome());
         result.Should().Be(EndBattleCommitResult.NotCommitted);
     }
 
@@ -289,7 +348,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
         var pastDeadline = DateTimeOffset.UtcNow.AddSeconds(-5);
         await _store.TryOpenTurnAsync(_battleId, 1, pastDeadline);
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
-        await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100);
+        await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100, DefaultOutcome());
 
         var claimed = await _store.ClaimDueBattlesAsync(
             DateTimeOffset.UtcNow, 10, TimeSpan.FromSeconds(12));
@@ -376,7 +435,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
 
         // Turn 2: open (already open from resolve-and-open) → resolve → end
         (await _store.TryMarkTurnResolvingAsync(_battleId, 2)).Should().BeTrue();
-        var endResult = await _store.EndBattleAndMarkResolvedAsync(_battleId, 2, 0, 0, 90);
+        var endResult = await _store.EndBattleAndMarkResolvedAsync(_battleId, 2, 0, 0, 90, DefaultOutcome());
         endResult.Should().Be(EndBattleCommitResult.EndedNow);
 
         // Final state

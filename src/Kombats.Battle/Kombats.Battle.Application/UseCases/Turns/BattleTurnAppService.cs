@@ -328,13 +328,23 @@ public sealed class BattleTurnAppService
         BattleEndedDomainEvent battleEnded,
         CancellationToken cancellationToken)
     {
-        // Commit battle end atomically (includes HP update)
+        // Commit battle end atomically (includes HP update and terminal outcome snapshot).
+        // The outcome is persisted onto Redis state so recovery can reconstruct a faithful
+        // BattleCompleted if the process crashes before the bus-outbox flush below — without
+        // this, the orphan fallback would republish every crashed battle as a data-less draw.
+        var endOutcome = new BattleEndOutcome(
+            battleEnded.WinnerPlayerId,
+            battleEnded.Reason,
+            battleEnded.FinalTurnIndex,
+            battleEnded.OccurredAt);
+
         var endResult = await _stateStore.EndBattleAndMarkResolvedAsync(
             battleId,
             turnIndex,
             resolutionResult.NewState.NoActionStreakBoth,
             resolutionResult.NewState.PlayerA.CurrentHp,
             resolutionResult.NewState.PlayerB.CurrentHp,
+            endOutcome,
             cancellationToken);
 
         if (endResult == EndBattleCommitResult.EndedNow)

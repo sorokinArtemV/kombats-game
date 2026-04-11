@@ -4,6 +4,7 @@ using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.UseCases.EnsureCharacterExists;
 using Kombats.Players.Contracts;
 using Kombats.Players.Domain.Entities;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
@@ -19,7 +20,8 @@ public sealed class EnsureCharacterExistsHandlerTests
 
     public EnsureCharacterExistsHandlerTests()
     {
-        _handler = new EnsureCharacterExistsHandler(_uow, _characters, _publisher);
+        _handler = new EnsureCharacterExistsHandler(
+            _uow, _characters, _publisher, NullLogger<EnsureCharacterExistsHandler>.Instance);
     }
 
     [Fact]

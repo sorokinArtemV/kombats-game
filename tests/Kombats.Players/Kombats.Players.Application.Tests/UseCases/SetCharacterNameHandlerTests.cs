@@ -4,6 +4,7 @@ using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.UseCases.SetCharacterName;
 using Kombats.Players.Contracts;
 using Kombats.Players.Domain.Entities;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
@@ -19,7 +20,8 @@ public sealed class SetCharacterNameHandlerTests
 
     public SetCharacterNameHandlerTests()
     {
-        _handler = new SetCharacterNameHandler(_uow, _characters, _publisher);
+        _handler = new SetCharacterNameHandler(
+            _uow, _characters, _publisher, NullLogger<SetCharacterNameHandler>.Instance);
     }
 
     private static Character CreateDraftCharacter(Guid? identityId = null)

@@ -207,20 +207,37 @@ internal sealed class RedisBattleStateStore : IBattleStateStore
     }
 
     public async Task<EndBattleCommitResult> EndBattleAndMarkResolvedAsync(
-        Guid battleId, 
-        int turnIndex, 
+        Guid battleId,
+        int turnIndex,
         int noActionStreak,
         int playerAHp,
         int playerBHp,
+        BattleEndOutcome outcome,
         CancellationToken cancellationToken = default)
     {
         var db = _redis.GetDatabase();
         var key = GetStateKey(battleId);
 
+        // Empty string sentinel for "no winner" — the Lua script writes cjson.null for this
+        // case so it round-trips through System.Text.Json as a null Guid on read.
+        var winnerArg = outcome.WinnerPlayerId?.ToString() ?? string.Empty;
+        var endedAtUnixMs = outcome.OccurredAt.ToUnixTimeMilliseconds();
+
         var result = await db.ScriptEvaluateAsync(
             RedisScripts.EndBattleAndMarkResolvedScript,
             new RedisKey[] { key, ActiveBattlesSetKey, DeadlinesZSetKey },
-            new RedisValue[] { turnIndex, noActionStreak, playerAHp, playerBHp, battleId.ToString() });
+            new RedisValue[]
+            {
+                turnIndex,
+                noActionStreak,
+                playerAHp,
+                playerBHp,
+                battleId.ToString(),
+                winnerArg,
+                (int)outcome.Reason,
+                outcome.FinalTurnIndex,
+                endedAtUnixMs
+            });
 
         var resultCode = (int)result;
         var commitResult = (EndBattleCommitResult)resultCode;

@@ -2,6 +2,7 @@ using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Players.Application.Battles;
 
@@ -11,6 +12,7 @@ namespace Kombats.Players.Application.Battles;
 /// </summary>
 internal sealed record HandleBattleCompletedCommand(
     Guid MessageId,
+    Guid BattleId,
     Guid? WinnerIdentityId,
     Guid? LoserIdentityId,
     string Reason) : ICommand;
@@ -25,25 +27,31 @@ internal sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattl
     private readonly ILevelingConfigProvider _levelingProvider;
     private readonly IUnitOfWork _uow;
     private readonly ICombatProfilePublisher _profilePublisher;
+    private readonly ILogger<HandleBattleCompletedHandler> _logger;
 
     public HandleBattleCompletedHandler(
         IInboxRepository inbox,
         ICharacterRepository characters,
         ILevelingConfigProvider levelingProvider,
         IUnitOfWork uow,
-        ICombatProfilePublisher profilePublisher)
+        ICombatProfilePublisher profilePublisher,
+        ILogger<HandleBattleCompletedHandler> logger)
     {
         _inbox = inbox;
         _characters = characters;
         _levelingProvider = levelingProvider;
         _uow = uow;
         _profilePublisher = profilePublisher;
+        _logger = logger;
     }
 
     public async Task<Result> HandleAsync(HandleBattleCompletedCommand command, CancellationToken cancellationToken)
     {
         if (await _inbox.IsProcessedAsync(command.MessageId, cancellationToken))
         {
+            _logger.LogInformation(
+                "BattleCompleted already processed, skipping: MessageId={MessageId}, BattleId={BattleId}, Idempotent={Idempotent}",
+                command.MessageId, command.BattleId, true);
             return Result.Success();
         }
 
@@ -95,6 +103,21 @@ internal sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattl
         }
 
         await _uow.SaveChangesAsync(cancellationToken);
+
+        if (winner is not null && loser is not null)
+        {
+            _logger.LogInformation(
+                "BattleCompleted applied XP: MessageId={MessageId}, BattleId={BattleId}, Reason={Reason}, Winner={WinnerIdentityId} Level={WinnerLevel} TotalXp={WinnerTotalXp}, Loser={LoserIdentityId} Level={LoserLevel} TotalXp={LoserTotalXp}",
+                command.MessageId, command.BattleId, command.Reason,
+                winner.IdentityId, winner.Level, winner.TotalXp,
+                loser.IdentityId, loser.Level, loser.TotalXp);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "BattleCompleted inbox recorded (no-winner outcome): MessageId={MessageId}, BattleId={BattleId}, Reason={Reason}",
+                command.MessageId, command.BattleId, command.Reason);
+        }
 
         return Result.Success();
     }

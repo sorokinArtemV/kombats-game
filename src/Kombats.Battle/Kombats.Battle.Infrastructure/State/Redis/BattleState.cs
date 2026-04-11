@@ -52,6 +52,26 @@ internal sealed class BattleState
     public int? PlayerBStamina { get; set; }
     public int? PlayerBAgility { get; set; }
     public int? PlayerBIntuition { get; set; }
+
+    // Terminal outcome fields — populated by EndBattleAndMarkResolvedScript when a battle ends.
+    // Absent for non-terminal battles and for battles that ended before this field set shipped.
+    // Used exclusively by BattleRecoveryService to reconstruct a faithful BattleCompleted if the
+    // process crashed between Redis end-commit and outbox flush.
+
+    /// <summary>
+    /// Winner identity id as a string for JSON/Lua compatibility. Empty string or missing
+    /// means "no winner" (draw / double forfeit / system-level termination).
+    /// </summary>
+    public string? EndWinnerPlayerId { get; set; }
+
+    /// <summary>
+    /// <see cref="Kombats.Battle.Domain.Results.EndBattleReason"/> value as int for Lua compat.
+    /// </summary>
+    public int? EndReason { get; set; }
+
+    public int? EndFinalTurnIndex { get; set; }
+
+    public long? EndedAtUnixMs { get; set; }
 }
 
 

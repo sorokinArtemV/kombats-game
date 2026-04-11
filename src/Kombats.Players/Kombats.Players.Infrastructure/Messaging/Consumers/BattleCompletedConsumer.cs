@@ -24,6 +24,7 @@ internal sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
 
         var command = new HandleBattleCompletedCommand(
             msg.MessageId,
+            msg.BattleId,
             msg.WinnerIdentityId,
             msg.LoserIdentityId,
             msg.Reason.ToString());

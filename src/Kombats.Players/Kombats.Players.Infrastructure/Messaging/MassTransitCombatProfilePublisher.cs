@@ -1,6 +1,7 @@
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Contracts;
 using MassTransit;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Players.Infrastructure.Messaging;
 
@@ -13,14 +14,22 @@ namespace Kombats.Players.Infrastructure.Messaging;
 internal sealed class MassTransitCombatProfilePublisher : ICombatProfilePublisher
 {
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<MassTransitCombatProfilePublisher> _logger;
 
-    public MassTransitCombatProfilePublisher(IPublishEndpoint publishEndpoint)
+    public MassTransitCombatProfilePublisher(
+        IPublishEndpoint publishEndpoint,
+        ILogger<MassTransitCombatProfilePublisher> logger)
     {
         _publishEndpoint = publishEndpoint;
+        _logger = logger;
     }
 
-    public Task PublishAsync(PlayerCombatProfileChanged profile, CancellationToken ct)
+    public async Task PublishAsync(PlayerCombatProfileChanged profile, CancellationToken ct)
     {
-        return _publishEndpoint.Publish(profile, ct);
+        await _publishEndpoint.Publish(profile, ct);
+
+        _logger.LogInformation(
+            "Queued PlayerCombatProfileChanged on outbox: IdentityId={IdentityId}, CharacterId={CharacterId}, Revision={Revision}, IsReady={IsReady}, Version={Version}",
+            profile.IdentityId, profile.CharacterId, profile.Revision, profile.IsReady, profile.Version);
     }
 }

@@ -1,6 +1,7 @@
 using Kombats.Battle.Contracts.Battle;
 using Kombats.Matchmaking.Application.Abstractions;
 using MassTransit;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Matchmaking.Infrastructure.Messaging;
 
@@ -12,13 +13,17 @@ namespace Kombats.Matchmaking.Infrastructure.Messaging;
 internal sealed class MassTransitCreateBattlePublisher : ICreateBattlePublisher
 {
     private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ILogger<MassTransitCreateBattlePublisher> _logger;
 
-    public MassTransitCreateBattlePublisher(IPublishEndpoint publishEndpoint)
+    public MassTransitCreateBattlePublisher(
+        IPublishEndpoint publishEndpoint,
+        ILogger<MassTransitCreateBattlePublisher> logger)
     {
         _publishEndpoint = publishEndpoint;
+        _logger = logger;
     }
 
-    public Task PublishAsync(CreateBattleRequest request, CancellationToken ct = default)
+    public async Task PublishAsync(CreateBattleRequest request, CancellationToken ct = default)
     {
         var command = new CreateBattle
         {
@@ -49,6 +54,10 @@ internal sealed class MassTransitCreateBattlePublisher : ICreateBattlePublisher
             }
         };
 
-        return _publishEndpoint.Publish(command, ct);
+        await _publishEndpoint.Publish(command, ct);
+
+        _logger.LogInformation(
+            "Queued CreateBattle on outbox: MatchId={MatchId}, BattleId={BattleId}, PlayerA={PlayerAIdentityId}, PlayerB={PlayerBIdentityId}",
+            request.MatchId, request.BattleId, request.PlayerA.IdentityId, request.PlayerB.IdentityId);
     }
 }

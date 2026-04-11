@@ -63,9 +63,11 @@ internal sealed class MassTransitBattleEventPublisher : IBattleEventPublisher
 
         await _publishEndpoint.Publish(battleCompleted, cancellationToken);
 
+        // Terminal summary log — single line carrying every field an operator needs
+        // to reconstruct a battle outcome without cross-referencing other logs.
         _logger.LogInformation(
-            "Published BattleCompleted event for BattleId: {BattleId}, Reason: {Reason}, Winner: {WinnerPlayerId}, Loser: {LoserPlayerId}",
-            battleId, contractReason, winnerPlayerId, loserPlayerId);
+            "Battle completed: BattleId={BattleId}, MatchId={MatchId}, Reason={Reason}, Winner={WinnerIdentityId}, Loser={LoserIdentityId}, TurnCount={TurnCount}, DurationMs={DurationMs}, RulesetVersion={RulesetVersion}",
+            battleId, matchId, contractReason, winnerPlayerId, loserPlayerId, turnCount, durationMs, rulesetVersion);
     }
 
     private static BattleEndReason MapReason(EndBattleReason domainReason)

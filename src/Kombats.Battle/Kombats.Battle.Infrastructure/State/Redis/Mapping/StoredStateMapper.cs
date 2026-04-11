@@ -1,5 +1,6 @@
 using Kombats.Battle.Application.ReadModels;
 using Kombats.Battle.Domain.Model;
+using Kombats.Battle.Domain.Results;
 
 namespace Kombats.Battle.Infrastructure.State.Redis.Mapping;
 
@@ -36,8 +37,20 @@ internal static class StoredStateMapper
             PlayerBStrength = state.PlayerBStrength,
             PlayerBStamina = state.PlayerBStamina,
             PlayerBAgility = state.PlayerBAgility,
-            PlayerBIntuition = state.PlayerBIntuition
+            PlayerBIntuition = state.PlayerBIntuition,
+            EndWinnerPlayerId = ParseWinnerId(state.EndWinnerPlayerId),
+            EndReason = state.EndReason.HasValue ? (EndBattleReason)state.EndReason.Value : null,
+            EndFinalTurnIndex = state.EndFinalTurnIndex,
+            EndedAt = state.EndedAtUnixMs.HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds(state.EndedAtUnixMs.Value)
+                : null
         };
+    }
+
+    private static Guid? ParseWinnerId(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        return Guid.TryParse(raw, out var id) ? id : null;
     }
 
     /// <summary>

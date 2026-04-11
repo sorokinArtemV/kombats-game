@@ -34,7 +34,7 @@ public sealed class MatchmakingClient(HttpClient httpClient, ILogger<Matchmaking
             return result ?? new InternalQueueStatusResponse("Searching");
         }
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, ServiceName, cancellationToken);
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, ServiceName, logger, cancellationToken);
         throw new BffServiceException(response.StatusCode, error);
     }
 
@@ -62,7 +62,7 @@ public sealed class MatchmakingClient(HttpClient httpClient, ILogger<Matchmaking
             return result ?? new InternalLeaveQueueResponse(false);
         }
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, ServiceName, cancellationToken);
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, ServiceName, logger, cancellationToken);
         throw new BffServiceException(response.StatusCode, error);
     }
 

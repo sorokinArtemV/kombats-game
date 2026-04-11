@@ -26,10 +26,6 @@ internal sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerComba
     {
         var message = context.Message;
 
-        _logger.LogInformation(
-            "Received player combat profile changed: IdentityId={IdentityId}, CharacterId={CharacterId}, Revision={Revision}, IsReady={IsReady}",
-            message.IdentityId, message.CharacterId, message.Revision, message.IsReady);
-
         var profile = new PlayerCombatProfile
         {
             IdentityId = message.IdentityId,
@@ -46,5 +42,9 @@ internal sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerComba
         };
 
         await _repository.UpsertAsync(profile, context.CancellationToken);
+
+        _logger.LogInformation(
+            "Upserted player combat profile projection: IdentityId={IdentityId}, CharacterId={CharacterId}, Revision={Revision}, IsReady={IsReady}",
+            message.IdentityId, message.CharacterId, message.Revision, message.IsReady);
     }
 }

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -50,10 +51,26 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
         // Events would be silently dropped. Instead, on any connection loss the Closed
         // handler fires, the frontend receives BattleConnectionLost, and must re-join
         // from scratch via a new JoinBattle call.
+        // Capture the current activity so the downstream Battle hub can correlate
+        // the long-lived SignalR session back to the originating frontend request.
+        // WebSocket upgrades do not carry ambient W3C trace context automatically.
+        Activity? activity = Activity.Current;
+        string? traceparent = activity?.Id;
+        string? tracestate = activity?.TraceStateString;
+
         HubConnection connection = new HubConnectionBuilder()
             .WithUrl(battleHubUrl, options =>
             {
                 options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
+
+                if (!string.IsNullOrEmpty(traceparent))
+                {
+                    options.Headers["traceparent"] = traceparent;
+                    if (!string.IsNullOrEmpty(tracestate))
+                    {
+                        options.Headers["tracestate"] = tracestate;
+                    }
+                }
             })
             .Build();
 

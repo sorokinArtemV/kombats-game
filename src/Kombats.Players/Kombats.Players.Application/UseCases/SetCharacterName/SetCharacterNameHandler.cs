@@ -2,6 +2,7 @@ using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Players.Application.UseCases.SetCharacterName;
 
@@ -11,15 +12,18 @@ internal sealed class SetCharacterNameHandler
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
     private readonly ICombatProfilePublisher _profilePublisher;
+    private readonly ILogger<SetCharacterNameHandler> _logger;
 
     public SetCharacterNameHandler(
         IUnitOfWork uow,
         ICharacterRepository characters,
-        ICombatProfilePublisher profilePublisher)
+        ICombatProfilePublisher profilePublisher,
+        ILogger<SetCharacterNameHandler> logger)
     {
         _uow = uow;
         _characters = characters;
         _profilePublisher = profilePublisher;
+        _logger = logger;
     }
 
     public async Task<Result<CharacterStateResult>> HandleAsync(SetCharacterNameCommand cmd, CancellationToken ct)
@@ -70,6 +74,10 @@ internal sealed class SetCharacterNameHandler
         try
         {
             await _uow.SaveChangesAsync(ct);
+
+            _logger.LogInformation(
+                "Character named for IdentityId={IdentityId}, CharacterId={CharacterId}, OnboardingState={OnboardingState}",
+                cmd.IdentityId, character.Id, character.OnboardingState);
 
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }

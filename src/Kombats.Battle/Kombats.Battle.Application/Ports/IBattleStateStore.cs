@@ -39,12 +39,19 @@ public interface IBattleStateStore
         int playerBHp,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Atomically transitions the battle to Ended and persists the full terminal outcome.
+    /// <paramref name="outcome"/> is written into Redis alongside Phase=Ended so that
+    /// BattleRecoveryService can reconstruct a faithful BattleCompleted event if the
+    /// process crashes between this call and the bus-outbox flush.
+    /// </summary>
     Task<EndBattleCommitResult> EndBattleAndMarkResolvedAsync(
         Guid battleId,
         int turnIndex,
         int noActionStreak,
         int playerAHp,
         int playerBHp,
+        BattleEndOutcome outcome,
         CancellationToken cancellationToken = default);
 
     /// <summary>

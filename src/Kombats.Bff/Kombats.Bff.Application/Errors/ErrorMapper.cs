@@ -1,10 +1,13 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Bff.Application.Errors;
 
 public static class ErrorMapper
 {
+    private const int BodySnippetMaxLength = 512;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -13,6 +16,7 @@ public static class ErrorMapper
     public static async Task<BffError> MapFromResponseAsync(
         HttpResponseMessage response,
         string serviceName,
+        ILogger logger,
         CancellationToken cancellationToken = default)
     {
         string? body = null;
@@ -26,7 +30,7 @@ public static class ErrorMapper
             // If we can't read the body, fall through to status-based mapping
         }
 
-        return response.StatusCode switch
+        BffError error = response.StatusCode switch
         {
             HttpStatusCode.NotFound => new BffError(BffErrorCode.CharacterNotFound, $"Resource not found in {serviceName}."),
             HttpStatusCode.Conflict => MapConflictError(body, serviceName),
@@ -36,6 +40,27 @@ public static class ErrorMapper
             HttpStatusCode.ServiceUnavailable => new BffError(BffErrorCode.ServiceUnavailable, $"{serviceName} service is unavailable."),
             _ => new BffError(BffErrorCode.InternalError, $"Unexpected error from {serviceName} (HTTP {(int)response.StatusCode}).")
         };
+
+        // Single structured boundary log for every non-2xx downstream response mapped
+        // into a BffError. Keeps the upstream error surface debuggable without
+        // requiring call sites to each decide what to log.
+        string? bodySnippet = body is null
+            ? null
+            : (body.Length > BodySnippetMaxLength ? body[..BodySnippetMaxLength] : body);
+
+        string? requestPath = response.RequestMessage?.RequestUri?.PathAndQuery;
+        string? requestMethod = response.RequestMessage?.Method.Method;
+
+        logger.LogWarning(
+            "Downstream {DownstreamService} returned non-success {StatusCode} for {RequestMethod} {RequestPath}. ErrorCode={ErrorCode} Body={ResponseBody}",
+            serviceName,
+            (int)response.StatusCode,
+            requestMethod,
+            requestPath,
+            error.Code,
+            bodySnippet);
+
+        return error;
     }
 
     private static BffError MapConflictError(string? body, string serviceName)

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using FluentAssertions;
 using Kombats.Bff.Application.Errors;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Kombats.Bff.Application.Tests;
@@ -14,7 +15,7 @@ public sealed class ErrorMapperTests
         using var response = new HttpResponseMessage(HttpStatusCode.NotFound);
         response.Content = new StringContent("");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.CharacterNotFound);
     }
@@ -25,7 +26,7 @@ public sealed class ErrorMapperTests
         using var response = new HttpResponseMessage(HttpStatusCode.Unauthorized);
         response.Content = new StringContent("");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.Unauthorized);
     }
@@ -36,7 +37,7 @@ public sealed class ErrorMapperTests
         using var response = new HttpResponseMessage(HttpStatusCode.Forbidden);
         response.Content = new StringContent("");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.Unauthorized);
     }
@@ -47,7 +48,7 @@ public sealed class ErrorMapperTests
         using var response = new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
         response.Content = new StringContent("");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Matchmaking");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Matchmaking", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.ServiceUnavailable);
         error.Message.Should().Contain("Matchmaking");
@@ -60,7 +61,7 @@ public sealed class ErrorMapperTests
         response.Content = new StringContent("{\"message\":\"Already in queue\"}",
             Encoding.UTF8, "application/json");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Matchmaking");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Matchmaking", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.AlreadyInQueue);
     }
@@ -72,7 +73,7 @@ public sealed class ErrorMapperTests
         response.Content = new StringContent("{\"message\":\"Concurrency violation\"}",
             Encoding.UTF8, "application/json");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.InvalidRequest);
     }
@@ -85,7 +86,7 @@ public sealed class ErrorMapperTests
             "{\"errors\":{\"Name\":[\"Name is required.\"]}}",
             Encoding.UTF8, "application/json");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.InvalidRequest);
         error.Message.Should().Be("Validation failed.");
@@ -100,7 +101,7 @@ public sealed class ErrorMapperTests
             "{\"message\":\"Character not ready\"}",
             Encoding.UTF8, "application/json");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.InvalidRequest);
         error.Message.Should().Be("Character not ready");
@@ -112,7 +113,7 @@ public sealed class ErrorMapperTests
         using var response = new HttpResponseMessage(HttpStatusCode.BadRequest);
         response.Content = new StringContent("not json");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Players", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.InvalidRequest);
         error.Message.Should().Contain("Players");
@@ -124,7 +125,7 @@ public sealed class ErrorMapperTests
         using var response = new HttpResponseMessage(HttpStatusCode.InternalServerError);
         response.Content = new StringContent("");
 
-        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Battle");
+        BffError error = await ErrorMapper.MapFromResponseAsync(response, "Battle", NullLogger.Instance);
 
         error.Code.Should().Be(BffErrorCode.InternalError);
         error.Message.Should().Contain("500");

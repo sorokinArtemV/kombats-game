@@ -130,17 +130,24 @@ internal sealed class BattleRecoveryService(
     /// <summary>
     /// Handles the case where Redis state is Ended but Postgres is still non-terminal.
     /// This occurs when the process crashed after Redis committed Phase=Ended but before
-    /// BattleCompleted was written to the outbox. Uses the same atomic pattern as orphan recovery:
-    /// mark ended in Postgres + publish to outbox in a single transaction.
+    /// BattleCompleted was written to the outbox.
+    ///
+    /// Prefers the enriched terminal outcome persisted on the Redis state (winner / reason /
+    /// final turn / ended-at) — that data is the real outcome of the crashed battle and
+    /// produces a faithful BattleCompleted event. Falls back to the data-less SystemError /
+    /// null-winner path only when Redis has no enriched outcome (battles that ended before
+    /// the enriched end-commit shipped, or edge cases where the fields were not written).
     /// </summary>
     private async Task ForceEndRedisEndedBattleAsync(
         Guid battleId,
         BattleSnapshot redisState,
         CancellationToken ct)
     {
+        var hasEnrichedOutcome = redisState.EndReason.HasValue;
+
         logger.LogWarning(
-            "Battle {BattleId} ended in Redis (Phase=Ended) but Postgres non-terminal — recovering",
-            battleId);
+            "Battle {BattleId} ended in Redis (Phase=Ended) but Postgres non-terminal — recovering (enriched={HasEnriched})",
+            battleId, hasEnrichedOutcome);
 
         var now = DateTimeOffset.UtcNow;
 
@@ -148,19 +155,21 @@ internal sealed class BattleRecoveryService(
         if (info is null)
             return; // Already ended (race with projection consumer) or doesn't exist
 
-        // Use available metadata from Redis state for the event
-        int turnCount = redisState.LastResolvedTurnIndex;
+        var reason = redisState.EndReason ?? EndBattleReason.SystemError;
+        var winnerPlayerId = hasEnrichedOutcome ? redisState.EndWinnerPlayerId : null;
+        var occurredAt = redisState.EndedAt ?? now;
+        int turnCount = redisState.EndFinalTurnIndex ?? redisState.LastResolvedTurnIndex;
         int rulesetVersion = redisState.Ruleset?.Version ?? 0;
-        int durationMs = Math.Max(0, (int)(now - info.CreatedAt).TotalMilliseconds);
+        int durationMs = Math.Max(0, (int)(occurredAt - info.CreatedAt).TotalMilliseconds);
 
         await eventPublisher.PublishBattleCompletedAsync(
             battleId,
             info.MatchId,
             info.PlayerAId,
             info.PlayerBId,
-            EndBattleReason.SystemError,
-            winnerPlayerId: null,
-            now,
+            reason,
+            winnerPlayerId,
+            occurredAt,
             turnCount: turnCount,
             durationMs: durationMs,
             rulesetVersion: rulesetVersion,
@@ -169,7 +178,7 @@ internal sealed class BattleRecoveryService(
         await recoveryRepo.CommitAsync(ct);
 
         logger.LogWarning(
-            "Force-ended Redis-Ended battle {BattleId} as SystemError and published BattleCompleted (TurnCount={TurnCount})",
-            battleId, turnCount);
+            "Force-ended Redis-Ended battle {BattleId} with Reason={Reason}, Winner={WinnerPlayerId}, TurnCount={TurnCount} (enriched={HasEnriched})",
+            battleId, reason, winnerPlayerId, turnCount, hasEnrichedOutcome);
     }
 }

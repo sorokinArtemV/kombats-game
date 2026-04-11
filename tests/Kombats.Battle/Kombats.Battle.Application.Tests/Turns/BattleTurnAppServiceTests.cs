@@ -268,7 +268,8 @@ public class BattleTurnAppServiceTests
             .Returns(resolutionResult);
 
         _stateStore.EndBattleAndMarkResolvedAsync(
-                _battleId, 1, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+                _battleId, 1, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<BattleEndOutcome>(), Arg.Any<CancellationToken>())
             .Returns(EndBattleCommitResult.EndedNow);
 
         // Act
@@ -285,9 +286,14 @@ public class BattleTurnAppServiceTests
         _engine.Received(1).ResolveTurn(
             Arg.Any<BattleDomainState>(), Arg.Any<PlayerAction>(), Arg.Any<PlayerAction>());
 
-        // Battle end committed to Redis
+        // Battle end committed to Redis with the enriched terminal outcome
         await _stateStore.Received(1).EndBattleAndMarkResolvedAsync(
-            _battleId, 1, 0, 80, 0, Arg.Any<CancellationToken>());
+            _battleId, 1, 0, 80, 0,
+            Arg.Is<BattleEndOutcome>(o =>
+                o.WinnerPlayerId == _playerAId &&
+                o.Reason == EndBattleReason.Normal &&
+                o.FinalTurnIndex == 1),
+            Arg.Any<CancellationToken>());
 
         // BattleCompleted event published
         await _publisher.Received(1).PublishBattleCompletedAsync(

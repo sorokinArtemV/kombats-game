@@ -12,6 +12,7 @@ using Kombats.Players.Infrastructure.Persistence.Repository;
 using Kombats.Players.Infrastructure.Tests.Fixtures;
 using MassTransit;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Xunit;
@@ -170,7 +171,9 @@ public sealed class BattleCompletedConsumerTests
             Options.Create(new LevelingOptions()));
         var publisher = new CapturingProfilePublisher();
         ICommandHandler<HandleBattleCompletedCommand> handler =
-            new HandleBattleCompletedHandler(inboxRepo, characterRepo, levelingProvider, uow, publisher);
+            new HandleBattleCompletedHandler(
+                inboxRepo, characterRepo, levelingProvider, uow, publisher,
+                NullLogger<HandleBattleCompletedHandler>.Instance);
         var consumer = new BattleCompletedConsumer(handler);
         return (consumer, publisher);
     }

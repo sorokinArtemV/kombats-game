@@ -118,6 +118,10 @@ internal static class RedisScripts
 
     /// <summary>
     /// Ends a battle and marks the current turn as resolved atomically.
+    /// Persists the full terminal outcome (winner / reason / final turn / ended-at) onto the
+    /// state JSON so BattleRecoveryService can reconstruct a faithful BattleCompleted event
+    /// if the process crashes between this Redis commit and the outbox flush.
+    ///
     /// KEYS[1] = state key (battle:state:{battleId})
     /// KEYS[2] = active battles set key (battle:active)
     /// KEYS[3] = deadlines ZSET key (battle:deadlines)
@@ -126,6 +130,10 @@ internal static class RedisScripts
     /// ARGV[3] = playerAHp (integer)
     /// ARGV[4] = playerBHp (integer)
     /// ARGV[5] = battleId (string)
+    /// ARGV[6] = endWinnerPlayerId (string; empty string for draw / no winner)
+    /// ARGV[7] = endReason (integer; EndBattleReason enum value)
+    /// ARGV[8] = endFinalTurnIndex (integer)
+    /// ARGV[9] = endedAtUnixMs (long, unix milliseconds)
     /// Returns: 2 = AlreadyEnded, 1 = EndedNow, 0 = NotCommitted
     /// </summary>
     internal const string EndBattleAndMarkResolvedScript = @"
@@ -150,6 +158,15 @@ internal static class RedisScripts
         state.PlayerAHp = tonumber(ARGV[3])
         state.PlayerBHp = tonumber(ARGV[4])
         state.NextResolveScheduledUtcTicks = 0
+        -- Persist terminal outcome for crash-window recovery fidelity
+        if ARGV[6] ~= '' then
+            state.EndWinnerPlayerId = ARGV[6]
+        else
+            state.EndWinnerPlayerId = cjson.null
+        end
+        state.EndReason = tonumber(ARGV[7])
+        state.EndFinalTurnIndex = tonumber(ARGV[8])
+        state.EndedAtUnixMs = tonumber(ARGV[9])
         state.Version = state.Version + 1
         redis.call('SET', KEYS[1], cjson.encode(state))
         -- Remove from active battles set

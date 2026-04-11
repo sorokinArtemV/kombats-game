@@ -61,7 +61,11 @@ public class BattleRecoveryServiceTests
     private BattleSnapshot CreateSnapshot(
         BattlePhase phase = BattlePhase.TurnOpen,
         int turnIndex = 1,
-        int lastResolved = 0)
+        int lastResolved = 0,
+        Guid? endWinnerPlayerId = null,
+        EndBattleReason? endReason = null,
+        int? endFinalTurnIndex = null,
+        DateTimeOffset? endedAt = null)
     {
         return new BattleSnapshot
         {
@@ -77,7 +81,11 @@ public class BattleRecoveryServiceTests
             PlayerAHp = 100,
             PlayerBHp = 100,
             NoActionStreakBoth = 0,
-            Version = 1
+            Version = 1,
+            EndWinnerPlayerId = endWinnerPlayerId,
+            EndReason = endReason,
+            EndFinalTurnIndex = endFinalTurnIndex,
+            EndedAt = endedAt
         };
     }
 
@@ -168,10 +176,20 @@ public class BattleRecoveryServiceTests
     // ========== Battle with Redis state Ended triggers recovery ==========
 
     [Fact]
-    public async Task RecoverBattle_RedisStateEnded_ForceEndsAndPublishesBattleCompleted()
+    public async Task RecoverBattle_RedisStateEnded_WithEnrichedOutcome_PublishesRealWinnerAndReason()
     {
-        // Arrange: Redis shows Ended but Postgres is non-terminal (crash after Redis commit)
-        var endedSnapshot = CreateSnapshot(phase: BattlePhase.Ended, lastResolved: 3);
+        // Arrange: Redis shows Ended AND carries the enriched terminal outcome
+        // (winner, real reason, final turn, ended-at). This is the post-Option-B state
+        // that closes the semantic-loss window: a battle that Redis resolved as a normal
+        // win must be republished as a normal win, not as a data-less draw.
+        var occurredAt = DateTimeOffset.UtcNow.AddSeconds(-2);
+        var endedSnapshot = CreateSnapshot(
+            phase: BattlePhase.Ended,
+            lastResolved: 3,
+            endWinnerPlayerId: _playerAId,
+            endReason: EndBattleReason.Normal,
+            endFinalTurnIndex: 3,
+            endedAt: occurredAt);
         _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
             .Returns(endedSnapshot);
 
@@ -182,10 +200,43 @@ public class BattleRecoveryServiceTests
         // Act
         await _service.RecoverBattleAsync(_battleId, CancellationToken.None);
 
-        // Assert: battle marked ended, event published with Redis metadata, then committed
-        await _recoveryRepo.Received(1).TryMarkOrphanedBattleEndedAsync(
-            _battleId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+        // Assert: battle marked ended, event published with REAL outcome, then committed
+        await _eventPublisher.Received(1).PublishBattleCompletedAsync(
+            _battleId, _matchId, _playerAId, _playerBId,
+            EndBattleReason.Normal, _playerAId,
+            occurredAt,
+            3, Arg.Any<int>(), 1,
+            Arg.Any<CancellationToken>());
 
+        // And explicitly NOT the data-less SystemError/null fallback
+        await _eventPublisher.DidNotReceive().PublishBattleCompletedAsync(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
+            EndBattleReason.SystemError, Arg.Any<Guid?>(), Arg.Any<DateTimeOffset>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+            Arg.Any<CancellationToken>());
+
+        await _recoveryRepo.Received(1).CommitAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RecoverBattle_RedisStateEnded_WithoutEnrichedOutcome_FallsBackToSystemError()
+    {
+        // Arrange: Redis shows Ended but has no enriched terminal outcome (pre-Option-B
+        // battle, or an edge case where the fields are missing). The recovery path must
+        // still function and must fall back to the data-less SystemError publication.
+        var endedSnapshot = CreateSnapshot(phase: BattlePhase.Ended, lastResolved: 3);
+        // No EndReason / EndWinnerPlayerId / EndFinalTurnIndex / EndedAt set
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(endedSnapshot);
+
+        var orphanInfo = new OrphanedBattleInfo(_matchId, _playerAId, _playerBId, DateTimeOffset.UtcNow.AddMinutes(-5));
+        _recoveryRepo.TryMarkOrphanedBattleEndedAsync(_battleId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
+            .Returns(orphanInfo);
+
+        // Act
+        await _service.RecoverBattleAsync(_battleId, CancellationToken.None);
+
+        // Assert: falls back to SystemError / null winner (previous behavior preserved)
         await _eventPublisher.Received(1).PublishBattleCompletedAsync(
             _battleId, _matchId, _playerAId, _playerBId,
             EndBattleReason.SystemError, null,

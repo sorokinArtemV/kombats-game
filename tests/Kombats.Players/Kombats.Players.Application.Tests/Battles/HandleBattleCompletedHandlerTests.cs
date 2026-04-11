@@ -5,6 +5,7 @@ using Kombats.Players.Application.Battles;
 using Kombats.Players.Contracts;
 using Kombats.Players.Domain.Entities;
 using Kombats.Players.Domain.Progression;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Xunit;
 
@@ -23,7 +24,9 @@ public sealed class HandleBattleCompletedHandlerTests
     {
         _levelingProvider.Get().Returns(new LevelingConfig(100));
         _levelingProvider.GetCurrentVersion().Returns(1);
-        _handler = new HandleBattleCompletedHandler(_inbox, _characters, _levelingProvider, _uow, _publisher);
+        _handler = new HandleBattleCompletedHandler(
+            _inbox, _characters, _levelingProvider, _uow, _publisher,
+            NullLogger<HandleBattleCompletedHandler>.Instance);
     }
 
     private static Character CreateReadyCharacter(Guid identityId)
@@ -46,7 +49,7 @@ public sealed class HandleBattleCompletedHandlerTests
         _characters.GetByIdentityIdAsync(winnerId, Arg.Any<CancellationToken>()).Returns(winner);
         _characters.GetByIdentityIdAsync(loserId, Arg.Any<CancellationToken>()).Returns(loser);
 
-        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), winnerId, loserId, "NormalVictory");
+        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), Guid.NewGuid(), winnerId, loserId, "NormalVictory");
         var result = await _handler.HandleAsync(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -63,7 +66,7 @@ public sealed class HandleBattleCompletedHandlerTests
     {
         _inbox.IsProcessedAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
 
-        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), null, null, "DoubleForfeit");
+        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), Guid.NewGuid(), null, null, "DoubleForfeit");
         var result = await _handler.HandleAsync(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -78,7 +81,7 @@ public sealed class HandleBattleCompletedHandlerTests
         var messageId = Guid.NewGuid();
         _inbox.IsProcessedAsync(messageId, Arg.Any<CancellationToken>()).Returns(true);
 
-        var command = new HandleBattleCompletedCommand(messageId, Guid.NewGuid(), Guid.NewGuid(), "NormalVictory");
+        var command = new HandleBattleCompletedCommand(messageId, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "NormalVictory");
         var result = await _handler.HandleAsync(command, CancellationToken.None);
 
         result.IsSuccess.Should().BeTrue();
@@ -94,7 +97,7 @@ public sealed class HandleBattleCompletedHandlerTests
         _inbox.IsProcessedAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
         _characters.GetByIdentityIdAsync(winnerId, Arg.Any<CancellationToken>()).Returns((Character?)null);
 
-        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), winnerId, loserId, "NormalVictory");
+        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), Guid.NewGuid(), winnerId, loserId, "NormalVictory");
         var result = await _handler.HandleAsync(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -112,7 +115,7 @@ public sealed class HandleBattleCompletedHandlerTests
             .Returns(CreateReadyCharacter(winnerId));
         _characters.GetByIdentityIdAsync(loserId, Arg.Any<CancellationToken>()).Returns((Character?)null);
 
-        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), winnerId, loserId, "NormalVictory");
+        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), Guid.NewGuid(), winnerId, loserId, "NormalVictory");
         var result = await _handler.HandleAsync(command, CancellationToken.None);
 
         result.IsFailure.Should().BeTrue();
@@ -126,7 +129,7 @@ public sealed class HandleBattleCompletedHandlerTests
         _inbox.IsProcessedAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
 
         var messageId = Guid.NewGuid();
-        var command = new HandleBattleCompletedCommand(messageId, null, null, "Draw");
+        var command = new HandleBattleCompletedCommand(messageId, Guid.NewGuid(), null, null, "Draw");
         await _handler.HandleAsync(command, CancellationToken.None);
 
         await _inbox.Received(1).AddProcessedAsync(messageId, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
@@ -146,7 +149,7 @@ public sealed class HandleBattleCompletedHandlerTests
         var published = new List<PlayerCombatProfileChanged>();
         await _publisher.PublishAsync(Arg.Do<PlayerCombatProfileChanged>(e => published.Add(e)), Arg.Any<CancellationToken>());
 
-        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), winnerId, loserId, "NormalVictory");
+        var command = new HandleBattleCompletedCommand(Guid.NewGuid(), Guid.NewGuid(), winnerId, loserId, "NormalVictory");
         await _handler.HandleAsync(command, CancellationToken.None);
 
         published.Should().HaveCount(2);

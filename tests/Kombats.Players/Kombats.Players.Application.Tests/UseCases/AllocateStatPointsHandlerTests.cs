@@ -4,6 +4,7 @@ using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.UseCases.AllocateStatPoints;
 using Kombats.Players.Contracts;
 using Kombats.Players.Domain.Entities;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
@@ -19,7 +20,8 @@ public sealed class AllocateStatPointsHandlerTests
 
     public AllocateStatPointsHandlerTests()
     {
-        _handler = new AllocateStatPointsHandler(_uow, _characters, _publisher);
+        _handler = new AllocateStatPointsHandler(
+            _uow, _characters, _publisher, NullLogger<AllocateStatPointsHandler>.Instance);
     }
 
     private static Character CreateNamedCharacter(Guid? identityId = null)

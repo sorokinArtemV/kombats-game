@@ -2,6 +2,7 @@ using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Players.Application.UseCases.AllocateStatPoints;
 
@@ -11,15 +12,18 @@ internal sealed class AllocateStatPointsHandler
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
     private readonly ICombatProfilePublisher _profilePublisher;
+    private readonly ILogger<AllocateStatPointsHandler> _logger;
 
     public AllocateStatPointsHandler(
         IUnitOfWork uow,
         ICharacterRepository characters,
-        ICombatProfilePublisher profilePublisher)
+        ICombatProfilePublisher profilePublisher,
+        ILogger<AllocateStatPointsHandler> logger)
     {
         _uow = uow;
         _characters = characters;
         _profilePublisher = profilePublisher;
+        _logger = logger;
     }
 
     public async Task<Result<AllocateStatPointsResult>> HandleAsync(AllocateStatPointsCommand cmd, CancellationToken ct)
@@ -82,11 +86,20 @@ internal sealed class AllocateStatPointsHandler
         }
         catch (ConcurrencyConflictException)
         {
+            _logger.LogWarning(
+                "AllocateStatPoints concurrency conflict for IdentityId={IdentityId}, CharacterId={CharacterId}, ExpectedRevision={ExpectedRevision}",
+                cmd.IdentityId, character.Id, cmd.ExpectedRevision);
             return Result.Failure<AllocateStatPointsResult>(
                 Error.Conflict(
                     "AllocateStatPoints.ConcurrentUpdate",
                     "Character was modified by another request. Reload and retry."));
         }
+
+        _logger.LogInformation(
+            "Stat points allocated for IdentityId={IdentityId}, CharacterId={CharacterId}, Revision={Revision}, Str={Str}, Agi={Agi}, Intuition={Intuition}, Vit={Vit}, UnspentPoints={Unspent}",
+            cmd.IdentityId, character.Id, character.Revision,
+            character.Strength, character.Agility, character.Intuition, character.Vitality,
+            character.UnspentPoints);
 
         return Result.Success(new AllocateStatPointsResult(
             Strength: character.Strength,
