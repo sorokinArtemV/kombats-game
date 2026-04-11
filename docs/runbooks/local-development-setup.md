@@ -162,7 +162,7 @@ Every service expects:
 }
 ```
 
-The realm **name is `kombats`** and the audience claim is **`kombats-api`**, injected by the realm's `kombats-api` client scope via an `oidc-audience-mapper`. The scope is attached to the `account` client as a default scope, so every access token issued for that client carries `aud=kombats-api`. The realm is imported automatically from `infra/keycloak/kombats-realm.json` on first boot — see section 4.
+The realm **name is `kombats`** and the audience claim is **`kombats-api`**, injected by an `oidc-audience-mapper` attached directly to the `account` client's `protocolMappers`. Keeping the mapper on the client (rather than introducing a realm-level `clientScopes` entry) avoids replacing Keycloak's built-in client scopes on import, so access tokens retain the standard identity claims (`sub`, `preferred_username`, `email`, `realm_access`) while also carrying `aud=kombats-api`. The realm is imported automatically from `infra/keycloak/kombats-realm.json` on first boot — see section 4.
 
 ### What you may have to change
 
@@ -193,7 +193,7 @@ The `kombats` realm is bootstrapped automatically on first boot. `docker-compose
 | Client redirect URIs | `/realms/kombats/account/*`, `http://localhost:5000/*`, `http://localhost:5173/*`, `http://localhost:3000/*`, `http://127.0.0.1:5500/*` |
 | Client web origins | `+` plus the above hosts and `*` (local dev only) |
 
-The `account` client is the built-in Keycloak Account Console client. The realm import overrides it to enable **Direct Access Grants**, which is what `tools/test-client/index.html` uses (`grant_type=password`, `client_id=account`). The realm also defines a dedicated `kombats-api` client scope (`oidc-audience-mapper`) attached to this client as a default scope, so access tokens carry `aud=kombats-api` — which is what every Kombats service validates (`Keycloak:Audience: "kombats-api"` in each `appsettings.json`).
+The `account` client is the built-in Keycloak Account Console client. The realm import overrides it to enable **Direct Access Grants**, which is what `tools/test-client/index.html` uses (`grant_type=password`, `client_id=account`). The client also carries an inline `oidc-audience-mapper` (`protocolMappers` on the client itself, not a separate realm client scope) that stamps `aud=kombats-api` onto every issued access token — which is what every Kombats service validates (`Keycloak:Audience: "kombats-api"` in each `appsettings.json`).
 
 ### Pre-provisioned test users
 
@@ -530,7 +530,7 @@ The following are **not automated** in the current repo state and require develo
 5. **No BFF health endpoint.** BFF's `Program.cs` does not call `MapHealthChecks`. Use Scalar or any known endpoint to confirm it is up.
 6. **No dev auth bypass middleware.** Every `/api/*` call needs a real Keycloak-issued JWT. There is no shortcut.
 7. **`docker-compose.yml` and `docker-compose.local.yml` collide on host ports.** Run at most one at a time.
-8. **Two legacy naming artifacts exist.** The repo still contains `Kombats.Shared` (legacy) under `src/Kombats.Players/`, and messaging-contract mapping in `Matchmaking` references `Kombats.Players.Contracts:PlayerCombatProfileChanged` by its legacy fully-qualified name. Neither affects local runs but both are tracked for removal.
+8. **Legacy naming artifact.** The repo still contains `Kombats.Shared` (legacy) under `src/Kombats.Players/`. Tracked for removal; does not affect local runs.
 9. **No end-to-end test client.** Phase 7B topology smoke tests are planned but not yet present.
 10. **OpenTelemetry OTLP endpoint is blank by default.** `"OtlpEndpoint": ""` disables export. If you want to export traces locally, set `OpenTelemetry:OtlpEndpoint` to your collector URL; no collector container ships with the local stack.
 

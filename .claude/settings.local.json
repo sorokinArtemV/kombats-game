@@ -86,7 +86,9 @@
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Battle/Kombats.Battle.Infrastructure/Properties)",
       "Bash(mkdir -p D:/1/tmp/kombats-game/src/Kombats.Battle/Kombats.Battle.Application/Properties)",
       "Bash(xargs -I{} basename {})",
-      "Bash(git -C D:/Programming/Sharp/kombats-game/kombats-game ls-files infra/keycloak/)"
+      "Bash(git -C D:/Programming/Sharp/kombats-game/kombats-game ls-files infra/keycloak/)",
+      "Bash(curl:*)",
+      "Bash(python -c \"import sys,json,base64; d=json.load\\(sys.stdin\\); t=d['access_token']; p=t.split\\('.'\\)[1]; p+='='*\\(-len\\(p\\)%4\\); print\\(json.dumps\\(json.loads\\(base64.urlsafe_b64decode\\(p\\)\\), indent=2\\)\\)\")"
     ]
   }
 }

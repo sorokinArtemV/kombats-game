@@ -241,7 +241,7 @@ function App() {
   }
 
   const allocTotal = statAlloc.strength + statAlloc.agility + statAlloc.intuition + statAlloc.vitality;
-  const charUnspent = char?.unspentPoints ?? 0;
+  const charUnspent = gameState?.character?.unspentPoints ?? 0;
   const allocValid = allocTotal > 0 && allocTotal <= charUnspent;
 
   async function allocateStats() {

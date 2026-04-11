@@ -54,31 +54,6 @@
         "post.logout.redirect.uris": "+"
       },
       "fullScopeAllowed": true,
-      "defaultClientScopes": [
-        "web-origins",
-        "acr",
-        "profile",
-        "roles",
-        "email",
-        "kombats-api"
-      ],
-      "optionalClientScopes": [
-        "address",
-        "phone",
-        "offline_access",
-        "microprofile-jwt"
-      ]
-    }
-  ],
-  "clientScopes": [
-    {
-      "name": "kombats-api",
-      "description": "Adds the kombats-api audience claim to access tokens issued for Kombats backend services.",
-      "protocol": "openid-connect",
-      "attributes": {
-        "include.in.token.scope": "false",
-        "display.on.consent.screen": "false"
-      },
       "protocolMappers": [
         {
           "name": "kombats-api-audience",
@@ -91,6 +66,20 @@
             "access.token.claim": "true"
           }
         }
+      ],
+      "defaultClientScopes": [
+        "basic",
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
       ]
     }
   ],
