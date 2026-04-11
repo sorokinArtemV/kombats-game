@@ -158,11 +158,11 @@ Every service expects:
 ```jsonc
 "Keycloak": {
   "Authority": "http://localhost:8080/realms/kombats",
-  "Audience": "account"
+  "Audience": "kombats-api"
 }
 ```
 
-The realm **name is `kombats`** and the audience claim is **`account`** (Keycloak's default audience for the built-in `account` client). The realm is imported automatically from `infra/keycloak/kombats-realm.json` on first boot — see section 4.
+The realm **name is `kombats`** and the audience claim is **`kombats-api`**, injected by the realm's `kombats-api` client scope via an `oidc-audience-mapper`. The scope is attached to the `account` client as a default scope, so every access token issued for that client carries `aud=kombats-api`. The realm is imported automatically from `infra/keycloak/kombats-realm.json` on first boot — see section 4.
 
 ### What you may have to change
 
@@ -193,7 +193,7 @@ The `kombats` realm is bootstrapped automatically on first boot. `docker-compose
 | Client redirect URIs | `/realms/kombats/account/*`, `http://localhost:5000/*`, `http://localhost:5173/*`, `http://localhost:3000/*`, `http://127.0.0.1:5500/*` |
 | Client web origins | `+` plus the above hosts and `*` (local dev only) |
 
-The `account` client is the built-in Keycloak Account Console client. The realm import overrides it to enable **Direct Access Grants**, which is what `tools/test-client/index.html` uses (`grant_type=password`, `client_id=account`). This keeps the audience claim on issued tokens equal to `account`, which is what every Kombats service expects (`Keycloak:Audience: "account"` in each `appsettings.json`).
+The `account` client is the built-in Keycloak Account Console client. The realm import overrides it to enable **Direct Access Grants**, which is what `tools/test-client/index.html` uses (`grant_type=password`, `client_id=account`). The realm also defines a dedicated `kombats-api` client scope (`oidc-audience-mapper`) attached to this client as a default scope, so access tokens carry `aud=kombats-api` — which is what every Kombats service validates (`Keycloak:Audience: "kombats-api"` in each `appsettings.json`).
 
 ### Pre-provisioned test users
 

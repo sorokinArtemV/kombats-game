@@ -100,7 +100,7 @@ services:
       Services__Matchmaking__BaseUrl: "http://matchmaking:8080"
       Services__Battle__BaseUrl: "http://battle:8080"
       Keycloak__Authority: "http://keycloak:8080/realms/kombats"
-      Keycloak__Audience: "account"
+      Keycloak__Audience: "kombats-api"
     depends_on:
       - keycloak
 
