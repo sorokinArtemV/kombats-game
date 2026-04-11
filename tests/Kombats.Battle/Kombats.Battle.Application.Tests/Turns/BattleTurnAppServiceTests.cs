@@ -21,6 +21,7 @@ public class BattleTurnAppServiceTests
     private readonly IBattleEngine _engine = Substitute.For<IBattleEngine>();
     private readonly IBattleRealtimeNotifier _notifier = Substitute.For<IBattleRealtimeNotifier>();
     private readonly IBattleEventPublisher _publisher = Substitute.For<IBattleEventPublisher>();
+    private readonly IBattleUnitOfWork _unitOfWork = Substitute.For<IBattleUnitOfWork>();
     private readonly IActionIntake _actionIntake = Substitute.For<IActionIntake>();
     private readonly IClock _clock = Substitute.For<IClock>();
     private readonly BattleTurnAppService _service;
@@ -43,7 +44,7 @@ public class BattleTurnAppServiceTests
     {
         _clock.UtcNow.Returns(DateTimeOffset.UtcNow);
         _service = new BattleTurnAppService(
-            _stateStore, _engine, _notifier, _publisher,
+            _stateStore, _engine, _notifier, _publisher, _unitOfWork,
             _actionIntake, _clock,
             Substitute.For<ILogger<BattleTurnAppService>>());
     }

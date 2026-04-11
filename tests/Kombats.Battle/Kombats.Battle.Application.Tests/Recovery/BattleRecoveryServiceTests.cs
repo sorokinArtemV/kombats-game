@@ -46,6 +46,7 @@ public class BattleRecoveryServiceTests
 
         _turnAppService = new BattleTurnAppService(
             _stateStore, _engine, _notifier, _eventPublisher,
+            Substitute.For<IBattleUnitOfWork>(),
             _actionIntake, _clock,
             Substitute.For<ILogger<BattleTurnAppService>>());
 

@@ -20,6 +20,7 @@ public sealed class BattleTurnAppService
     private readonly IBattleEngine _battleEngine;
     private readonly IBattleRealtimeNotifier _notifier;
     private readonly IBattleEventPublisher _eventPublisher;
+    private readonly IBattleUnitOfWork _unitOfWork;
     private readonly IActionIntake _actionIntake;
     private readonly IClock _clock;
     private readonly ILogger<BattleTurnAppService> _logger;
@@ -29,6 +30,7 @@ public sealed class BattleTurnAppService
         IBattleEngine battleEngine,
         IBattleRealtimeNotifier notifier,
         IBattleEventPublisher eventPublisher,
+        IBattleUnitOfWork unitOfWork,
         IActionIntake actionIntake,
         IClock clock,
         ILogger<BattleTurnAppService> logger)
@@ -37,6 +39,7 @@ public sealed class BattleTurnAppService
         _battleEngine = battleEngine;
         _notifier = notifier;
         _eventPublisher = eventPublisher;
+        _unitOfWork = unitOfWork;
         _actionIntake = actionIntake;
         _clock = clock;
         _logger = logger;
@@ -358,6 +361,12 @@ public sealed class BattleTurnAppService
                 durationMs: 0,
                 rulesetVersion: state.Ruleset.Version,
                 cancellationToken);
+
+            // Flush the bus outbox. UseBusOutbox buffers IPublishEndpoint.Publish calls on the
+            // DbContext change tracker; without SaveChangesAsync the outbox row is never written
+            // and the event never reaches RabbitMQ. Idempotency is protected upstream by the
+            // Redis EndedNow gate, which ensures this branch runs at most once per battle.
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
                 "Battle {BattleId} ended. Reason: {Reason}, Winner: {WinnerPlayerId}",

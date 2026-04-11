@@ -111,6 +111,7 @@ builder.Services.AddOptions<BattleRulesetsOptions>()
 
 // Infrastructure — ports
 builder.Services.AddScoped<IBattleRecoveryRepository, BattleRecoveryRepository>();
+builder.Services.AddScoped<IBattleUnitOfWork, BattleUnitOfWork>();
 builder.Services.AddScoped<IBattleStateStore, RedisBattleStateStore>();
 builder.Services.AddScoped<IBattleRealtimeNotifier, SignalRBattleRealtimeNotifier>();
 builder.Services.AddScoped<IBattleEventPublisher, MassTransitBattleEventPublisher>();
