@@ -13,6 +13,8 @@ public interface IBattleRealtimeNotifier
         Guid battleId,
         Guid playerAId,
         Guid playerBId,
+        string? playerAName,
+        string? playerBName,
         CancellationToken cancellationToken = default);
 
     public Task NotifyTurnOpenedAsync(
@@ -49,6 +51,10 @@ public interface IBattleRealtimeNotifier
         int version,
         int? playerAHp,
         int? playerBHp,
+        string? playerAName,
+        string? playerBName,
+        int? playerAMaxHp,
+        int? playerBMaxHp,
         CancellationToken cancellationToken = default);
 
     Task NotifyBattleEndedAsync(

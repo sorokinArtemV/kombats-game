@@ -14,6 +14,10 @@ public interface IBattleStateStore
     Task<bool> TryInitializeBattleAsync(
         Guid battleId,
         BattleDomainState initialState,
+        string? playerAName,
+        string? playerBName,
+        int? playerAMaxHp,
+        int? playerBMaxHp,
         CancellationToken cancellationToken = default);
 
     Task<BattleSnapshot?> GetStateAsync(Guid battleId, CancellationToken cancellationToken = default);

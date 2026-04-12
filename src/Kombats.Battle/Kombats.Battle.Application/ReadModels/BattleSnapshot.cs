@@ -22,6 +22,12 @@ public sealed class BattleSnapshot
     public int LastResolvedTurnIndex { get; init; }
     public int Version { get; init; }
     
+    // Participant metadata
+    public string? PlayerAName { get; init; }
+    public string? PlayerBName { get; init; }
+    public int? PlayerAMaxHp { get; init; }
+    public int? PlayerBMaxHp { get; init; }
+
     // Player HP
     public int? PlayerAHp { get; init; }
     public int? PlayerBHp { get; init; }

@@ -5,6 +5,7 @@ using Kombats.Battle.Api.Endpoints;
 using Kombats.Battle.Api.Extensions;
 using Kombats.Battle.Application.Ports;
 using Kombats.Battle.Application.UseCases.Lifecycle;
+using Kombats.Battle.Application.UseCases.GetBattleHistory;
 using Kombats.Battle.Application.UseCases.Recovery;
 using Kombats.Battle.Application.UseCases.Turns;
 using Kombats.Battle.Bootstrap.Workers;
@@ -80,6 +81,7 @@ builder.Services.AddScoped<IActionIntake, ActionIntakeService>();
 builder.Services.AddScoped<BattleLifecycleAppService>();
 builder.Services.AddScoped<BattleTurnAppService>();
 builder.Services.AddScoped<BattleRecoveryService>();
+builder.Services.AddScoped<GetBattleHistoryHandler>();
 
 // Infrastructure — persistence
 builder.Services.AddDbContext<BattleDbContext>(options =>
@@ -110,6 +112,8 @@ builder.Services.AddOptions<BattleRulesetsOptions>()
     .ValidateOnStart();
 
 // Infrastructure — ports
+builder.Services.AddScoped<IBattleTurnHistoryStore, BattleTurnHistoryStore>();
+builder.Services.AddScoped<IBattleHistoryRepository, BattleHistoryRepository>();
 builder.Services.AddScoped<IBattleRecoveryRepository, BattleRecoveryRepository>();
 builder.Services.AddScoped<IBattleUnitOfWork, BattleUnitOfWork>();
 builder.Services.AddScoped<IBattleStateStore, RedisBattleStateStore>();

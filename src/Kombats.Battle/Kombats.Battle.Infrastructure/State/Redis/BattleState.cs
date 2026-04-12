@@ -53,6 +53,12 @@ internal sealed class BattleState
     public int? PlayerBAgility { get; set; }
     public int? PlayerBIntuition { get; set; }
 
+    // Participant metadata (infrastructure-level, not domain)
+    public string? PlayerAName { get; set; }
+    public string? PlayerBName { get; set; }
+    public int? PlayerAMaxHp { get; set; }
+    public int? PlayerBMaxHp { get; set; }
+
     // Terminal outcome fields — populated by EndBattleAndMarkResolvedScript when a battle ends.
     // Absent for non-terminal battles and for battles that ended before this field set shipped.
     // Used exclusively by BattleRecoveryService to reconstruct a faithful BattleCompleted if the

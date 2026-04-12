@@ -199,7 +199,11 @@ internal static class RealtimeContractMapper
             EndedReason = endedReason,
             Version = state.Version,
             PlayerAHp = state.PlayerAHp,
-            PlayerBHp = state.PlayerBHp
+            PlayerBHp = state.PlayerBHp,
+            PlayerAName = state.PlayerAName,
+            PlayerBName = state.PlayerBName,
+            PlayerAMaxHp = state.PlayerAMaxHp,
+            PlayerBMaxHp = state.PlayerBMaxHp
         };
     }
 }

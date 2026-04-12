@@ -38,6 +38,9 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
         _logger.LogInformation("Processing CreateBattle command for BattleId: {BattleId}, MatchId: {MatchId}",
             command.BattleId, command.MatchId);
 
+        var playerAName = command.PlayerA.Name;
+        var playerBName = command.PlayerB.Name;
+
         var battle = new BattleEntity
         {
             BattleId = command.BattleId,
@@ -45,7 +48,9 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
             PlayerAId = playerAId,
             PlayerBId = playerBId,
             State = "ArenaOpen",
-            CreatedAt = DateTimeOffset.UtcNow
+            CreatedAt = DateTimeOffset.UtcNow,
+            PlayerAName = playerAName,
+            PlayerBName = playerBName
         };
 
         _dbContext.Battles.Add(battle);
@@ -77,6 +82,8 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
                 playerBId,
                 profileA,
                 profileB,
+                playerAName,
+                playerBName,
                 context.CancellationToken);
 
             if (initResult == null)
@@ -86,6 +93,11 @@ public class CreateBattleConsumer : IConsumer<CreateBattle>
                     command.BattleId);
                 return;
             }
+
+            // Write max HP to BattleEntity (computed by lifecycle service from ruleset)
+            battle.PlayerAMaxHp = initResult.PlayerAMaxHp;
+            battle.PlayerBMaxHp = initResult.PlayerBMaxHp;
+            await _dbContext.SaveChangesAsync(context.CancellationToken);
 
             await context.Publish(new BattleCreated
             {

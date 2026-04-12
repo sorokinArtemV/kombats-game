@@ -1,37 +1,38 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
+using Kombats.Battle.Realtime.Contracts;
+using Kombats.Bff.Application.Clients;
+using Kombats.Bff.Application.Narration;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Kombats.Bff.Application.Clients;
 
 namespace Kombats.Bff.Application.Relay;
 
 public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
 {
-    private readonly ConcurrentDictionary<string, HubConnection> _connections = new();
+    private readonly ConcurrentDictionary<string, BattleConnection> _connections = new();
     private readonly ServicesOptions _servicesOptions;
     private readonly IFrontendBattleSender _sender;
+    private readonly INarrationPipeline _narrationPipeline;
     private readonly ILogger<BattleHubRelay> _logger;
 
-    // The 6 server-to-client event names from Battle's RealtimeEventNames
-    private static readonly string[] EventNames =
-    [
-        "BattleReady",
-        "TurnOpened",
-        "TurnResolved",
-        "PlayerDamaged",
-        "BattleStateUpdated",
-        "BattleEnded"
-    ];
+    /// <summary>Event names relayed blindly (no narration, no deserialization).</summary>
+    private static readonly string[] BlindEventNames = ["BattleReady", "TurnOpened", "PlayerDamaged"];
+
+    /// <summary>The SignalR event name used for narration feed entries.</summary>
+    public const string BattleFeedUpdatedEvent = "BattleFeedUpdated";
 
     public BattleHubRelay(
         IOptions<ServicesOptions> servicesOptions,
         IFrontendBattleSender sender,
+        INarrationPipeline narrationPipeline,
         ILogger<BattleHubRelay> logger)
     {
         _servicesOptions = servicesOptions.Value;
         _sender = sender;
+        _narrationPipeline = narrationPipeline;
         _logger = logger;
     }
 
@@ -41,19 +42,11 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
         string accessToken,
         CancellationToken cancellationToken = default)
     {
-        // If there's already a connection for this frontend connection, dispose it first
+        // If there's already a connection for this frontend connection, dispose it first (reconnect)
         await DisconnectAsync(frontendConnectionId);
 
         string battleHubUrl = $"{_servicesOptions.Battle.BaseUrl.TrimEnd('/')}/battlehub";
 
-        // No WithAutomaticReconnect(): after a transport-level reconnect the downstream
-        // HubConnection gets a new connection ID and is no longer in the Battle group.
-        // Events would be silently dropped. Instead, on any connection loss the Closed
-        // handler fires, the frontend receives BattleConnectionLost, and must re-join
-        // from scratch via a new JoinBattle call.
-        // Capture the current activity so the downstream Battle hub can correlate
-        // the long-lived SignalR session back to the originating frontend request.
-        // WebSocket upgrades do not carry ambient W3C trace context automatically.
         Activity? activity = Activity.Current;
         string? traceparent = activity?.Id;
         string? tracestate = activity?.TraceStateString;
@@ -67,18 +60,13 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
                 {
                     options.Headers["traceparent"] = traceparent;
                     if (!string.IsNullOrEmpty(tracestate))
-                    {
                         options.Headers["tracestate"] = tracestate;
-                    }
                 }
             })
             .Build();
 
-        // Subscribe to all server-to-client events from Battle and relay them to the frontend.
-        // Uses IFrontendBattleSender (backed by IHubContext<BattleHub>) to target the frontend
-        // connection by its stable connection ID. This is safe for use outside hub method scope,
-        // unlike Hub.Clients.Caller which must not be captured in long-lived callbacks.
-        foreach (string eventName in EventNames)
+        // Blind relay handlers — forward as-is, no deserialization
+        foreach (string eventName in BlindEventNames)
         {
             connection.On<object>(eventName, async (payload) =>
             {
@@ -95,6 +83,127 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
             });
         }
 
+        // Typed handler: TurnResolved — relay raw, then generate + send BattleFeedUpdated
+        connection.On<TurnResolvedRealtime>(RealtimeEventNames.TurnResolved, async (turnResolved) =>
+        {
+            // Always relay raw event first
+            try
+            {
+                await _sender.SendAsync(frontendConnectionId, RealtimeEventNames.TurnResolved, [turnResolved]);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to relay TurnResolved to frontend {ConnectionId}", frontendConnectionId);
+            }
+
+            // Then generate narration (best-effort — never block raw relay)
+            try
+            {
+                if (_connections.TryGetValue(frontendConnectionId, out var bc) && bc.State is not null)
+                {
+                    var state = bc.State;
+                    var feed = _narrationPipeline.GenerateTurnFeed(
+                        state.BattleId,
+                        turnResolved,
+                        state.Participants,
+                        state.Commentator,
+                        state.PlayerAHp,
+                        state.PlayerBHp,
+                        state.PlayerAMaxHp,
+                        state.PlayerBMaxHp);
+
+                    if (feed.Entries.Length > 0)
+                    {
+                        await _sender.SendAsync(frontendConnectionId, BattleFeedUpdatedEvent, [feed]);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to generate/send BattleFeedUpdated for TurnResolved on {ConnectionId}",
+                    frontendConnectionId);
+            }
+        });
+
+        // Typed handler: BattleEnded — relay raw, then generate + send BattleFeedUpdated
+        connection.On<BattleEndedRealtime>(RealtimeEventNames.BattleEnded, async (ended) =>
+        {
+            // Always relay raw event first
+            try
+            {
+                await _sender.SendAsync(frontendConnectionId, RealtimeEventNames.BattleEnded, [ended]);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to relay BattleEnded to frontend {ConnectionId}", frontendConnectionId);
+            }
+
+            // Generate end-of-battle narration (best-effort)
+            try
+            {
+                if (_connections.TryGetValue(frontendConnectionId, out var bc) && bc.State is not null)
+                {
+                    var state = bc.State;
+                    var feed = _narrationPipeline.GenerateBattleEndFeed(
+                        state.BattleId,
+                        ended,
+                        state.Participants,
+                        state.Commentator);
+
+                    if (feed.Entries.Length > 0)
+                    {
+                        await _sender.SendAsync(frontendConnectionId, BattleFeedUpdatedEvent, [feed]);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to generate/send BattleFeedUpdated for BattleEnded on {ConnectionId}",
+                    frontendConnectionId);
+            }
+
+            // Auto-cleanup downstream connection
+            _logger.LogInformation(
+                "Battle ended for frontend {ConnectionId}, cleaning up downstream connection",
+                frontendConnectionId);
+            await DisconnectAsync(frontendConnectionId);
+        });
+
+        // Typed handler: BattleStateUpdated — capture HP into connection state, relay raw
+        connection.On<BattleStateUpdatedRealtime>(RealtimeEventNames.BattleStateUpdated, async (stateUpdate) =>
+        {
+            // Update HP tracking in connection state
+            try
+            {
+                if (_connections.TryGetValue(frontendConnectionId, out var bc) && bc.State is not null)
+                {
+                    bc.State.PlayerAHp = stateUpdate.PlayerAHp;
+                    bc.State.PlayerBHp = stateUpdate.PlayerBHp;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to update HP state from BattleStateUpdated on {ConnectionId}",
+                    frontendConnectionId);
+            }
+
+            // Relay raw
+            try
+            {
+                await _sender.SendAsync(frontendConnectionId, RealtimeEventNames.BattleStateUpdated, [stateUpdate]);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to relay BattleStateUpdated to frontend {ConnectionId}", frontendConnectionId);
+            }
+        });
+
         // Handle downstream connection closure
         connection.Closed += async (exception) =>
         {
@@ -102,10 +211,6 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
                 "Downstream Battle connection closed for frontend {ConnectionId}. Exception: {Error}",
                 frontendConnectionId, exception?.Message);
 
-            // BattleConnectionLost is a BFF-originated synthetic event — it is NOT a native
-            // Battle service event. It signals that the BFF→Battle downstream connection
-            // was lost. The frontend should treat this as a hard failure and re-join the
-            // battle from scratch via a new JoinBattle call if the battle is still active.
             try
             {
                 await _sender.SendAsync(frontendConnectionId, "BattleConnectionLost",
@@ -119,8 +224,9 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
             }
         };
 
-        // Store the connection before connecting (so cleanup can find it if connect fails)
-        _connections[frontendConnectionId] = connection;
+        // Store connection before connecting
+        var battleConnection = new BattleConnection(connection, null);
+        _connections[frontendConnectionId] = battleConnection;
 
         try
         {
@@ -136,24 +242,52 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
                 battleId,
                 cancellationToken);
 
-            // Subscribe to BattleEnded to auto-cleanup the downstream connection.
-            // NOTE: This handler runs AFTER the relay handler above (which forwards BattleEnded
-            // to the frontend) because SignalR client dispatches On<> handlers in registration
-            // order. The relay handler in the EventNames loop was registered first, so the
-            // frontend receives BattleEnded before this cleanup handler disposes the connection.
-            connection.On<object>("BattleEnded", async (_) =>
+            // Deserialize snapshot to capture participant names and max HP
+            BattleConnectionState? connectionState = null;
+            try
             {
-                _logger.LogInformation(
-                    "Battle ended for frontend {ConnectionId}, cleaning up downstream connection",
+                var snapshotRealtime = DeserializeSnapshot(snapshot);
+                if (snapshotRealtime is not null)
+                {
+                    var participants = new BattleParticipantSnapshot(
+                        snapshotRealtime.PlayerAId,
+                        snapshotRealtime.PlayerBId,
+                        snapshotRealtime.PlayerAName,
+                        snapshotRealtime.PlayerBName);
+
+                    connectionState = new BattleConnectionState
+                    {
+                        BattleId = battleId,
+                        Participants = participants,
+                        Commentator = new CommentatorState(),
+                        PlayerAHp = snapshotRealtime.PlayerAHp,
+                        PlayerBHp = snapshotRealtime.PlayerBHp,
+                        PlayerAMaxHp = snapshotRealtime.PlayerAMaxHp,
+                        PlayerBMaxHp = snapshotRealtime.PlayerBMaxHp
+                    };
+
+                    // Update connection with state
+                    _connections[frontendConnectionId] = new BattleConnection(connection, connectionState);
+
+                    // Send battle start feed entry
+                    var startFeed = _narrationPipeline.GenerateBattleStartFeed(battleId, participants);
+                    if (startFeed.Entries.Length > 0)
+                    {
+                        await _sender.SendAsync(frontendConnectionId, BattleFeedUpdatedEvent, [startFeed]);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to deserialize snapshot or send battle start feed for {ConnectionId}. Raw relay continues.",
                     frontendConnectionId);
-                await DisconnectAsync(frontendConnectionId);
-            });
+            }
 
             return snapshot;
         }
         catch
         {
-            // If connection or JoinBattle fails, clean up
             _connections.TryRemove(frontendConnectionId, out _);
             await DisposeConnectionSafely(connection);
             throw;
@@ -167,19 +301,19 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
         string actionPayload,
         CancellationToken cancellationToken = default)
     {
-        if (!_connections.TryGetValue(frontendConnectionId, out HubConnection? connection))
+        if (!_connections.TryGetValue(frontendConnectionId, out var bc))
         {
             throw new InvalidOperationException(
                 $"No active battle connection for frontend connection {frontendConnectionId}. Call JoinBattle first.");
         }
 
-        if (connection.State != HubConnectionState.Connected)
+        if (bc.Hub.State != HubConnectionState.Connected)
         {
             throw new InvalidOperationException(
-                $"Battle connection is in {connection.State} state, not Connected.");
+                $"Battle connection is in {bc.Hub.State} state, not Connected.");
         }
 
-        await connection.InvokeAsync(
+        await bc.Hub.InvokeAsync(
             "SubmitTurnAction",
             battleId,
             turnIndex,
@@ -189,12 +323,12 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
 
     public async Task DisconnectAsync(string frontendConnectionId)
     {
-        if (_connections.TryRemove(frontendConnectionId, out HubConnection? connection))
+        if (_connections.TryRemove(frontendConnectionId, out var bc))
         {
             _logger.LogInformation(
                 "Disposing downstream Battle connection for frontend {ConnectionId}",
                 frontendConnectionId);
-            await DisposeConnectionSafely(connection);
+            await DisposeConnectionSafely(bc.Hub);
         }
     }
 
@@ -204,6 +338,18 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
         {
             await DisconnectAsync(connectionId);
         }
+    }
+
+    private static BattleSnapshotRealtime? DeserializeSnapshot(object snapshot)
+    {
+        if (snapshot is JsonElement jsonElement)
+        {
+            return JsonSerializer.Deserialize<BattleSnapshotRealtime>(
+                jsonElement.GetRawText(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+
+        return null;
     }
 
     private static async Task DisposeConnectionSafely(HubConnection connection)
@@ -221,4 +367,7 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
             // Best-effort cleanup — don't throw on dispose
         }
     }
+
+    /// <summary>Wraps a downstream HubConnection with its per-connection narration state.</summary>
+    internal sealed record BattleConnection(HubConnection Hub, BattleConnectionState? State);
 }

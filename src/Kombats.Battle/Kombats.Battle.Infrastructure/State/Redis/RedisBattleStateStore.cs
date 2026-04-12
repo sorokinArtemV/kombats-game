@@ -66,8 +66,12 @@ internal sealed class RedisBattleStateStore : IBattleStateStore
     private string GetSubmissionMarkerKey(Guid battleId, int turnIndex) => $"battle:turn:{battleId}:{turnIndex}:submitted";
 
     public async Task<bool> TryInitializeBattleAsync(
-        Guid battleId, 
-        BattleDomainState initialState, 
+        Guid battleId,
+        BattleDomainState initialState,
+        string? playerAName,
+        string? playerBName,
+        int? playerAMaxHp,
+        int? playerBMaxHp,
         CancellationToken cancellationToken = default)
     {
         var db = _redis.GetDatabase();
@@ -76,6 +80,12 @@ internal sealed class RedisBattleStateStore : IBattleStateStore
         // Convert Domain state to Infrastructure storage model
         DateTimeOffset deadlineUtc = _clock.UtcNow; // ArenaOpen deadline is meaningless but consistent
         BattleState state = StoredStateMapper.FromDomainState(initialState, deadlineUtc, version: 1);
+
+        // Set participant metadata (infrastructure-level, outside domain state)
+        state.PlayerAName = playerAName;
+        state.PlayerBName = playerBName;
+        state.PlayerAMaxHp = playerAMaxHp;
+        state.PlayerBMaxHp = playerBMaxHp;
 
         // Use SETNX for idempotent initialization
         string json = JsonSerializer.Serialize(state);

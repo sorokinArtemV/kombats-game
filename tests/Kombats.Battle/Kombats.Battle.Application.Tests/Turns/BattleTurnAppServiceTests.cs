@@ -23,6 +23,7 @@ public class BattleTurnAppServiceTests
     private readonly IBattleEventPublisher _publisher = Substitute.For<IBattleEventPublisher>();
     private readonly IBattleUnitOfWork _unitOfWork = Substitute.For<IBattleUnitOfWork>();
     private readonly IActionIntake _actionIntake = Substitute.For<IActionIntake>();
+    private readonly IBattleTurnHistoryStore _turnHistoryStore = Substitute.For<IBattleTurnHistoryStore>();
     private readonly IClock _clock = Substitute.For<IClock>();
     private readonly BattleTurnAppService _service;
 
@@ -45,7 +46,7 @@ public class BattleTurnAppServiceTests
         _clock.UtcNow.Returns(DateTimeOffset.UtcNow);
         _service = new BattleTurnAppService(
             _stateStore, _engine, _notifier, _publisher, _unitOfWork,
-            _actionIntake, _clock,
+            _actionIntake, _turnHistoryStore, _clock,
             Substitute.For<ILogger<BattleTurnAppService>>());
     }
 
@@ -386,6 +387,160 @@ public class BattleTurnAppServiceTests
             _battleId, 1, Arg.Any<string>(), Arg.Any<string>(),
             Arg.Any<TurnResolutionLog>(), Arg.Any<CancellationToken>());
 
+        await _notifier.Received(1).NotifyTurnOpenedAsync(
+            _battleId, 2, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    // ========== Turn History Persistence Tests ==========
+
+    [Fact]
+    public async Task ResolveTurn_TurnContinues_PersistsTurnHistory()
+    {
+        var snapshot = CreateSnapshot(phase: BattlePhase.Resolving, turnIndex: 1);
+        var afterTurnOpenSnapshot = CreateSnapshot(phase: BattlePhase.TurnOpen, turnIndex: 2, lastResolved: 1);
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(snapshot, snapshot, afterTurnOpenSnapshot);
+
+        _stateStore.GetActionsAsync(_battleId, 1, _playerAId, _playerBId, Arg.Any<CancellationToken>())
+            .Returns(((PlayerActionCommand?)null, (PlayerActionCommand?)null));
+
+        var turnLog = new TurnResolutionLog
+        {
+            BattleId = _battleId, TurnIndex = 1,
+            AtoB = new AttackResolution { AttackerId = _playerAId, DefenderId = _playerBId, TurnIndex = 1, Outcome = AttackOutcome.Hit, Damage = 15 },
+            BtoA = new AttackResolution { AttackerId = _playerBId, DefenderId = _playerAId, TurnIndex = 1, Outcome = AttackOutcome.Dodged, Damage = 0 }
+        };
+
+        var newState = new BattleDomainState(
+            _battleId, snapshot.MatchId, _playerAId, _playerBId,
+            snapshot.Ruleset, BattlePhase.TurnOpen, 2, 0, 1,
+            new PlayerState(_playerAId, 100, 100, DefaultStats),
+            new PlayerState(_playerBId, 100, 85, DefaultStats));
+
+        _engine.ResolveTurn(Arg.Any<BattleDomainState>(), Arg.Any<PlayerAction>(), Arg.Any<PlayerAction>())
+            .Returns(new BattleResolutionResult
+            {
+                NewState = newState,
+                TurnLog = turnLog,
+                Events = [new TurnResolvedDomainEvent(_battleId, 1,
+                    PlayerAction.NoAction(_playerAId, 1), PlayerAction.NoAction(_playerBId, 1),
+                    turnLog, DateTimeOffset.UtcNow)]
+            });
+
+        _stateStore.MarkTurnResolvedAndOpenNextAsync(
+                _battleId, 1, 2, Arg.Any<DateTimeOffset>(), 0, 100, 85, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var result = await _service.ResolveTurnAsync(_battleId, CancellationToken.None);
+
+        result.Should().BeTrue();
+        await _turnHistoryStore.Received(1).PersistTurnAsync(
+            _battleId, 1, turnLog, 100, 85, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResolveTurn_BattleEnds_TracksTurnHistory()
+    {
+        var snapshot = CreateSnapshot(phase: BattlePhase.Resolving, turnIndex: 1);
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(snapshot, snapshot);
+
+        _stateStore.GetActionsAsync(_battleId, 1, _playerAId, _playerBId, Arg.Any<CancellationToken>())
+            .Returns(((PlayerActionCommand?)null, (PlayerActionCommand?)null));
+
+        var turnLog = new TurnResolutionLog
+        {
+            BattleId = _battleId, TurnIndex = 1,
+            AtoB = new AttackResolution { AttackerId = _playerAId, DefenderId = _playerBId, TurnIndex = 1, Outcome = AttackOutcome.Hit, Damage = 100 },
+            BtoA = new AttackResolution { AttackerId = _playerBId, DefenderId = _playerAId, TurnIndex = 1, Outcome = AttackOutcome.NoAction, Damage = 0 }
+        };
+
+        var newState = new BattleDomainState(
+            _battleId, snapshot.MatchId, _playerAId, _playerBId,
+            snapshot.Ruleset, BattlePhase.Ended, 1, 0, 1,
+            new PlayerState(_playerAId, 100, 100, DefaultStats),
+            new PlayerState(_playerBId, 100, 0, DefaultStats));
+
+        _engine.ResolveTurn(Arg.Any<BattleDomainState>(), Arg.Any<PlayerAction>(), Arg.Any<PlayerAction>())
+            .Returns(new BattleResolutionResult
+            {
+                NewState = newState,
+                TurnLog = turnLog,
+                Events =
+                [
+                    new BattleEndedDomainEvent(_battleId, _playerAId, EndBattleReason.Normal, 1, DateTimeOffset.UtcNow)
+                ]
+            });
+
+        _stateStore.EndBattleAndMarkResolvedAsync(
+                _battleId, 1, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<BattleEndOutcome>(), Arg.Any<CancellationToken>())
+            .Returns(EndBattleCommitResult.EndedNow);
+
+        var result = await _service.ResolveTurnAsync(_battleId, CancellationToken.None);
+
+        result.Should().BeTrue();
+        _turnHistoryStore.Received(1).TrackTurn(
+            _battleId, 1, turnLog, 100, 0);
+        // PersistTurnAsync should NOT be called (TrackTurn is the battle-ending path)
+        await _turnHistoryStore.DidNotReceive().PersistTurnAsync(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<TurnResolutionLog>(),
+            Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ResolveTurn_TurnContinues_HistoryFailure_DoesNotBlockResolution()
+    {
+        var snapshot = CreateSnapshot(phase: BattlePhase.Resolving, turnIndex: 1);
+        var afterTurnOpenSnapshot = CreateSnapshot(phase: BattlePhase.TurnOpen, turnIndex: 2, lastResolved: 1);
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(snapshot, snapshot, afterTurnOpenSnapshot);
+
+        _stateStore.GetActionsAsync(_battleId, 1, _playerAId, _playerBId, Arg.Any<CancellationToken>())
+            .Returns(((PlayerActionCommand?)null, (PlayerActionCommand?)null));
+
+        var turnLog = new TurnResolutionLog
+        {
+            BattleId = _battleId, TurnIndex = 1,
+            AtoB = new AttackResolution { AttackerId = _playerAId, DefenderId = _playerBId, TurnIndex = 1, Outcome = AttackOutcome.NoAction, Damage = 0 },
+            BtoA = new AttackResolution { AttackerId = _playerBId, DefenderId = _playerAId, TurnIndex = 1, Outcome = AttackOutcome.NoAction, Damage = 0 }
+        };
+
+        var newState = new BattleDomainState(
+            _battleId, snapshot.MatchId, _playerAId, _playerBId,
+            snapshot.Ruleset, BattlePhase.TurnOpen, 2, 1, 1,
+            new PlayerState(_playerAId, 100, 100, DefaultStats),
+            new PlayerState(_playerBId, 100, 100, DefaultStats));
+
+        _engine.ResolveTurn(Arg.Any<BattleDomainState>(), Arg.Any<PlayerAction>(), Arg.Any<PlayerAction>())
+            .Returns(new BattleResolutionResult
+            {
+                NewState = newState,
+                TurnLog = turnLog,
+                Events = [new TurnResolvedDomainEvent(_battleId, 1,
+                    PlayerAction.NoAction(_playerAId, 1), PlayerAction.NoAction(_playerBId, 1),
+                    turnLog, DateTimeOffset.UtcNow)]
+            });
+
+        _stateStore.MarkTurnResolvedAndOpenNextAsync(
+                _battleId, 1, 2, Arg.Any<DateTimeOffset>(), 1, 100, 100, Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        // Simulate PG failure
+        _turnHistoryStore.PersistTurnAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<TurnResolutionLog>(),
+                Arg.Any<int>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new Exception("PG connection lost"));
+
+        var result = await _service.ResolveTurnAsync(_battleId, CancellationToken.None);
+
+        // Battle continues despite history write failure
+        result.Should().BeTrue();
+
+        // Notifications still fire
+        await _notifier.Received(1).NotifyTurnResolvedAsync(
+            _battleId, 1, Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<TurnResolutionLog>(), Arg.Any<CancellationToken>());
         await _notifier.Received(1).NotifyTurnOpenedAsync(
             _battleId, 2, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }

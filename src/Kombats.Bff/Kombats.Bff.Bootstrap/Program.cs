@@ -5,6 +5,8 @@ using Kombats.Bff.Api.Hubs;
 using Kombats.Bff.Api.Middleware;
 using Kombats.Bff.Application.Clients;
 using Kombats.Bff.Application.Composition;
+using Kombats.Bff.Application.Narration;
+using Kombats.Bff.Application.Narration.Templates;
 using Kombats.Bff.Application.Relay;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Http.Resilience;
@@ -239,12 +241,54 @@ builder.Services.AddHttpClient<IMatchmakingClient, MatchmakingClient>(client =>
         .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.AttemptTimeoutSeconds));
 });
 
+// Typed HttpClients — Battle
+builder.Services.AddHttpClient<IBattleClient, BattleClient>(client =>
+{
+    string baseUrl = builder.Configuration["Services:Battle:BaseUrl"]
+        ?? throw new InvalidOperationException("Services:Battle:BaseUrl is required.");
+    client.BaseAddress = new Uri(baseUrl);
+})
+.AddHttpMessageHandler<JwtForwardingHandler>()
+.AddResilienceHandler("battle", (pipeline, _) =>
+{
+    pipeline
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.TotalRequestTimeoutSeconds))
+        .AddRetry(new HttpRetryStrategyOptions
+        {
+            MaxRetryAttempts = resilienceOptions.RetryMaxAttempts,
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(500),
+            ShouldHandle = args =>
+            {
+                if (args.Outcome.Result?.RequestMessage?.Method != HttpMethod.Get)
+                    return ValueTask.FromResult(false);
+                return new HttpRetryStrategyOptions().ShouldHandle(args);
+            }
+        })
+        .AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds),
+            MinimumThroughput = resilienceOptions.CircuitBreakerFailureThreshold,
+            BreakDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds)
+        })
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.AttemptTimeoutSeconds));
+});
+
 // SignalR — frontend-facing hub
 builder.Services.AddSignalR();
 
 // Frontend event sender — uses IHubContext<BattleHub> to target connections by ID.
 // IHubContext is stable outside hub method scope (unlike Hub.Clients.Caller).
 builder.Services.AddSingleton<IFrontendBattleSender, HubContextBattleSender>();
+
+// Narration subsystem — pure application logic, no infrastructure dependencies
+builder.Services.AddSingleton<ITemplateCatalog, InMemoryTemplateCatalog>();
+builder.Services.AddSingleton<ITemplateSelector, DeterministicTemplateSelector>();
+builder.Services.AddSingleton<INarrationRenderer, PlaceholderNarrationRenderer>();
+builder.Services.AddSingleton<ICommentatorPolicy, DefaultCommentatorPolicy>();
+builder.Services.AddSingleton<IFeedAssembler, DefaultFeedAssembler>();
+builder.Services.AddSingleton<INarrationPipeline, NarrationPipeline>();
 
 // Battle hub relay — manages per-connection downstream SignalR connections to Battle
 builder.Services.AddSingleton<IBattleHubRelay, BattleHubRelay>();

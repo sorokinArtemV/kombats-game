@@ -13,6 +13,7 @@ public class BattleDbContext : Microsoft.EntityFrameworkCore.DbContext
     }
 
     public DbSet<BattleEntity> Battles { get; set; } = null!;
+    public DbSet<BattleTurnEntity> BattleTurns { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,7 +34,30 @@ public class BattleDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.EndedAt).IsRequired(false);
             entity.Property(e => e.EndReason).HasMaxLength(50).IsRequired(false);
             entity.Property(e => e.WinnerPlayerId).IsRequired(false);
+            entity.Property(e => e.PlayerAName).HasMaxLength(16).IsRequired(false);
+            entity.Property(e => e.PlayerBName).HasMaxLength(16).IsRequired(false);
+            entity.Property(e => e.PlayerAMaxHp).IsRequired(false);
+            entity.Property(e => e.PlayerBMaxHp).IsRequired(false);
             entity.HasIndex(e => e.MatchId);
+        });
+
+        modelBuilder.Entity<BattleTurnEntity>(entity =>
+        {
+            entity.ToTable("battle_turns");
+            entity.HasKey(e => new { e.BattleId, e.TurnIndex });
+            entity.Property(e => e.AtoBOutcome).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.AtoBAttackZone).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.AtoBDefenderBlockPrimary).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.AtoBDefenderBlockSecondary).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.BtoAOutcome).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.BtoAAttackZone).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.BtoADefenderBlockPrimary).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.BtoADefenderBlockSecondary).HasMaxLength(20).IsRequired(false);
+            entity.Property(e => e.ResolvedAt).IsRequired();
+            entity.HasOne<BattleEntity>()
+                .WithMany()
+                .HasForeignKey(e => e.BattleId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.AddInboxStateEntity(); 

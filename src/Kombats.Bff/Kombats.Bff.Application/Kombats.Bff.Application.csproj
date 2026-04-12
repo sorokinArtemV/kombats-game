@@ -8,4 +8,8 @@
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\Kombats.Battle\Kombats.Battle.Realtime.Contracts\Kombats.Battle.Realtime.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>

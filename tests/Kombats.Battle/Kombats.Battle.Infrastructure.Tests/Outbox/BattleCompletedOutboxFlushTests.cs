@@ -155,7 +155,7 @@ public class BattleCompletedOutboxFlushTests
 
         var service = new BattleTurnAppService(
             stateStore, engine, notifier, publisher, unitOfWork,
-            actionIntake, clock,
+            actionIntake, Substitute.For<IBattleTurnHistoryStore>(), clock,
             NullLogger<BattleTurnAppService>.Instance);
 
         // Act
@@ -207,7 +207,7 @@ public class BattleCompletedOutboxFlushTests
 
         var service = new BattleTurnAppService(
             stateStore, engine, notifier, publisher, noOpUnitOfWork,
-            actionIntake, clock,
+            actionIntake, Substitute.For<IBattleTurnHistoryStore>(), clock,
             NullLogger<BattleTurnAppService>.Instance);
 
         // Act

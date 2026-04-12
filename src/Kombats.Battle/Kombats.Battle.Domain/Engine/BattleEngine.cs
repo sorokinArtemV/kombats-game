@@ -158,7 +158,8 @@ public sealed class BattleEngine : IBattleEngine
         return new BattleResolutionResult
         {
             NewState = newState,
-            Events = events
+            Events = events,
+            TurnLog = turnLog
         };
     }
 

@@ -68,7 +68,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     public async Task TryInitialize_NewBattle_ReturnsTrue()
     {
         var state = CreateDomainState();
-        var result = await _store.TryInitializeBattleAsync(_battleId, state);
+        var result = await _store.TryInitializeBattleAsync(_battleId, state, null, null, null, null);
         result.Should().BeTrue();
     }
 
@@ -76,9 +76,9 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     public async Task TryInitialize_DuplicateBattle_ReturnsFalse_Idempotent()
     {
         var state = CreateDomainState();
-        await _store.TryInitializeBattleAsync(_battleId, state);
+        await _store.TryInitializeBattleAsync(_battleId, state, null, null, null, null);
 
-        var duplicate = await _store.TryInitializeBattleAsync(_battleId, state);
+        var duplicate = await _store.TryInitializeBattleAsync(_battleId, state, null, null, null, null);
         duplicate.Should().BeFalse();
     }
 
@@ -86,7 +86,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     public async Task TryInitialize_ThenGet_RoundTripsAllFields()
     {
         var state = CreateDomainState();
-        await _store.TryInitializeBattleAsync(_battleId, state);
+        await _store.TryInitializeBattleAsync(_battleId, state, null, null, null, null);
 
         var snapshot = await _store.GetStateAsync(_battleId);
         snapshot.Should().NotBeNull();
@@ -114,7 +114,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task TryOpenTurn_FromArenaOpen_Succeeds()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         var deadline = DateTimeOffset.UtcNow.AddSeconds(30);
 
         var result = await _store.TryOpenTurnAsync(_battleId, 1, deadline);
@@ -128,7 +128,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task TryOpenTurn_WrongTurnIndex_Fails()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
 
         // Try to open turn 2 when LastResolvedTurnIndex is 0 (expects turn 1)
         var result = await _store.TryOpenTurnAsync(_battleId, 2, DateTimeOffset.UtcNow.AddSeconds(30));
@@ -138,7 +138,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task TryOpenTurn_AlreadyTurnOpen_Fails()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
 
         // Try to open turn 1 again (phase is TurnOpen, not ArenaOpen/Resolving)
@@ -151,7 +151,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task TryMarkResolving_FromTurnOpen_Succeeds()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
 
         var result = await _store.TryMarkTurnResolvingAsync(_battleId, 1);
@@ -164,7 +164,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task TryMarkResolving_WrongTurnIndex_Fails()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
 
         var result = await _store.TryMarkTurnResolvingAsync(_battleId, 2);
@@ -174,7 +174,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task TryMarkResolving_FromArenaOpen_Fails()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
 
         var result = await _store.TryMarkTurnResolvingAsync(_battleId, 1);
         result.Should().BeFalse();
@@ -185,7 +185,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task ResolveAndOpenNext_FullCycle_UpdatesStateCorrectly()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
 
@@ -205,7 +205,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task ResolveAndOpenNext_WrongPhase_Fails()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
 
         // Phase is TurnOpen, not Resolving
@@ -219,7 +219,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task EndBattle_FromResolving_ReturnsEndedNow()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
 
@@ -234,7 +234,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task EndBattle_AlreadyEnded_ReturnsAlreadyEnded()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
         await _store.EndBattleAndMarkResolvedAsync(_battleId, 1, 0, 0, 100, DefaultOutcome());
@@ -252,7 +252,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
         // StoredStateMapper must project them back onto BattleSnapshot. This is the data
         // BattleRecoveryService relies on to avoid the data-less OrphanRecovery fallback
         // when the process crashes between Redis end-commit and the outbox flush.
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
 
@@ -280,7 +280,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     {
         // Draws and system-level terminations carry a null WinnerPlayerId. The Lua script
         // uses cjson.null for this case; the snapshot must deserialize back to a null Guid?.
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
 
@@ -302,7 +302,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task EndBattle_WrongPhase_ReturnsNotCommitted()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30));
 
         // Phase is TurnOpen, not Resolving
@@ -315,7 +315,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task ClaimDueBattles_DueBattleInTurnOpen_ClaimSucceeds()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         // Open turn with deadline in the past
         var pastDeadline = DateTimeOffset.UtcNow.AddSeconds(-5);
         await _store.TryOpenTurnAsync(_battleId, 1, pastDeadline);
@@ -331,7 +331,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task ClaimDueBattles_DeadlineInFuture_NoClaim()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         var futureDeadline = DateTimeOffset.UtcNow.AddMinutes(5);
         await _store.TryOpenTurnAsync(_battleId, 1, futureDeadline);
 
@@ -344,7 +344,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     [Fact]
     public async Task ClaimDueBattles_EndedBattle_RemovedFromZset()
     {
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
         var pastDeadline = DateTimeOffset.UtcNow.AddSeconds(-5);
         await _store.TryOpenTurnAsync(_battleId, 1, pastDeadline);
         await _store.TryMarkTurnResolvingAsync(_battleId, 1);
@@ -426,7 +426,7 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
     public async Task FullLifecycle_InitOpenResolveContinueEnd_AllTransitionsWork()
     {
         // Init
-        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState());
+        await _store.TryInitializeBattleAsync(_battleId, CreateDomainState(), null, null, null, null);
 
         // Turn 1: open → resolve → open next
         (await _store.TryOpenTurnAsync(_battleId, 1, DateTimeOffset.UtcNow.AddSeconds(30))).Should().BeTrue();
@@ -442,6 +442,36 @@ public class RedisBattleStateStoreTests : IAsyncLifetime
         var snapshot = await _store.GetStateAsync(_battleId);
         snapshot!.Phase.Should().Be(BattlePhase.Ended);
         snapshot.LastResolvedTurnIndex.Should().Be(2);
+    }
+
+    // ========== Participant Metadata (Names + MaxHP) ==========
+
+    [Fact]
+    public async Task TryInitialize_WithNames_RoundTripsNamesAndMaxHp()
+    {
+        var state = CreateDomainState();
+        await _store.TryInitializeBattleAsync(_battleId, state, "Alice", "Bob", 150, 130);
+
+        var snapshot = await _store.GetStateAsync(_battleId);
+        snapshot.Should().NotBeNull();
+        snapshot!.PlayerAName.Should().Be("Alice");
+        snapshot.PlayerBName.Should().Be("Bob");
+        snapshot.PlayerAMaxHp.Should().Be(150);
+        snapshot.PlayerBMaxHp.Should().Be(130);
+    }
+
+    [Fact]
+    public async Task TryInitialize_WithNullNames_RoundTripsAsNull()
+    {
+        var state = CreateDomainState();
+        await _store.TryInitializeBattleAsync(_battleId, state, null, null, null, null);
+
+        var snapshot = await _store.GetStateAsync(_battleId);
+        snapshot.Should().NotBeNull();
+        snapshot!.PlayerAName.Should().BeNull();
+        snapshot.PlayerBName.Should().BeNull();
+        snapshot.PlayerAMaxHp.Should().BeNull();
+        snapshot.PlayerBMaxHp.Should().BeNull();
     }
 
     // ========== Helpers ==========

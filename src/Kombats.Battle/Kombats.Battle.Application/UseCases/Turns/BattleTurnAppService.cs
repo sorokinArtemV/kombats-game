@@ -22,6 +22,7 @@ public sealed class BattleTurnAppService
     private readonly IBattleEventPublisher _eventPublisher;
     private readonly IBattleUnitOfWork _unitOfWork;
     private readonly IActionIntake _actionIntake;
+    private readonly IBattleTurnHistoryStore _turnHistoryStore;
     private readonly IClock _clock;
     private readonly ILogger<BattleTurnAppService> _logger;
 
@@ -32,6 +33,7 @@ public sealed class BattleTurnAppService
         IBattleEventPublisher eventPublisher,
         IBattleUnitOfWork unitOfWork,
         IActionIntake actionIntake,
+        IBattleTurnHistoryStore turnHistoryStore,
         IClock clock,
         ILogger<BattleTurnAppService> logger)
     {
@@ -41,6 +43,7 @@ public sealed class BattleTurnAppService
         _eventPublisher = eventPublisher;
         _unitOfWork = unitOfWork;
         _actionIntake = actionIntake;
+        _turnHistoryStore = turnHistoryStore;
         _clock = clock;
         _logger = logger;
     }
@@ -349,6 +352,15 @@ public sealed class BattleTurnAppService
 
         if (endResult == EndBattleCommitResult.EndedNow)
         {
+            // Track final turn in DbContext for atomic commit with outbox
+            if (resolutionResult.TurnLog is not null)
+            {
+                _turnHistoryStore.TrackTurn(
+                    battleId, turnIndex, resolutionResult.TurnLog,
+                    resolutionResult.NewState.PlayerA.CurrentHp,
+                    resolutionResult.NewState.PlayerB.CurrentHp);
+            }
+
             // Only notify/publish if battle ended in this call
             await _notifier.NotifyBattleEndedAsync(
                 battleId,
@@ -433,6 +445,26 @@ public sealed class BattleTurnAppService
             return false;
         }
 
+        // Persist turn history (best-effort — must not block battle progression)
+        if (resolutionResult.TurnLog is not null)
+        {
+            try
+            {
+                await _turnHistoryStore.PersistTurnAsync(
+                    battleId, turnIndex, resolutionResult.TurnLog,
+                    resolutionResult.NewState.PlayerA.CurrentHp,
+                    resolutionResult.NewState.PlayerB.CurrentHp,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to persist turn history for BattleId: {BattleId}, Turn: {TurnIndex}. "
+                    + "Battle continues. Post-match feed may have a gap.",
+                    battleId, turnIndex);
+            }
+        }
+
         // Reload state to get authoritative deadline
         var stateAfterTurnOpen = await _stateStore.GetStateAsync(battleId, cancellationToken);
         if (stateAfterTurnOpen == null)
@@ -485,6 +517,10 @@ public sealed class BattleTurnAppService
             stateAfterTurnOpen.Version,
             resolutionResult.NewState.PlayerA.CurrentHp,
             resolutionResult.NewState.PlayerB.CurrentHp,
+            stateAfterTurnOpen.PlayerAName,
+            stateAfterTurnOpen.PlayerBName,
+            stateAfterTurnOpen.PlayerAMaxHp,
+            stateAfterTurnOpen.PlayerBMaxHp,
             cancellationToken);
 
         _logger.LogInformation(

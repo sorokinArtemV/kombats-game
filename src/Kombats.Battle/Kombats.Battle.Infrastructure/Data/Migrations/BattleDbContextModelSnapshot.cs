@@ -50,9 +50,27 @@ namespace Kombats.Battle.Infrastructure.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("player_a_id");
 
+                    b.Property<int?>("PlayerAMaxHp")
+                        .HasColumnType("integer")
+                        .HasColumnName("player_a_max_hp");
+
+                    b.Property<string>("PlayerAName")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("player_a_name");
+
                     b.Property<Guid>("PlayerBId")
                         .HasColumnType("uuid")
                         .HasColumnName("player_b_id");
+
+                    b.Property<int?>("PlayerBMaxHp")
+                        .HasColumnType("integer")
+                        .HasColumnName("player_b_max_hp");
+
+                    b.Property<string>("PlayerBName")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("player_b_name");
 
                     b.Property<string>("State")
                         .IsRequired()
@@ -71,6 +89,100 @@ namespace Kombats.Battle.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_battles_match_id");
 
                     b.ToTable("battles", "battle");
+                });
+
+            modelBuilder.Entity("Kombats.Battle.Infrastructure.Data.Entities.BattleTurnEntity", b =>
+                {
+                    b.Property<Guid>("BattleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("battle_id");
+
+                    b.Property<int>("TurnIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("turn_index");
+
+                    b.Property<string>("AtoBAttackZone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ato_b_attack_zone");
+
+                    b.Property<int>("AtoBDamage")
+                        .HasColumnType("integer")
+                        .HasColumnName("ato_b_damage");
+
+                    b.Property<string>("AtoBDefenderBlockPrimary")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ato_b_defender_block_primary");
+
+                    b.Property<string>("AtoBDefenderBlockSecondary")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ato_b_defender_block_secondary");
+
+                    b.Property<string>("AtoBOutcome")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("ato_b_outcome");
+
+                    b.Property<bool>("AtoBWasBlocked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ato_b_was_blocked");
+
+                    b.Property<bool>("AtoBWasCrit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ato_b_was_crit");
+
+                    b.Property<string>("BtoAAttackZone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bto_a_attack_zone");
+
+                    b.Property<int>("BtoADamage")
+                        .HasColumnType("integer")
+                        .HasColumnName("bto_a_damage");
+
+                    b.Property<string>("BtoADefenderBlockPrimary")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bto_a_defender_block_primary");
+
+                    b.Property<string>("BtoADefenderBlockSecondary")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("bto_a_defender_block_secondary");
+
+                    b.Property<string>("BtoAOutcome")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("bto_a_outcome");
+
+                    b.Property<bool>("BtoAWasBlocked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("bto_a_was_blocked");
+
+                    b.Property<bool>("BtoAWasCrit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("bto_a_was_crit");
+
+                    b.Property<int>("PlayerAHpAfter")
+                        .HasColumnType("integer")
+                        .HasColumnName("player_a_hp_after");
+
+                    b.Property<int>("PlayerBHpAfter")
+                        .HasColumnType("integer")
+                        .HasColumnName("player_b_hp_after");
+
+                    b.Property<DateTimeOffset>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at");
+
+                    b.HasKey("BattleId", "TurnIndex")
+                        .HasName("pk_battle_turns");
+
+                    b.ToTable("battle_turns", "battle");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.InboxState", b =>
@@ -289,6 +401,16 @@ namespace Kombats.Battle.Infrastructure.Data.Migrations
                         .HasDatabaseName("ix_outbox_state_created");
 
                     b.ToTable("outbox_state", "battle");
+                });
+
+            modelBuilder.Entity("Kombats.Battle.Infrastructure.Data.Entities.BattleTurnEntity", b =>
+                {
+                    b.HasOne("Kombats.Battle.Infrastructure.Data.Entities.BattleEntity", null)
+                        .WithMany()
+                        .HasForeignKey("BattleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_battle_turns_battles_battle_id");
                 });
 
             modelBuilder.Entity("MassTransit.EntityFrameworkCoreIntegration.OutboxMessage", b =>

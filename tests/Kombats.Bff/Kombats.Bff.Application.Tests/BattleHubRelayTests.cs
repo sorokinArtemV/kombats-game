@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Kombats.Bff.Application.Clients;
+using Kombats.Bff.Application.Narration;
+using Kombats.Bff.Application.Narration.Templates;
 using Kombats.Bff.Application.Relay;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -12,33 +14,43 @@ public sealed class BattleHubRelayTests
 {
     private readonly BattleHubRelay _relay;
     private readonly IFrontendBattleSender _sender;
+    private readonly INarrationPipeline _pipeline;
+
+    private static ServicesOptions CreateServicesOptions(string battleBaseUrl = "http://localhost:5003") => new()
+    {
+        Players = new ServiceOptions { BaseUrl = "http://localhost:5001" },
+        Matchmaking = new ServiceOptions { BaseUrl = "http://localhost:5002" },
+        Battle = new ServiceOptions { BaseUrl = battleBaseUrl }
+    };
+
+    private static INarrationPipeline CreateRealPipeline() => new NarrationPipeline(
+        new InMemoryTemplateCatalog(),
+        new DeterministicTemplateSelector(),
+        new PlaceholderNarrationRenderer(),
+        new DefaultCommentatorPolicy(),
+        new DefaultFeedAssembler());
 
     public BattleHubRelayTests()
     {
-        var options = Options.Create(new ServicesOptions
-        {
-            Players = new ServiceOptions { BaseUrl = "http://localhost:5001" },
-            Matchmaking = new ServiceOptions { BaseUrl = "http://localhost:5002" },
-            Battle = new ServiceOptions { BaseUrl = "http://localhost:5003" }
-        });
-
         _sender = Substitute.For<IFrontendBattleSender>();
-        var logger = Substitute.For<ILogger<BattleHubRelay>>();
+        _pipeline = CreateRealPipeline();
 
-        _relay = new BattleHubRelay(options, _sender, logger);
+        _relay = new BattleHubRelay(
+            Options.Create(CreateServicesOptions()),
+            _sender,
+            _pipeline,
+            Substitute.For<ILogger<BattleHubRelay>>());
     }
 
     [Fact]
     public async Task SubmitTurnActionAsync_WithoutJoin_ThrowsInvalidOperation()
     {
-        // Act
         Func<Task> act = () => _relay.SubmitTurnActionAsync(
             "connection-1",
             Guid.NewGuid(),
             0,
             "Attack:Head");
 
-        // Assert
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*No active battle connection*");
     }
@@ -46,35 +58,24 @@ public sealed class BattleHubRelayTests
     [Fact]
     public async Task DisconnectAsync_WithoutConnection_DoesNotThrow()
     {
-        // Act — disconnecting a non-existent connection should be a no-op
         Func<Task> act = () => _relay.DisconnectAsync("nonexistent-connection");
-
-        // Assert
         await act.Should().NotThrowAsync();
     }
 
     [Fact]
     public async Task JoinBattleAsync_WithUnreachableBattle_ThrowsAndCleansUp()
     {
-        // Arrange — Battle service is not running, so connection will fail
-        var options = Options.Create(new ServicesOptions
-        {
-            Players = new ServiceOptions { BaseUrl = "http://localhost:5001" },
-            Matchmaking = new ServiceOptions { BaseUrl = "http://localhost:5002" },
-            Battle = new ServiceOptions { BaseUrl = "http://unreachable-host:9999" }
-        });
+        var relay = new BattleHubRelay(
+            Options.Create(CreateServicesOptions("http://unreachable-host:9999")),
+            Substitute.For<IFrontendBattleSender>(),
+            _pipeline,
+            Substitute.For<ILogger<BattleHubRelay>>());
 
-        var sender = Substitute.For<IFrontendBattleSender>();
-        var logger = Substitute.For<ILogger<BattleHubRelay>>();
-        var relay = new BattleHubRelay(options, sender, logger);
-
-        // Act
         Func<Task> act = () => relay.JoinBattleAsync(
             Guid.NewGuid(),
             "connection-1",
             "fake-jwt-token");
 
-        // Assert — should throw because Battle is unreachable
         await act.Should().ThrowAsync<Exception>();
 
         // After failure, SubmitTurnAction should also fail (connection cleaned up)
@@ -86,10 +87,7 @@ public sealed class BattleHubRelayTests
     [Fact]
     public async Task DisposeAsync_CleansUpAllConnections()
     {
-        // Act — disposing an empty relay should not throw
         Func<Task> act = async () => await _relay.DisposeAsync();
-
-        // Assert
         await act.Should().NotThrowAsync();
     }
 
@@ -108,7 +106,6 @@ public sealed class BattleHubRelayTests
     [Fact]
     public void BattleHubRelay_UsesIFrontendBattleSender_NotCallback()
     {
-        // Verify the relay constructor requires IFrontendBattleSender
         var ctors = typeof(BattleHubRelay).GetConstructors();
         ctors.Should().HaveCount(1);
 
@@ -120,12 +117,26 @@ public sealed class BattleHubRelayTests
     [Fact]
     public void IBattleHubRelay_JoinBattleAsync_DoesNotAcceptCallback()
     {
-        // Verify the interface does not accept a Func callback parameter
         var method = typeof(IBattleHubRelay).GetMethod("JoinBattleAsync");
         method.Should().NotBeNull();
 
         var parameters = method!.GetParameters();
         parameters.Should().NotContain(p => p.ParameterType.Name.StartsWith("Func"),
             "JoinBattleAsync must not accept a callback — events are sent via IFrontendBattleSender");
+    }
+
+    [Fact]
+    public void BattleHubRelay_RequiresINarrationPipeline()
+    {
+        var ctors = typeof(BattleHubRelay).GetConstructors();
+        var parameters = ctors[0].GetParameters();
+        parameters.Should().Contain(p => p.ParameterType == typeof(INarrationPipeline),
+            "BattleHubRelay must accept INarrationPipeline for feed generation");
+    }
+
+    [Fact]
+    public void BattleFeedUpdatedEvent_IsCorrectName()
+    {
+        BattleHubRelay.BattleFeedUpdatedEvent.Should().Be("BattleFeedUpdated");
     }
 }

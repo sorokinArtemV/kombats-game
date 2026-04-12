@@ -11,4 +11,8 @@ public class BattleEntity
     public DateTimeOffset? EndedAt { get; set; }
     public string? EndReason { get; set; }
     public Guid? WinnerPlayerId { get; set; }
+    public string? PlayerAName { get; set; }
+    public string? PlayerBName { get; set; }
+    public int? PlayerAMaxHp { get; set; }
+    public int? PlayerBMaxHp { get; set; }
 }

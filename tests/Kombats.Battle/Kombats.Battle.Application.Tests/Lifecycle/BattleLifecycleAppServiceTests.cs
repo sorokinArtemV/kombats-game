@@ -51,19 +51,19 @@ public class BattleLifecycleAppServiceTests
         var profileA = new CombatProfile(playerAId, 10, 10, 10, 10);
         var profileB = new CombatProfile(playerBId, 10, 10, 10, 10);
 
-        _stateStore.TryInitializeBattleAsync(Arg.Any<Guid>(), Arg.Any<BattleDomainState>(), Arg.Any<CancellationToken>())
+        _stateStore.TryInitializeBattleAsync(Arg.Any<Guid>(), Arg.Any<BattleDomainState>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _stateStore.TryOpenTurnAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(true);
 
         var result = await _service.HandleBattleCreatedAsync(
-            battleId, matchId, playerAId, playerBId, profileA, profileB);
+            battleId, matchId, playerAId, playerBId, profileA, profileB, "PlayerA", "PlayerB");
 
         result.Should().NotBeNull();
         result!.RulesetVersion.Should().Be(1);
         result.Seed.Should().Be(42);
 
-        await _stateStore.Received(1).TryInitializeBattleAsync(battleId, Arg.Any<BattleDomainState>(), Arg.Any<CancellationToken>());
+        await _stateStore.Received(1).TryInitializeBattleAsync(battleId, Arg.Any<BattleDomainState>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<int?>(), Arg.Any<int?>(), Arg.Any<CancellationToken>());
         await _stateStore.Received(1).TryOpenTurnAsync(battleId, 1, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
@@ -78,9 +78,9 @@ public class BattleLifecycleAppServiceTests
             .Returns(false); // Turn already open (convergent idempotency)
 
         await _service.HandleBattleCreatedAsync(
-            battleId, Guid.NewGuid(), profileA.PlayerId, profileB.PlayerId, profileA, profileB);
+            battleId, Guid.NewGuid(), profileA.PlayerId, profileB.PlayerId, profileA, profileB, null, null);
 
-        await _notifier.DidNotReceive().NotifyBattleReadyAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyBattleReadyAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
         await _notifier.DidNotReceive().NotifyTurnOpenedAsync(Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
@@ -97,9 +97,9 @@ public class BattleLifecycleAppServiceTests
             .Returns(true);
 
         await _service.HandleBattleCreatedAsync(
-            battleId, Guid.NewGuid(), playerAId, playerBId, profileA, profileB);
+            battleId, Guid.NewGuid(), playerAId, playerBId, profileA, profileB, "PlayerA", "PlayerB");
 
-        await _notifier.Received(1).NotifyBattleReadyAsync(battleId, playerAId, playerBId, Arg.Any<CancellationToken>());
+        await _notifier.Received(1).NotifyBattleReadyAsync(battleId, playerAId, playerBId, "PlayerA", "PlayerB", Arg.Any<CancellationToken>());
         await _notifier.Received(1).NotifyTurnOpenedAsync(battleId, 1, Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
@@ -111,7 +111,8 @@ public class BattleLifecycleAppServiceTests
         var result = await _service.HandleBattleCreatedAsync(
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             new CombatProfile(Guid.NewGuid(), 10, 10, 10, 10),
-            new CombatProfile(Guid.NewGuid(), 10, 10, 10, 10));
+            new CombatProfile(Guid.NewGuid(), 10, 10, 10, 10),
+            null, null);
 
         result.Should().BeNull();
     }

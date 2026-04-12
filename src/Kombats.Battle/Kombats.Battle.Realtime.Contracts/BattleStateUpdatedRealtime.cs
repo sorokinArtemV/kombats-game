@@ -18,6 +18,10 @@ public record BattleStateUpdatedRealtime
     public int Version { get; init; }
     public int? PlayerAHp { get; init; }
     public int? PlayerBHp { get; init; }
+    public string? PlayerAName { get; init; }
+    public string? PlayerBName { get; init; }
+    public int? PlayerAMaxHp { get; init; }
+    public int? PlayerBMaxHp { get; init; }
 }
 
 

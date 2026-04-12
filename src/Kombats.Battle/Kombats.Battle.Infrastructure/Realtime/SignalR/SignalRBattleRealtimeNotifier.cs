@@ -25,13 +25,15 @@ internal sealed class SignalRBattleRealtimeNotifier : IBattleRealtimeNotifier
         _logger = logger;
     }
 
-    public async Task NotifyBattleReadyAsync(Guid battleId, Guid playerAId, Guid playerBId, CancellationToken cancellationToken = default)
+    public async Task NotifyBattleReadyAsync(Guid battleId, Guid playerAId, Guid playerBId, string? playerAName, string? playerBName, CancellationToken cancellationToken = default)
     {
         var payload = new BattleReadyRealtime
         {
             BattleId = battleId,
             PlayerAId = playerAId,
-            PlayerBId = playerBId
+            PlayerBId = playerBId,
+            PlayerAName = playerAName,
+            PlayerBName = playerBName
         };
 
         await _hubContext.Clients.Group($"battle:{battleId}").SendAsync(
@@ -103,6 +105,10 @@ internal sealed class SignalRBattleRealtimeNotifier : IBattleRealtimeNotifier
         int version,
         int? playerAHp,
         int? playerBHp,
+        string? playerAName,
+        string? playerBName,
+        int? playerAMaxHp,
+        int? playerBMaxHp,
         CancellationToken cancellationToken = default)
     {
         var payload = new BattleStateUpdatedRealtime
@@ -119,7 +125,11 @@ internal sealed class SignalRBattleRealtimeNotifier : IBattleRealtimeNotifier
             EndedReason = RealtimeContractMapper.ToRealtimeEndReason(endedReason, _logger),
             Version = version,
             PlayerAHp = playerAHp,
-            PlayerBHp = playerBHp
+            PlayerBHp = playerBHp,
+            PlayerAName = playerAName,
+            PlayerBName = playerBName,
+            PlayerAMaxHp = playerAMaxHp,
+            PlayerBMaxHp = playerBMaxHp
         };
 
         await _hubContext.Clients.Group($"battle:{battleId}").SendAsync(

@@ -8,6 +8,8 @@ public record BattleReadyRealtime
     public Guid BattleId { get; init; }
     public Guid PlayerAId { get; init; }
     public Guid PlayerBId { get; init; }
+    public string? PlayerAName { get; init; }
+    public string? PlayerBName { get; init; }
 }
 
 
