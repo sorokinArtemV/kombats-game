@@ -81,13 +81,15 @@ public sealed class BattleTurnAppService
             throw new InvalidOperationException("User is not a participant in this battle");
         }
 
-        // If battle is ended, reject
+        // If battle is already ended, ignore gracefully — this is expected when a concurrent
+        // submission triggers resolution and transitions Phase→Ended before this call loads state.
+        // The client will learn about battle end via the BattleEnded SignalR notification.
         if (state.Phase == BattlePhase.Ended)
         {
-            _logger.LogWarning(
-                "Battle {BattleId} is ended, rejecting action submission from PlayerId: {PlayerId}",
+            _logger.LogDebug(
+                "Battle {BattleId} already ended, ignoring action from PlayerId: {PlayerId}",
                 battleId, playerId);
-            throw new InvalidOperationException("Battle has ended");
+            return;
         }
 
         // Process action through intake pipeline (parses JSON, validates protocol and semantics)

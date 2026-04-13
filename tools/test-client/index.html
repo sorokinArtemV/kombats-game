@@ -103,6 +103,21 @@
 
   .debug-json { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto; padding: 8px; background: #161616; border-radius: var(--radius); color: var(--text2); border: 1px solid var(--border); }
 
+  .feed-content { flex: 1; overflow-y: auto; padding: 8px; background: var(--surface2); border-radius: var(--radius); display: flex; flex-direction: column; gap: 2px; }
+  .feed-entry { padding: 4px 8px; border-radius: 4px; font-size: 13px; line-height: 1.5; }
+  .feed-entry.severity-normal { }
+  .feed-entry.severity-important { font-weight: 600; }
+  .feed-entry.severity-critical { font-weight: 700; }
+  .feed-entry.tone-neutral { color: var(--text); }
+  .feed-entry.tone-aggressive { color: var(--red); }
+  .feed-entry.tone-defensive { color: var(--accent); }
+  .feed-entry.tone-dramatic { color: var(--yellow); }
+  .feed-entry.tone-system { color: var(--text2); font-style: italic; }
+  .feed-entry.tone-flavor { color: var(--orange); font-style: italic; }
+  .feed-turn-header { padding: 6px 8px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); font-weight: 600; border-top: 1px solid var(--border); margin-top: 4px; }
+  .feed-turn-header:first-child { border-top: none; margin-top: 0; }
+  .feed-empty { color: var(--text2); font-size: 13px; padding: 20px; text-align: center; }
+
   .phase-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
   .phase-badge.ArenaOpen { background: rgba(92,158,255,.2); color: var(--accent); }
   .phase-badge.TurnOpen { background: rgba(102,187,106,.2); color: var(--green); }
@@ -150,8 +165,12 @@ function App() {
   const [logs, setLogs] = useState([]);
   const logEndRef = useRef(null);
 
+  // Battle Feed (commentary)
+  const [feedEntries, setFeedEntries] = useState([]);
+  const feedEndRef = useRef(null);
+
   // Debug panel
-  const [debugTab, setDebugTab] = useState('state');
+  const [debugTab, setDebugTab] = useState('feed');
   const [lastResponse, setLastResponse] = useState(null);
 
   const addLog = useCallback((type, msg) => {
@@ -162,6 +181,10 @@ function App() {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
+
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [feedEntries]);
 
   // --- Auth ---
   async function doLogin() {
@@ -321,6 +344,14 @@ function App() {
       });
     });
 
+    // Battle Feed (commentary narration)
+    conn.on('BattleFeedUpdated', (payload) => {
+      addLog('event', `BattleFeedUpdated: ${payload?.entries?.length ?? 0} entries`);
+      if (payload && payload.entries && payload.entries.length > 0) {
+        setFeedEntries(prev => [...prev, ...payload.entries]);
+      }
+    });
+
     conn.onclose(() => { setHubStatus('disconnected'); addLog('warn', 'Hub connection closed'); });
     conn.onreconnecting(() => { setHubStatus('connecting'); addLog('warn', 'Hub reconnecting...'); });
     conn.onreconnected(() => { setHubStatus('connected'); addLog('event', 'Hub reconnected'); });
@@ -368,6 +399,7 @@ function App() {
       setHubConnection(null);
       setBattleState(null);
       setHubStatus('disconnected');
+      setFeedEntries([]);
     }
   }
 
@@ -610,16 +642,43 @@ function App() {
       {/* Bottom: Log Panel */}
       <div className="log-panel panel">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <div className="panel-title" style={{ margin: 0 }}>Event Log</div>
+          <div className="panel-title" style={{ margin: 0 }}>{debugTab === 'feed' ? 'Battle Feed' : 'Event Log'}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             <div className="tab-bar">
+              <button className={debugTab === 'feed' ? 'active' : ''} onClick={() => setDebugTab('feed')}>Battle Feed</button>
               <button className={debugTab === 'log' ? 'active' : ''} onClick={() => setDebugTab('log')}>Log</button>
               <button className={debugTab === 'state' ? 'active' : ''} onClick={() => setDebugTab('state')}>State</button>
               <button className={debugTab === 'response' ? 'active' : ''} onClick={() => setDebugTab('response')}>Last Response</button>
             </div>
-            <button onClick={() => setLogs([])} style={{ fontSize: 11, padding: '3px 8px' }}>Clear</button>
+            {debugTab === 'feed' && <button onClick={() => setFeedEntries([])} style={{ fontSize: 11, padding: '3px 8px' }}>Clear</button>}
+            {debugTab !== 'feed' && <button onClick={() => setLogs([])} style={{ fontSize: 11, padding: '3px 8px' }}>Clear</button>}
           </div>
         </div>
+        {debugTab === 'feed' && (
+          <div className="feed-content">
+            {feedEntries.length === 0 && (
+              <div className="feed-empty">Waiting for battle to begin...</div>
+            )}
+            {(() => {
+              let lastTurn = -1;
+              const TONE_NAMES = ['neutral','aggressive','defensive','dramatic','system','flavor'];
+              const SEV_NAMES = ['normal','important','critical'];
+              return feedEntries.map((e, i) => {
+                const toneName = typeof e.tone === 'number' ? (TONE_NAMES[e.tone] || 'neutral') : String(e.tone || 'Neutral').toLowerCase();
+                const sevName = typeof e.severity === 'number' ? (SEV_NAMES[e.severity] || 'normal') : String(e.severity || 'Normal').toLowerCase();
+                const toneClass = 'tone-' + toneName;
+                const sevClass = 'severity-' + sevName;
+                const showTurnHeader = e.turnIndex !== lastTurn && e.turnIndex < 2147483647;
+                lastTurn = e.turnIndex;
+                return React.createElement(React.Fragment, { key: e.key || i },
+                  showTurnHeader && React.createElement('div', { className: 'feed-turn-header' }, `Round ${e.turnIndex + 1}`),
+                  React.createElement('div', { className: `feed-entry ${toneClass} ${sevClass}` }, e.text)
+                );
+              });
+            })()}
+            <div ref={feedEndRef} />
+          </div>
+        )}
         {debugTab === 'log' && (
           <div className="log-content">
             {logs.map((l, i) => (

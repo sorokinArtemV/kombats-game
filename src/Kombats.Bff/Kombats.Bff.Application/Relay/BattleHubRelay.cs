@@ -1,10 +1,13 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Kombats.Battle.Realtime.Contracts;
 using Kombats.Bff.Application.Clients;
 using Kombats.Bff.Application.Narration;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -51,7 +54,7 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
         string? traceparent = activity?.Id;
         string? tracestate = activity?.TraceStateString;
 
-        HubConnection connection = new HubConnectionBuilder()
+        var hubBuilder = new HubConnectionBuilder()
             .WithUrl(battleHubUrl, options =>
             {
                 options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
@@ -62,8 +65,17 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
                     if (!string.IsNullOrEmpty(tracestate))
                         options.Headers["tracestate"] = tracestate;
                 }
-            })
-            .Build();
+            });
+
+        // Match the Battle service's SignalR JSON config: enums are serialized as strings.
+        // Without this, typed On<T> handlers fail to deserialize enum fields (Outcome, Phase, Reason)
+        // and silently drop TurnResolved / BattleStateUpdated / BattleEnded events.
+        hubBuilder.Services.Configure<JsonHubProtocolOptions>(opt =>
+        {
+            opt.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+        });
+
+        HubConnection connection = hubBuilder.Build();
 
         // Blind relay handlers — forward as-is, no deserialization
         foreach (string eventName in BlindEventNames)
@@ -340,13 +352,19 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
         }
     }
 
+    private static readonly JsonSerializerOptions SnapshotSerializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
+    };
+
     private static BattleSnapshotRealtime? DeserializeSnapshot(object snapshot)
     {
         if (snapshot is JsonElement jsonElement)
         {
             return JsonSerializer.Deserialize<BattleSnapshotRealtime>(
                 jsonElement.GetRawText(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                SnapshotSerializerOptions);
         }
 
         return null;

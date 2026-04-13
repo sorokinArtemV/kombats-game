@@ -94,13 +94,131 @@ public class BattleTurnAppServiceTests
     }
 
     [Fact]
-    public async Task SubmitAction_BattleEnded_Throws()
+    public async Task SubmitAction_BattleAlreadyEnded_DoesNotThrow()
     {
         _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
             .Returns(CreateSnapshot(phase: BattlePhase.Ended));
 
         var act = () => _service.SubmitActionAsync(_battleId, _playerAId, 1, "{}", CancellationToken.None);
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SubmitAction_BattleAlreadyEnded_DoesNotPersistAction()
+    {
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(CreateSnapshot(phase: BattlePhase.Ended));
+
+        await _service.SubmitActionAsync(_battleId, _playerAId, 1, "{}", CancellationToken.None);
+
+        _actionIntake.DidNotReceive().ProcessAction(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<int>(),
+            Arg.Any<string?>(), Arg.Any<BattleSnapshot>());
+        await _stateStore.DidNotReceive().StoreActionAndCheckBothSubmittedAsync(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
+            Arg.Any<PlayerActionCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SubmitAction_BattleAlreadyEnded_DoesNotInvokeFurtherProcessing()
+    {
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(CreateSnapshot(phase: BattlePhase.Ended));
+
+        await _service.SubmitActionAsync(_battleId, _playerAId, 1, "{}", CancellationToken.None);
+
+        // No intake, no store, no resolve, no notify
+        _actionIntake.DidNotReceive().ProcessAction(
+            Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<int>(),
+            Arg.Any<string?>(), Arg.Any<BattleSnapshot>());
+        await _stateStore.DidNotReceive().StoreActionAndCheckBothSubmittedAsync(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
+            Arg.Any<PlayerActionCommand>(), Arg.Any<CancellationToken>());
+        await _stateStore.DidNotReceive().TryMarkTurnResolvingAsync(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<CancellationToken>());
+        await _notifier.DidNotReceive().NotifyBattleEndedAsync(
+            Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<Guid?>(),
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SubmitAction_ConcurrentSubmitAfterResolutionEndsBattle_SecondSubmitIsGracefulNoOp()
+    {
+        // Simulate the race: Player A submits, both-submitted triggers resolution,
+        // battle ends. Player B's concurrent submit arrives and sees Phase=Ended.
+        //
+        // This is a deterministic approximation of the race condition: we call
+        // SubmitActionAsync twice sequentially, with the state store returning
+        // TurnOpen for the first call (which triggers resolution → Ended) and
+        // Ended for the second call.
+
+        // --- First call setup: Player A submits, triggers resolution that ends battle ---
+        var turnOpenSnapshot = CreateSnapshot(phase: BattlePhase.TurnOpen, turnIndex: 1);
+        var endedSnapshot = CreateSnapshot(phase: BattlePhase.Ended, turnIndex: 1, lastResolved: 1);
+
+        // GetStateAsync returns: TurnOpen (A's submit), Resolving (resolution reload), Ended (B's submit)
+        _stateStore.GetStateAsync(_battleId, Arg.Any<CancellationToken>())
+            .Returns(turnOpenSnapshot, turnOpenSnapshot, endedSnapshot);
+
+        var commandA = new PlayerActionCommand
+        {
+            BattleId = _battleId, PlayerId = _playerAId, TurnIndex = 1,
+            Quality = ActionQuality.Valid, AttackZone = BattleZone.Head,
+            BlockZonePrimary = BattleZone.Chest, BlockZoneSecondary = BattleZone.Belly
+        };
+        _actionIntake.ProcessAction(_battleId, _playerAId, 1, Arg.Any<string?>(), turnOpenSnapshot)
+            .Returns(commandA);
+
+        // Both submitted → triggers early resolution
+        _stateStore.StoreActionAndCheckBothSubmittedAsync(
+                Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
+                Arg.Any<PlayerActionCommand>(), Arg.Any<CancellationToken>())
+            .Returns(new ActionStoreAndCheckResult { StoreResult = ActionStoreResult.Accepted, BothSubmitted = true, WasStored = true });
+
+        // Resolution CAS succeeds
+        _stateStore.TryMarkTurnResolvingAsync(_battleId, 1, Arg.Any<CancellationToken>()).Returns(true);
+
+        // Engine ends the battle
+        var battleEndedEvent = new BattleEndedDomainEvent(
+            _battleId, _playerAId, EndBattleReason.Normal, 1, DateTimeOffset.UtcNow);
+        var newState = new BattleDomainState(
+            _battleId, turnOpenSnapshot.MatchId, _playerAId, _playerBId,
+            turnOpenSnapshot.Ruleset, BattlePhase.Ended, 1, 0, 1,
+            new PlayerState(_playerAId, 100, 80, DefaultStats),
+            new PlayerState(_playerBId, 100, 0, DefaultStats));
+
+        _engine.ResolveTurn(Arg.Any<BattleDomainState>(), Arg.Any<PlayerAction>(), Arg.Any<PlayerAction>())
+            .Returns(new BattleResolutionResult
+            {
+                NewState = newState,
+                Events = [battleEndedEvent]
+            });
+
+        _stateStore.EndBattleAndMarkResolvedAsync(
+                _battleId, 1, Arg.Any<int>(), Arg.Any<int>(), Arg.Any<int>(),
+                Arg.Any<BattleEndOutcome>(), Arg.Any<CancellationToken>())
+            .Returns(EndBattleCommitResult.EndedNow);
+
+        _stateStore.GetActionsAsync(_battleId, 1, _playerAId, _playerBId, Arg.Any<CancellationToken>())
+            .Returns((commandA, (PlayerActionCommand?)null));
+
+        // --- Act: Player A submits (triggers resolution + battle end) ---
+        await _service.SubmitActionAsync(_battleId, _playerAId, 1, "{}", CancellationToken.None);
+
+        // --- Act: Player B's late submit arrives, state is now Ended ---
+        var actB = () => _service.SubmitActionAsync(_battleId, _playerBId, 1, "{}", CancellationToken.None);
+        await actB.Should().NotThrowAsync();
+
+        // --- Assert: Player A's submit triggered full resolution ---
+        await _notifier.Received(1).NotifyBattleEndedAsync(
+            _battleId, Arg.Any<string>(), Arg.Any<Guid?>(),
+            Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
+
+        // Player B's late submit did NOT trigger any additional processing
+        // (only 1 call to StoreActionAndCheckBothSubmittedAsync total — from A's submit)
+        await _stateStore.Received(1).StoreActionAndCheckBothSubmittedAsync(
+            Arg.Any<Guid>(), Arg.Any<int>(), Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid>(),
+            Arg.Any<PlayerActionCommand>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

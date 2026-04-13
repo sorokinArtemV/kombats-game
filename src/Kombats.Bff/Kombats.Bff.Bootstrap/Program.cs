@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using Kombats.Bff.Api.Extensions;
 using Kombats.Bff.Api.Hubs;
@@ -276,7 +277,11 @@ builder.Services.AddHttpClient<IBattleClient, BattleClient>(client =>
 });
 
 // SignalR — frontend-facing hub
-builder.Services.AddSignalR();
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    });
 
 // Frontend event sender — uses IHubContext<BattleHub> to target connections by ID.
 // IHubContext is stable outside hub method scope (unlike Hub.Clients.Caller).

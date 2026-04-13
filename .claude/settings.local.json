@@ -92,7 +92,12 @@
       "Bash(xargs basename:*)",
       "Bash(awk '{total+=$1} END {print \"Total templates:\", total}')",
       "Bash(sed 's/.*Add\\(\"//')",
-      "Bash(sed 's/\".*//')"
+      "Bash(sed 's/\".*//')",
+      "Bash(git log:*)",
+      "Bash(python3 -c ':*)",
+      "Bash(dotnet-ildasm /c/Users/Artem.Sorokin/.nuget/packages/microsoft.aspnetcore.signalr.client.core/10.0.3/lib/net10.0/Microsoft.AspNetCore.SignalR.Client.Core.dll)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ]
   }
 }
