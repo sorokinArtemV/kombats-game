@@ -325,12 +325,40 @@ public sealed class BattleHubRelay : IBattleHubRelay, IAsyncDisposable
                 $"Battle connection is in {bc.Hub.State} state, not Connected.");
         }
 
-        await bc.Hub.InvokeAsync(
-            "SubmitTurnAction",
-            battleId,
-            turnIndex,
-            actionPayload,
-            cancellationToken);
+        try
+        {
+            // Don't propagate caller's CancellationToken to the downstream invoke.
+            // Once the action reaches Battle, it's committed to Redis before resolution starts.
+            // Cancelling the invoke doesn't undo the action — it just loses the acknowledgement.
+            // The downstream HubConnection has its own ServerTimeout (default 30s) for stalls.
+            await bc.Hub.InvokeAsync(
+                "SubmitTurnAction",
+                battleId,
+                turnIndex,
+                actionPayload,
+                CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
+        {
+            // On battle-ending turns, the BattleEnded handler fires before the Completion frame
+            // arrives (SignalR message ordering: notification sent before hub method returns).
+            // The handler calls DisconnectAsync which kills this connection, cancelling the
+            // in-flight InvokeAsync. The action was already processed — this is expected.
+            if (!_connections.ContainsKey(frontendConnectionId))
+            {
+                _logger.LogInformation(
+                    "Downstream SubmitTurnAction cancelled for {ConnectionId} battle {BattleId} turn {TurnIndex} — "
+                    + "battle ended during resolution (action was processed successfully)",
+                    frontendConnectionId, battleId, turnIndex);
+                return;
+            }
+
+            // Connection still in dictionary but invoke cancelled — genuine failure
+            _logger.LogWarning(ex,
+                "Downstream SubmitTurnAction cancelled unexpectedly for {ConnectionId} battle {BattleId} turn {TurnIndex}",
+                frontendConnectionId, battleId, turnIndex);
+            throw;
+        }
     }
 
     public async Task DisconnectAsync(string frontendConnectionId)
