@@ -32,7 +32,7 @@ These are settled. Implementation must not reopen them.
 |---|---|---|
 | A1 | Chat is a standalone service following per-service project template | AD-CHAT-01 |
 | A2 | BFF is the sole client-facing boundary | AD-CHAT-02 |
-| A3 | Players is sole source of truth for profiles; Chat caches display names only | AD-CHAT-03 |
+| A3 | Players is sole source of truth for profiles; Chat caches display names and readiness only | AD-CHAT-03 |
 | A4 | `IdentityId` is canonical cross-service identifier; client-facing name is `playerId` | AD-CHAT-04 |
 | A5 | v1 topology: per-user BFF relay, single-instance Chat, single-instance BFF | AD-CHAT-05 |
 | A6 | PostgreSQL `chat` schema + Redis DB 2 | AD-CHAT-06 |
@@ -99,50 +99,52 @@ The plan follows a bottom-up, dependency-driven order:
 
 **Implementation tasks (in order):**
 
-1. **Create Chat project structure:**
-   - Create six projects under `src/Kombats.Chat/`: Bootstrap, Api, Application, Domain, Infrastructure, Contracts
-   - SDKs: Bootstrap = `Microsoft.NET.Sdk.Web`, all others = `Microsoft.NET.Sdk`
-   - Add all six to `Kombats.sln`
-   - Add project references per dependency graph (Bootstrap → Api → Application → Domain; Infrastructure → Application + Domain; Bootstrap → Infrastructure)
-   - Add `InternalsVisibleTo`: Application → Infrastructure, Bootstrap; Infrastructure → Bootstrap
-   - Add package references via central package management (no inline versions): EF Core, Npgsql, StackExchange.Redis, MassTransit 8.3.0, FluentValidation, Microsoft.AspNetCore.OpenApi
-   - Reference `Kombats.Messaging`, `Kombats.Abstractions`, `Kombats.Players.Contracts`
-   - Empty `Program.cs` in Bootstrap: `var builder = WebApplication.CreateBuilder(args); var app = builder.Build(); app.Run();`
+1. **Verify and align existing Chat project structure:**
+   - The Chat project skeleton already exists in the repository: six projects under `src/Kombats.Chat/` (Bootstrap, Api, Application, Domain, Infrastructure, Contracts) and four test projects under `tests/Kombats.Chat/`. Do not create from scratch — verify and align.
+   - Verify SDKs: Bootstrap = `Microsoft.NET.Sdk.Web`, all others = `Microsoft.NET.Sdk`
+   - Verify all six projects are in `Kombats.sln`
+   - Verify project references per dependency graph (Bootstrap → Api → Application → Domain; Infrastructure → Application + Domain; Bootstrap → Infrastructure)
+   - Verify `InternalsVisibleTo`: Application → Infrastructure, Bootstrap; Infrastructure → Bootstrap
+   - Verify package references via central package management (no inline versions): EF Core, Npgsql, StackExchange.Redis, MassTransit 8.3.0, FluentValidation, Microsoft.AspNetCore.OpenApi
+   - Verify references to `Kombats.Messaging`, `Kombats.Abstractions`, `Kombats.Players.Contracts`
+   - Verify `Program.cs` in Bootstrap has a minimal host setup
+   - Fix any gaps found during verification
    - Verify: `dotnet build` succeeds for the full solution
 
-2. **Create Chat Contracts project:**
-   - `Kombats.Chat.Contracts` — empty, exists for forward compatibility
-   - Zero NuGet deps, `Microsoft.NET.Sdk`
+2. **Verify Chat Contracts project:**
+   - `Kombats.Chat.Contracts` — already exists, verify it is empty with zero NuGet deps and `Microsoft.NET.Sdk`
 
-3. **Create test project structure:**
-   - Create four test projects under `tests/Kombats.Chat/`: Domain.Tests, Application.Tests, Infrastructure.Tests, Api.Tests
-   - Add to `Kombats.sln`
-   - Set up shared Testcontainers fixtures in Infrastructure.Tests for PostgreSQL and Redis
-   - Set up `WebApplicationFactory<Program>` bootstrap in Api.Tests
+3. **Verify and align test project structure:**
+   - Four test projects already exist under `tests/Kombats.Chat/`: Domain.Tests, Application.Tests, Infrastructure.Tests, Api.Tests
+   - Verify all four are in `Kombats.sln`
+   - Set up shared Testcontainers fixtures in Infrastructure.Tests for PostgreSQL and Redis (if not already present)
+   - Set up `WebApplicationFactory<Program>` bootstrap in Api.Tests (if not already present)
    - Verify: `dotnet test` runs (no tests yet, but projects compile)
 
 4. **Implement Players profile endpoint:**
-   - Application: `GetPlayerProfileQuery(Guid IdentityId)`, `GetPlayerProfileQueryHandler`, `GetPlayerProfileQueryResponse` (PlayerId, DisplayName, Level, Strength, Agility, Intuition, Vitality, Wins, Losses)
+   - Application: `GetPlayerProfileQuery(Guid IdentityId)`, `GetPlayerProfileQueryHandler`, `GetPlayerProfileQueryResponse` (PlayerId, DisplayName, IsReady, Level, Strength, Agility, Intuition, Vitality, Wins, Losses)
+   - **`IsReady` field:** Maps from `CharacterStateResult.State == OnboardingState.Ready`. This field is required by Chat's Layer 2 eligibility enforcement (see Batch 3) and by the display-name resolver's HTTP fallback path.
    - Handler loads `Character` by `IdentityId`, leverages existing `CharacterStateResult.FromCharacter()`, maps to response. Returns not-found if character doesn't exist.
    - Api: `GET /api/v1/players/{identityId}/profile`, `[Authorize]`, any authenticated user can query any player
    - Bootstrap: handler registration + endpoint mapping (verify auto-scan covers it)
-   - Tests: Players profile endpoint tests — 200 with valid player, 404 for unknown, auth enforcement
+   - Tests: Players profile endpoint tests — 200 with valid player (verify `IsReady` matches onboarding state), 404 for unknown, auth enforcement
 
-5. **Docker-compose updates:**
-   - Add Chat service entry to `docker-compose.yml`
+5. **Docker-compose verification:**
+   - A Chat service entry already exists in `docker-compose.yml`. Verify it has the correct configuration:
    - Connection strings: Postgres (same instance, `chat` schema), Redis (DB 2), RabbitMQ, Keycloak
    - Dependency ordering: postgres, redis, rabbitmq, keycloak → chat
+   - Fix any gaps in the existing entry
 
 **Batch outputs:**
-- Chat solution structure exists, `dotnet build` passes
+- Chat solution structure verified and aligned, `dotnet build` passes
 - Chat Bootstrap starts as empty host
-- `GET /api/v1/players/{identityId}/profile` is live and tested
+- `GET /api/v1/players/{identityId}/profile` is live and tested (including `IsReady` field)
 - Docker-compose runs Chat alongside existing services
 - Test projects compile, Testcontainers fixtures ready
 
 **What is NOT in Batch 0:** No ChatDbContext, no entity configurations, no EF Core migrations, no domain entities, no Redis connections, no hub.
 
-**Gate:** `dotnet build` succeeds. `dotnet test` succeeds. Players profile endpoint returns correct data. Docker-compose starts Chat alongside existing services. Review: project structure matches appendix in architecture spec.
+**Gate:** `dotnet build` succeeds. `dotnet test` succeeds. Players profile endpoint returns correct data including `IsReady`. Docker-compose starts Chat alongside existing services. Review: project structure matches appendix in architecture spec.
 
 ---
 
@@ -243,7 +245,7 @@ The plan follows a bottom-up, dependency-driven order:
 
 #### Batch 2 — Redis Layer (Presence, Rate Limiting, Name Cache)
 
-**Goal:** All Redis-backed infrastructure works: presence lifecycle via Lua scripts, rate limiting with in-memory fallback, display-name cache with full resolver chain.
+**Goal:** All Redis-backed infrastructure works: presence lifecycle via Lua scripts, rate limiting with in-memory fallback, player info cache (name + readiness) with full resolver and eligibility checker chains.
 
 **Prerequisites:** Batch 0 (Players profile endpoint for resolver HTTP fallback).
 
@@ -256,8 +258,9 @@ The plan follows a bottom-up, dependency-driven order:
 1. **Application ports (Redis-related):**
    - `IPresenceStore`: `ConnectAsync(identityId, displayName)` returns bool (first connection), `DisconnectAsync(identityId)` returns bool (last connection), `HeartbeatAsync(identityId)`, `GetOnlinePlayersAsync(limit, offset)`, `GetOnlineCountAsync()`, `IsOnlineAsync(identityId)`
    - `IRateLimiter`: `CheckAndIncrementAsync(identityId, surface)` returns `(bool allowed, int? retryAfterMs)`
-   - `IDisplayNameCache`: `GetAsync(identityId)`, `SetAsync(identityId, name)`, `RenewTtlAsync(identityId)`
+   - `IPlayerInfoCache`: `GetAsync(identityId)` returns `CachedPlayerInfo?` (record with `Name` and `IsReady`), `SetAsync(identityId, name, isReady)`, `RemoveAsync(identityId)`
    - `IDisplayNameResolver`: `ResolveAsync(identityId)` returns string (name, or "Unknown" sentinel)
+   - `IEligibilityChecker`: `CheckEligibilityAsync(identityId)` returns `(bool eligible, string? displayName)`. Chain: `IPlayerInfoCache` → Players HTTP → reject if unverifiable. See Batch 3 for enforcement logic.
 
 2. **Redis presence store (`RedisPresenceStore`):**
    - Implement three Lua scripts exactly as specified in architecture spec Section 7:
@@ -292,44 +295,65 @@ The plan follows a bottom-up, dependency-driven order:
      - Redis unavailable → in-memory fallback works correctly
      - Fallback recovery: Redis comes back → distributed limiter resumes
 
-4. **Redis display-name cache (`RedisDisplayNameCache`):**
-   - Key: `chat:name:{id}`, TTL 7 days
-   - Set: write name with 7-day TTL
-   - Get: read name, renew TTL on hit
+4. **Redis player info cache (`RedisPlayerInfoCache`):**
+   - Replaces the previous `IDisplayNameCache` concept. Stores both display name and readiness, which Chat needs for eligibility enforcement and message stamping.
+   - Key: `chat:player:{id}`, TTL 7 days
+   - Value: JSON `{ "name": "<displayName>", "isReady": true|false }`
+   - Set: write name + isReady with 7-day TTL
+   - Get: read and deserialize, renew TTL on hit. Returns `CachedPlayerInfo` record or null on miss.
+   - Remove: delete key (used when a player's state changes to not-ready, if needed)
    - Integration tests:
-     - Set → get → correct value
+     - Set (name + isReady=true) → get → correct values
+     - Set (name + isReady=false) → get → correct values (isReady is false)
      - TTL renewed on read
      - Expired key → cache miss (returns null)
 
 5. **Display-name resolver (`DisplayNameResolver`):**
    - Implements `IDisplayNameResolver`
-   - Chain: `IDisplayNameCache.GetAsync()` → HTTP `GET /api/v1/players/{identityId}/profile` → `"Unknown"` sentinel
-   - On HTTP success: populate cache via `IDisplayNameCache.SetAsync()`, return name
+   - Chain: `IPlayerInfoCache.GetAsync()` → HTTP `GET /api/v1/players/{identityId}/profile` → `"Unknown"` sentinel
+   - On cache hit: return `cachedInfo.Name` (regardless of `IsReady` — the resolver only resolves names; eligibility is checked separately by `IEligibilityChecker`)
+   - On HTTP success: populate cache via `IPlayerInfoCache.SetAsync(identityId, name, isReady)`, return name
    - On HTTP failure (timeout, 404, 5xx): return `"Unknown"`, do not cache sentinel
    - Typed HTTP client for Players profile endpoint with aggressive timeout (3 seconds)
    - Application unit tests (stubbed cache + HTTP):
      - Cache hit → returns cached name, no HTTP call
-     - Cache miss + HTTP success → returns name, populates cache
+     - Cache miss + HTTP success → returns name, populates cache with name AND isReady
      - Cache miss + HTTP failure → returns "Unknown"
      - Cache miss + HTTP timeout → returns "Unknown"
 
-6. **Application use case: `GetOnlinePlayers`:**
+6. **Eligibility checker (`EligibilityChecker`):**
+   - Implements `IEligibilityChecker`
+   - Chain: `IPlayerInfoCache.GetAsync()` → HTTP `GET /api/v1/players/{identityId}/profile` → reject
+   - On cache hit with `isReady == true`: return `(eligible: true, displayName: name)`
+   - On cache hit with `isReady == false`: return `(eligible: false, displayName: null)`
+   - On cache miss + HTTP success: populate cache, check `isReady` from response, return accordingly
+   - On cache miss + HTTP failure/timeout: return `(eligible: false, displayName: null)` — unverified users are rejected (per spec Section 16: "Chat does not allow unverified users to send messages")
+   - Application unit tests (stubbed cache + HTTP):
+     - Cache hit with isReady=true → eligible
+     - Cache hit with isReady=false → not eligible
+     - Cache miss + HTTP returns isReady=true → eligible, cache populated
+     - Cache miss + HTTP returns isReady=false → not eligible, cache populated
+     - Cache miss + HTTP failure → not eligible
+
+7. **Application use case: `GetOnlinePlayers`:**
    - Paginated query against `IPresenceStore`
    - Application unit test with stubbed presence store
 
-7. **API: Presence HTTP endpoint:**
+8. **API: Presence HTTP endpoint:**
    - `GET /api/internal/presence/online?limit=100&offset=0`, `[Authorize]`
    - Response DTO matching spec Section 12
 
 **Batch outputs:**
 - Presence Lua scripts tested with real Redis (all multi-tab scenarios pass)
 - Rate limiter with fallback tested
-- Display-name cache with full resolver chain tested
+- Player info cache stores name + isReady, tested
+- Display-name resolver chain tested (cache → HTTP → "Unknown")
+- Eligibility checker chain tested (cache → HTTP → reject)
 - Online players query via HTTP endpoint
 - All Redis integration tests pass
 - All application unit tests pass
 
-**Gate:** Every Lua script edge case from the multi-tab table (spec Section 15) is covered by a passing test. Rate-limiter fallback activates and deactivates correctly. Display-name resolver fallback chain handles all three stages. Review required: Lua script code review by a second person/agent before proceeding to Batch 3.
+**Gate:** Every Lua script edge case from the multi-tab table (spec Section 15) is covered by a passing test. Rate-limiter fallback activates and deactivates correctly. Display-name resolver fallback chain handles all three stages. Eligibility checker correctly differentiates ready vs not-ready players (cache hit path and HTTP fallback path). Review required: Lua script code review by a second person/agent before proceeding to Batch 3.
 
 ---
 
@@ -373,7 +397,8 @@ The plan follows a bottom-up, dependency-driven order:
      - Cancel per-connection heartbeat timer
    - `JoinGlobalChat`:
      - **Enforce eligibility** (`OnboardingState == Ready`) — Chat Layer 2 authoritative check
-     - Eligibility check: display-name cache lookup → if no entry, HTTP call to Players profile → if Players unavailable and cache empty, reject with `ChatError(code: "not_eligible")`
+     - Eligibility check via `IEligibilityChecker.CheckEligibilityAsync(identityId)`: checks player info cache for `isReady == true` → if cache miss, calls Players HTTP profile endpoint and checks `isReady` from response → if Players unavailable and cache empty, reject. Returns `(eligible: false)` for any player whose `isReady` is explicitly false, not just for missing players.
+     - Reject with `ChatError(code: "not_eligible")` if not eligible
      - Add connection to global chat SignalR group
      - Query recent messages (first page, newest first)
      - Query online players (capped 100 + total count)
@@ -408,6 +433,7 @@ The plan follows a bottom-up, dependency-driven order:
      - `ConnectUser`: calls presence store, broadcasts only on first connection
      - `DisconnectUser`: calls presence store, broadcasts only on last connection
      - `JoinGlobalChat`: enforces eligibility (rejects ineligible), adds to group, queries messages and online players, does NOT touch presence
+     - **Negative eligibility: player has a cached display name but `isReady == false` → rejected with `ChatError(code: "not_eligible")`** (verifies that eligibility is based on readiness, not just name existence)
      - Rate-limited send → returns error with retryAfterMs
      - Invalid content → returns correct error code
 
@@ -426,6 +452,7 @@ The plan follows a bottom-up, dependency-driven order:
    - Hub/API tests:
      - Auth enforcement: valid JWT → connect, no JWT → reject
      - `JoinGlobalChat` returns correct structure
+     - `JoinGlobalChat` with player who has name but `isReady == false` → `ChatError(code: "not_eligible")`
      - `SendGlobalMessage` with valid content → broadcast received by other connections in group
      - `SendGlobalMessage` with invalid content → `ChatError`
      - Rate-limited send → `ChatError` with `rate_limited` code and `retryAfterMs`
@@ -436,7 +463,7 @@ The plan follows a bottom-up, dependency-driven order:
    - Redis connection (DB 2) registration
    - MassTransit via `Kombats.Messaging` (bus config, outbox, inbox — but consumer registration deferred to B4)
    - Handler registration: Scrutor scan or explicit DI for all `ICommandHandler<>`, `IQueryHandler<>`
-   - Port implementations: register `RedisPresenceStore`, `RedisRateLimiter`, `RedisDisplayNameCache`, `DisplayNameResolver`, `MessageFilter`, `UserRestriction`, `MessageRepository`, `ConversationRepository`
+   - Port implementations: register `RedisPresenceStore`, `RedisRateLimiter`, `RedisPlayerInfoCache`, `DisplayNameResolver`, `EligibilityChecker`, `MessageFilter`, `UserRestriction`, `MessageRepository`, `ConversationRepository`
    - Auth: Keycloak JWT configuration
    - SignalR hub mapping: `app.MapHub<ChatHub>("/chathub-internal")`
    - Minimal API endpoint mapping
@@ -459,7 +486,7 @@ The plan follows a bottom-up, dependency-driven order:
 - All application unit tests pass
 - Hub integration tests pass
 
-**Gate:** A SignalR test client can connect to `/chathub-internal` with a valid JWT, call `JoinGlobalChat`, send a global message, and see the broadcast. A second client receives the message. A DM between two clients works end-to-end through the hub. Rate limiting rejects excessive sends. Ineligible users are rejected on `JoinGlobalChat`. Presence broadcast fires on first connect and last disconnect. Internal hub contract is frozen — no changes without explicit coordination with Batch 5.
+**Gate:** A SignalR test client can connect to `/chathub-internal` with a valid JWT, call `JoinGlobalChat`, send a global message, and see the broadcast. A second client receives the message. A DM between two clients works end-to-end through the hub. Rate limiting rejects excessive sends. Ineligible users are rejected on `JoinGlobalChat` — **including a player who has a display name but `isReady == false`** (this is the critical negative case that verifies eligibility is based on readiness, not name existence). Presence broadcast fires on first connect and last disconnect. Internal hub contract is frozen — no changes without explicit coordination with Batch 5.
 
 ---
 
@@ -476,20 +503,24 @@ The plan follows a bottom-up, dependency-driven order:
 **Implementation tasks (in order):**
 
 1. **Application use case: `HandlePlayerProfileChanged`:**
-   - Receives `IdentityId` + `Name` from event
-   - Calls `IDisplayNameCache.SetAsync(identityId, name)`
-   - Application unit test: updates cache with correct name
+   - Receives `IdentityId` + `Name` + `IsReady` from event
+   - Calls `IPlayerInfoCache.SetAsync(identityId, name, isReady)` — stores both display name and readiness
+   - If `IsReady` transitions to `false` (rare — e.g., data correction), the cache entry is updated with `isReady: false`, which causes subsequent eligibility checks to reject the player
+   - Application unit tests:
+     - Event with `IsReady=true` → cache updated with name and isReady=true
+     - Event with `IsReady=false` → cache updated with name and isReady=false
 
 2. **MassTransit consumer:**
    - `PlayerCombatProfileChangedConsumer` in Infrastructure/Messaging/Consumers
-   - Thin consumer: extract `IdentityId` + `Name`, call `HandlePlayerProfileChanged` handler
+   - Thin consumer: extract `IdentityId` + `Name` + `IsReady`, call `HandlePlayerProfileChanged` handler
    - Inbox for idempotency (tables already created in B1 migration)
    - Consumer registration in Bootstrap via `Kombats.Messaging` assembly scan
    - Tests:
-     - Behavior test: event processed → display-name cache updated
+     - Behavior test: event with `IsReady=true` processed → player info cache updated with name and isReady=true
+     - Behavior test: event with `IsReady=false` processed → player info cache updated with isReady=false
      - Idempotency test: same message twice (same MessageId) → second is no-op
      - Edge cases: null Name field handling
-   - Contract serialization test: `PlayerCombatProfileChanged` round-trip with all fields including `Version`
+   - Contract serialization test: `PlayerCombatProfileChanged` round-trip with all fields including `Version` and `IsReady`
 
 3. **MessageRetentionWorker (hosted service):**
    - Runs every hour (configurable)
@@ -517,13 +548,13 @@ The plan follows a bottom-up, dependency-driven order:
    - MassTransit consumer registration (if not already covered by assembly scan)
 
 **Batch outputs:**
-- Display-name cache populated from integration events
+- Player info cache (name + isReady) populated from integration events
 - Old messages cleaned up hourly (batched)
 - Stale presence entries swept every 60s
 - Consumer idempotency verified
 - Contract serialization verified
 
-**Gate:** Consumer processes a `PlayerCombatProfileChanged` event and the name appears in the Redis cache. Second delivery of same message is a no-op. Retention worker deletes old messages without deleting new ones. Sweep worker removes stale ZSET entries and broadcasts `PlayerOffline`.
+**Gate:** Consumer processes a `PlayerCombatProfileChanged` event and the name + isReady appear in the Redis cache. Event with `IsReady=false` produces a cache entry with `isReady: false`. Second delivery of same message is a no-op. Retention worker deletes old messages without deleting new ones. Sweep worker removes stale ZSET entries and broadcasts `PlayerOffline`.
 
 ---
 
@@ -674,7 +705,7 @@ These are the moments where shared contract surfaces must be frozen before downs
 
 | Contract Surface | Must Be Frozen | Before | Owner | Consumers |
 |---|---|---|---|---|
-| Players profile endpoint response shape (`GetPlayerProfileQueryResponse`) | End of Batch 0 | B2 start (DisplayNameResolver), B5 start (player card endpoint) | Chat implementer (defines what fields are needed) | Chat Infrastructure (resolver HTTP fallback), BFF (player card endpoint) |
+| Players profile endpoint response shape (`GetPlayerProfileQueryResponse` — includes `IsReady`) | End of Batch 0 | B2 start (DisplayNameResolver, EligibilityChecker), B5 start (player card endpoint) | Chat implementer (defines what fields are needed) | Chat Infrastructure (resolver + eligibility HTTP fallback), BFF (player card endpoint) |
 | Chat internal hub method signatures (names, parameters, return types) | Start of Batch 3 (first task) | B5 start (BFF relay builds against these) | Chat implementer | BFF implementer (ChatHubRelay, ChatHub) |
 | Chat internal hub server-to-client event names and payloads | Start of Batch 3 (first task) | B5 start (BFF relay subscribes to these) | Chat implementer | BFF implementer (ChatHubRelay event forwarding) |
 | Chat internal HTTP endpoint paths and response DTOs | End of Batch 1 (paths defined), finalized start of Batch 3 | B5 start (BFF ChatClient builds against these) | Chat implementer | BFF implementer (ChatClient) |
@@ -695,7 +726,7 @@ These are the moments where shared contract surfaces must be frozen before downs
 | **G0: Foundation** | Batch 0 | Project structure matches spec appendix. Players endpoint works. Docker-compose starts. | `dotnet build` passes. `dotnet test` passes. Players profile endpoint returns correct data. |
 | **G1: Domain + Persistence** | Batch 1 | Domain invariants tested. Persistence round-trips work. DM resolution handles races. Migration applies cleanly. | All domain unit tests pass. All Postgres integration tests pass. |
 | **G2: Redis Layer** | Batch 2 | Lua scripts handle every edge case from multi-tab table. Rate-limit fallback works. Resolver chain is correct. **Mandatory code review of Lua scripts.** | All Redis integration tests pass. Lua script code reviewed by second person/agent. |
-| **G3: Hub Integration** | Batch 3 | Hub orchestrates all use cases correctly. Eligibility enforced. Rate limiting enforced. Auth enforced. **Internal contract surface is frozen.** | Hub integration tests pass. Application unit tests pass for all handlers. Contract surface documented and agreed. |
+| **G3: Hub Integration** | Batch 3 | Hub orchestrates all use cases correctly. Eligibility enforced — **including negative case: named player with `isReady=false` is rejected.** Rate limiting enforced. Auth enforced. **Internal contract surface is frozen.** | Hub integration tests pass. Application unit tests pass for all handlers (including negative eligibility). Contract surface documented and agreed. |
 | **G4: Background** | Batch 4 | Consumer idempotent. Retention batched. Sweep uses ZREM gating. | Consumer tests pass (behavior + idempotency). Worker tests pass. |
 | **G5: BFF Integration** | Batch 5 | Relay lifecycle correct. Hub forwarding works. HTTP proxying works. Player card works. | BFF tests pass. Frontend client can use all features through BFF. |
 | **G6: E2E Validation** | Batch 6 | All E2E flows work. Degradation verified. Auth sweep clean. Config correct. | All E2E tests pass. System ready for release. |
@@ -792,16 +823,21 @@ These are the moments where shared contract surfaces must be frozen before downs
 
 ### R4: Eligibility Enforcement Gaps (MEDIUM)
 
-**Risk:** Ineligible users access chat features.
+**Risk:** Ineligible users access chat features. Specifically: a player who has a display name but `OnboardingState != Ready` must be rejected — eligibility is determined by `isReady`, not by name existence.
 
-**Where addressed:** Batch 3 — Chat Layer 2 authoritative enforcement on `JoinGlobalChat`, `SendGlobalMessage`, `SendDirectMessage`.
+**Where addressed:**
+- Batch 0: Players profile endpoint includes `IsReady` in response
+- Batch 2: `IPlayerInfoCache` stores `(name, isReady)` — not just name. `IEligibilityChecker` checks `isReady` explicitly.
+- Batch 3: Chat Layer 2 authoritative enforcement on `JoinGlobalChat`, `SendGlobalMessage`, `SendDirectMessage` uses `IEligibilityChecker`
+- Batch 4: Consumer extracts `IsReady` from `PlayerCombatProfileChanged` and stores it in the player info cache
 
 **How validated:**
 - Application unit tests: each handler that enforces eligibility has a test case for an ineligible user → rejection
+- **Critical negative test: player with cached display name but `isReady == false` → rejected with `ChatError(code: "not_eligible")`** — this verifies that eligibility is based on readiness, not name existence
 - Hub integration test: ineligible user calls `JoinGlobalChat` → `ChatError(code: "not_eligible")`
 - BFF does NOT enforce eligibility (per EQ-4) — Chat is the sole gate
 
-**Must be true before B5:** Eligibility enforcement tests pass for all relevant handlers.
+**Must be true before B5:** Eligibility enforcement tests pass for all relevant handlers, including the named-but-not-ready negative case.
 
 ### R5: Display-Name Resolver Fallback Chain (LOW-MEDIUM)
 
@@ -882,21 +918,21 @@ These are the moments where shared contract surfaces must be frozen before downs
 
 ### Batch 0 — Done When:
 
-- [ ] Six Chat projects exist in `src/Kombats.Chat/` with correct SDKs and references
-- [ ] All six projects added to `Kombats.sln`
+- [ ] Six Chat projects verified in `src/Kombats.Chat/` with correct SDKs and references (existing skeleton aligned)
+- [ ] All six projects in `Kombats.sln`
 - [ ] `InternalsVisibleTo` configured (Application → Infrastructure, Bootstrap; Infrastructure → Bootstrap)
 - [ ] Package references use central package management (no inline versions)
 - [ ] Chat Contracts project exists (empty, zero deps)
-- [ ] Four test projects exist in `tests/Kombats.Chat/` and added to solution
+- [ ] Four test projects verified in `tests/Kombats.Chat/` and in solution
 - [ ] Testcontainers fixtures set up for PostgreSQL and Redis
 - [ ] `WebApplicationFactory<Program>` bootstrap set up in Api.Tests
 - [ ] `dotnet build` succeeds for full solution
 - [ ] `dotnet test` succeeds (Players profile tests pass)
-- [ ] `GET /api/v1/players/{identityId}/profile` returns correct data for existing player
+- [ ] `GET /api/v1/players/{identityId}/profile` returns correct data for existing player, **including `IsReady` field**
 - [ ] Players profile endpoint returns 404 for unknown player
 - [ ] Players profile endpoint rejects unauthenticated requests
 - [ ] Chat Bootstrap starts as empty host (no services)
-- [ ] Docker-compose starts Chat alongside existing services
+- [ ] Docker-compose Chat entry verified and starts alongside existing services
 
 ### Batch 1 — Done When:
 
@@ -928,8 +964,10 @@ These are the moments where shared contract surfaces must be frozen before downs
 - [ ] Rate limiter: under limit → allowed, at limit → denied with retryAfterMs, window expires → allowed
 - [ ] Rate limiter: Redis unavailable → in-memory fallback activates, rate limiting still works
 - [ ] Rate limiter: Redis recovers → distributed limiter resumes
-- [ ] Display-name cache: set → get → correct, TTL renewed on read, expired → miss
-- [ ] DisplayNameResolver: cache hit → name, cache miss + HTTP success → name + cache populated, cache miss + HTTP failure → "Unknown"
+- [ ] Player info cache: set (name + isReady) → get → correct values, TTL renewed on read, expired → miss
+- [ ] Player info cache: isReady=false stored and returned correctly (not treated as eligible)
+- [ ] DisplayNameResolver: cache hit → name, cache miss + HTTP success → name + cache populated (with isReady), cache miss + HTTP failure → "Unknown"
+- [ ] EligibilityChecker: cache hit with isReady=true → eligible, cache hit with isReady=false → not eligible, cache miss + HTTP success → checks isReady from response, cache miss + HTTP failure → not eligible
 - [ ] `GET /api/internal/presence/online` returns online players with auth enforcement
 - [ ] Lua script code review completed by second person/agent
 
@@ -940,6 +978,7 @@ These are the moments where shared contract surfaces must be frozen before downs
 - [ ] `DisconnectUser` broadcasts `PlayerOffline` on last connection only
 - [ ] Per-connection heartbeat timer fires every 30 seconds
 - [ ] `JoinGlobalChat` rejects ineligible users with `ChatError(code: "not_eligible")`
+- [ ] `JoinGlobalChat` rejects a player who has a cached display name but `isReady == false` (negative eligibility case)
 - [ ] `JoinGlobalChat` returns recent messages + online players (capped 100) + total online count
 - [ ] `JoinGlobalChat` does NOT touch presence (already established on connect)
 - [ ] `SendGlobalMessage` pipeline: eligibility → rate-check → filter → resolve name → persist → broadcast
@@ -952,9 +991,10 @@ These are the moments where shared contract surfaces must be frozen before downs
 
 ### Batch 4 — Done When:
 
-- [ ] `PlayerCombatProfileChangedConsumer` processes event → display-name appears in Redis cache
+- [ ] `PlayerCombatProfileChangedConsumer` processes event → name and isReady appear in Redis player info cache
+- [ ] Consumer with `IsReady=false` event → cache entry has `isReady: false`
 - [ ] Consumer idempotency: same MessageId twice → second is no-op
-- [ ] `PlayerCombatProfileChanged` serialization round-trip succeeds
+- [ ] `PlayerCombatProfileChanged` serialization round-trip succeeds (including `IsReady` field)
 - [ ] `MessageRetentionWorker` deletes old messages in batches, keeps new messages
 - [ ] Retention worker deletes empty direct conversations, never deletes global
 - [ ] `PresenceSweepWorker` removes stale ZSET entries with score > 90s old
@@ -997,13 +1037,13 @@ These are the moments where shared contract surfaces must be frozen before downs
 
 After this plan is approved:
 
-1. **Start Batch 0.** The primary implementer creates the Chat project skeleton, test project structure, and Players profile endpoint. This is the critical unblocking step — nothing else can start until B0 is complete.
+1. **Start Batch 0.** The primary implementer verifies and aligns the existing Chat project skeleton, test project structure, and implements the Players profile endpoint. The skeleton already exists — the focus is verification, gap-filling, and the Players endpoint. This is the critical unblocking step — nothing else can start until B0 is complete.
 
-2. **First artifact to produce:** The six Chat projects with correct SDKs, references, and `InternalsVisibleTo`, added to the solution. Verify `dotnet build` before anything else.
+2. **First artifact to produce:** Verified Chat project structure with correct SDKs, references, and `InternalsVisibleTo`. Verify `dotnet build` before anything else.
 
-3. **Second artifact:** Players profile endpoint (query, handler, endpoint, tests). This unblocks both B2 (display-name resolver HTTP fallback) and B5 (player card endpoint).
+3. **Second artifact:** Players profile endpoint (query, handler, endpoint, tests) — **must include `IsReady` in response**. This unblocks both B2 (eligibility checker + display-name resolver HTTP fallback) and B5 (player card endpoint).
 
-4. **Third artifact:** Docker-compose Chat service entry with connection strings.
+4. **Third artifact:** Docker-compose Chat service entry verified with correct connection strings.
 
 5. **After B0 gate passes:** Start B1 and B2 in parallel (or interleaved if single implementer).
 

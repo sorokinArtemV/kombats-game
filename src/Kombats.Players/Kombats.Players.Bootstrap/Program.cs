@@ -11,6 +11,7 @@ using Kombats.Players.Application.Battles;
 using Kombats.Players.Application.UseCases.AllocateStatPoints;
 using Kombats.Players.Application.UseCases.EnsureCharacterExists;
 using Kombats.Players.Application.UseCases.GetCharacter;
+using Kombats.Players.Application.UseCases.GetPlayerProfile;
 using Kombats.Players.Application.UseCases.SetCharacterName;
 using Kombats.Players.Infrastructure.Configuration;
 using Kombats.Players.Infrastructure.Data;
@@ -82,6 +83,7 @@ builder.Services.AddScoped<ICommandHandler<AllocateStatPointsCommand, AllocateSt
 builder.Services.AddScoped<ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult>, EnsureCharacterExistsHandler>();
 builder.Services.AddScoped<ICommandHandler<SetCharacterNameCommand, CharacterStateResult>, SetCharacterNameHandler>();
 builder.Services.AddScoped<IQueryHandler<GetCharacterQuery, CharacterStateResult>, GetCharacterHandler>();
+builder.Services.AddScoped<IQueryHandler<GetPlayerProfileQuery, GetPlayerProfileQueryResponse>, GetPlayerProfileHandler>();
 builder.Services.AddScoped<ICommandHandler<HandleBattleCompletedCommand>, HandleBattleCompletedHandler>();
 builder.Services.AddScoped<ICombatProfilePublisher, MassTransitCombatProfilePublisher>();
 

@@ -104,6 +104,34 @@ services:
     depends_on:
       - keycloak
 
+  chat:
+    build:
+      context: .
+      dockerfile: src/Kombats.Chat/Kombats.Chat.Bootstrap/Dockerfile
+    container_name: kombats_chat
+    restart: unless-stopped
+    ports:
+      - "5001:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__PostgresConnection: "Host=postgres;Port=5432;Database=kombats;Username=postgres;Password=postgres"
+      ConnectionStrings__Redis: "redis:6379,allowAdmin=true"
+      Messaging__RabbitMq__Host: rabbitmq
+      Messaging__RabbitMq__Port: 5672
+      Messaging__RabbitMq__Username: guest
+      Messaging__RabbitMq__Password: guest
+      Keycloak__Authority: "http://keycloak:8080/realms/kombats"
+      Keycloak__Audience: "kombats-api"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
 volumes:
   postgres_data:
   keycloak_db:

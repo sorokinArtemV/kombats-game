@@ -24,6 +24,7 @@ public sealed class AuthTests : IClassFixture<PlayersApiFactory>, IDisposable
     [InlineData("POST", "/api/v1/me/ensure")]
     [InlineData("POST", "/api/v1/character/name")]
     [InlineData("POST", "/api/v1/players/me/stats/allocate")]
+    [InlineData("GET", "/api/v1/players/d290f1ee-6c54-4b01-90e6-d701748f0851/profile")]
     public async Task ProtectedEndpoint_WithoutAuth_Returns401(string method, string path)
     {
         var request = new HttpRequestMessage(new HttpMethod(method), path);

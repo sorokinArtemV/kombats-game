@@ -7,6 +7,7 @@ using Kombats.Players.Application.Battles;
 using Kombats.Players.Application.UseCases.AllocateStatPoints;
 using Kombats.Players.Application.UseCases.EnsureCharacterExists;
 using Kombats.Players.Application.UseCases.GetCharacter;
+using Kombats.Players.Application.UseCases.GetPlayerProfile;
 using Kombats.Players.Application.UseCases.SetCharacterName;
 using Kombats.Players.Domain.Entities;
 using Microsoft.AspNetCore.Authentication;
@@ -55,6 +56,9 @@ public sealed class PlayersApiFactory : WebApplicationFactory<Program>
     internal IQueryHandler<GetCharacterQuery, CharacterStateResult> GetCharacterHandler { get; }
         = Substitute.For<IQueryHandler<GetCharacterQuery, CharacterStateResult>>();
 
+    internal IQueryHandler<GetPlayerProfileQuery, GetPlayerProfileQueryResponse> GetPlayerProfileHandler { get; }
+        = Substitute.For<IQueryHandler<GetPlayerProfileQuery, GetPlayerProfileQueryResponse>>();
+
     internal ICommandHandler<HandleBattleCompletedCommand> BattleCompletedHandler { get; }
         = Substitute.For<ICommandHandler<HandleBattleCompletedCommand>>();
 
@@ -88,6 +92,7 @@ public sealed class PlayersApiFactory : WebApplicationFactory<Program>
             services.Replace(ServiceDescriptor.Scoped<ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult>>(_ => EnsureHandler));
             services.Replace(ServiceDescriptor.Scoped<ICommandHandler<SetCharacterNameCommand, CharacterStateResult>>(_ => SetNameHandler));
             services.Replace(ServiceDescriptor.Scoped<IQueryHandler<GetCharacterQuery, CharacterStateResult>>(_ => GetCharacterHandler));
+            services.Replace(ServiceDescriptor.Scoped<IQueryHandler<GetPlayerProfileQuery, GetPlayerProfileQueryResponse>>(_ => GetPlayerProfileHandler));
             services.Replace(ServiceDescriptor.Scoped<ICommandHandler<HandleBattleCompletedCommand>>(_ => BattleCompletedHandler));
 
             // Replace infrastructure ports with no-ops

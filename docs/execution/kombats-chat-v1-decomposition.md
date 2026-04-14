@@ -79,8 +79,9 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
   - `IConversationRepository` — get by id, get or create direct (sorted-pair + ON CONFLICT), get global, list by participant, update last message
   - `IPresenceStore` — connect, disconnect, heartbeat, get online players (paginated), get online count, is online
   - `IRateLimiter` — check and increment (returns allowed/denied + retry-after)
-  - `IDisplayNameCache` — get, set, renew TTL
+  - `IPlayerInfoCache` — get (returns `CachedPlayerInfo` with name + isReady), set (name + isReady), remove
   - `IDisplayNameResolver` — resolve (cache → HTTP → "Unknown" sentinel)
+  - `IEligibilityChecker` — check eligibility (cache → HTTP → reject). Returns `(eligible, displayName?)`. Checks `isReady` explicitly, not just name existence.
   - `IMessageFilter` — filter message content (v1: length check, sanitization)
   - `IUserRestriction` — check send permission (v1: no-op, always allows)
 - **Use cases (command/query handlers):**
@@ -94,7 +95,7 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
   - `GetConversations` — list user's active conversations
   - `GetDirectMessages` — resolve conversation by participant pair, delegate to `GetConversationMessages`
   - `GetOnlinePlayers` — paginated presence query
-  - `HandlePlayerProfileChanged` — update display-name cache from integration event
+  - `HandlePlayerProfileChanged` — update player info cache (name + isReady) from integration event
 
 #### S1.4 — Infrastructure: PostgreSQL Persistence
 - `ChatDbContext` with `chat` schema, snake_case naming, outbox/inbox tables
@@ -115,14 +116,16 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
   - Fixed-window counter: `INCR` + `EXPIRE`
   - Keys: `chat:ratelimit:{id}:global` (10s TTL), `chat:ratelimit:{id}:dm` (30s TTL), `chat:ratelimit:{id}:presence` (5s TTL)
   - In-memory fallback (`ConcurrentDictionary`) when Redis unavailable (AD-CHAT-08)
-- `RedisDisplayNameCache` implementing `IDisplayNameCache`
-  - Key: `chat:name:{id}`, TTL 7 days, renewed on read and on event
+- `RedisPlayerInfoCache` implementing `IPlayerInfoCache`
+  - Key: `chat:player:{id}`, value: JSON `{ "name": "...", "isReady": true|false }`, TTL 7 days, renewed on read and on event
 - `DisplayNameResolver` implementing `IDisplayNameResolver`
   - Chain: Redis cache → Players HTTP (`GET /api/v1/players/{id}/profile`) → "Unknown" sentinel
   - Typed HTTP client for Players profile endpoint
+- `EligibilityChecker` implementing `IEligibilityChecker`
+  - Chain: Redis cache (checks `isReady`) → Players HTTP (checks `isReady` from response) → reject if unverifiable
 
 #### S1.6 — Infrastructure: MassTransit Consumer
-- `PlayerCombatProfileChangedConsumer` — thin consumer, extracts `IdentityId` + `Name`, calls `HandlePlayerProfileChanged` handler
+- `PlayerCombatProfileChangedConsumer` — thin consumer, extracts `IdentityId` + `Name` + `IsReady`, calls `HandlePlayerProfileChanged` handler
 - Inbox for idempotency
 - Consumer registration in Bootstrap
 
@@ -233,8 +236,9 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 #### S3.1 — Application: GetPlayerProfile Query
 - `GetPlayerProfileQuery(Guid IdentityId)`
 - `GetPlayerProfileQueryHandler` — loads `Character` by `IdentityId`, maps to response
-- `GetPlayerProfileQueryResponse` — `PlayerId`, `DisplayName`, `Level`, `Strength`, `Agility`, `Intuition`, `Vitality`, `Wins`, `Losses`
-- Leverages existing `CharacterStateResult.FromCharacter()` (already includes wins/losses)
+- `GetPlayerProfileQueryResponse` — `PlayerId`, `DisplayName`, `IsReady`, `Level`, `Strength`, `Agility`, `Intuition`, `Vitality`, `Wins`, `Losses`
+- `IsReady`: maps from `CharacterStateResult.State == OnboardingState.Ready`. Required by Chat's Layer 2 eligibility enforcement and the display-name resolver HTTP fallback.
+- Leverages existing `CharacterStateResult.FromCharacter()` (already includes wins/losses and OnboardingState)
 - Returns not-found if character doesn't exist
 
 #### S3.2 — API: Profile Endpoint
@@ -267,27 +271,29 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 ## 5. Batch Plan
 
 ### Batch 0: Foundation
-**Goal:** Chat service exists in the solution, builds, and starts as an empty host. Players profile endpoint is available. No Chat domain code, no persistence, no functional behavior.
+**Goal:** Chat service exists in the solution, builds, and starts as an empty host. Players profile endpoint is available (including `IsReady`). No Chat domain code, no persistence, no functional behavior.
 
 **Included work:**
-- S1.1 — Project skeleton and solution integration (all six projects, SDKs, references, `InternalsVisibleTo`, empty `Program.cs`)
-- S3.1 — GetPlayerProfile query handler
+- S1.1 — Verify and align existing project skeleton (all six projects already exist — verify SDKs, references, `InternalsVisibleTo`, `Program.cs`)
+- S3.1 — GetPlayerProfile query handler (response includes `IsReady`)
 - S3.2 — Profile endpoint
 - S3.3 — Players bootstrap wiring
-- S4.1 — Empty Contracts project
-- S1.10 (partial) — Docker-compose Chat service entry (connection strings, dependency ordering)
+- S4.1 — Verify existing empty Contracts project
+- S1.10 (partial) — Verify existing docker-compose Chat service entry (connection strings, dependency ordering)
 
-**Why together:** The skeleton must exist before any other Chat work. The Players profile endpoint is independent and small — including it here unblocks the display-name resolver's HTTP fallback (Batch 2) and the BFF player card endpoint (Batch 5).
+**Why together:** The skeleton must exist before any other Chat work. The Players profile endpoint is independent and small — including it here unblocks the eligibility checker and display-name resolver's HTTP fallback (Batch 2) and the BFF player card endpoint (Batch 5).
+
+**Note:** The Chat project skeleton and test projects already exist in the repository. Batch 0 is verification and alignment of the existing structure, not greenfield creation. The docker-compose also already has a Chat entry.
 
 **Test infrastructure included in Batch 0:**
-- Create test projects: `Kombats.Chat.Domain.Tests`, `Kombats.Chat.Application.Tests`, `Kombats.Chat.Infrastructure.Tests`, `Kombats.Chat.Api.Tests`
-- Add test projects to `Kombats.sln`
-- Set up shared Testcontainers fixtures for PostgreSQL and Redis (reusable across Chat infrastructure tests)
-- Set up `WebApplicationFactory<Program>` bootstrap in `Kombats.Chat.Api.Tests` (or `Infrastructure.Tests` as appropriate)
+- Verify test projects exist: `Kombats.Chat.Domain.Tests`, `Kombats.Chat.Application.Tests`, `Kombats.Chat.Infrastructure.Tests`, `Kombats.Chat.Api.Tests`
+- Verify test projects are in `Kombats.sln`
+- Set up shared Testcontainers fixtures for PostgreSQL and Redis (reusable across Chat infrastructure tests) if not already present
+- Set up `WebApplicationFactory<Program>` bootstrap in `Kombats.Chat.Api.Tests` (or `Infrastructure.Tests` as appropriate) if not already present
 - Add Players test coverage for the new profile endpoint (`Kombats.Players.Api.Tests` or existing test project)
 - Verify `dotnet test` runs (no tests yet beyond Players profile, but projects compile)
 
-**What is NOT in Batch 0:** No `ChatDbContext`, no entity configurations, no EF Core migrations, no domain entities. Those belong entirely to Batch 1. Batch 0 is strictly project scaffolding, test infrastructure scaffolding, and the Players endpoint.
+**What is NOT in Batch 0:** No `ChatDbContext`, no entity configurations, no EF Core migrations, no domain entities. Those belong entirely to Batch 1. Batch 0 is strictly project verification/alignment, test infrastructure scaffolding, and the Players endpoint.
 
 **Prerequisites:** None. This is the foundation.
 
@@ -325,16 +331,16 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 ---
 
 ### Batch 2: Redis Layer (Presence, Rate Limiting, Name Cache)
-**Goal:** All Redis-backed infrastructure works: presence lifecycle, rate limiting, display-name cache.
+**Goal:** All Redis-backed infrastructure works: presence lifecycle, rate limiting, player info cache (name + readiness), eligibility checker.
 
 **Included work:**
-- S1.5 — All Redis infrastructure: `RedisPresenceStore` (with Lua scripts), `RedisRateLimiter` (with in-memory fallback), `RedisDisplayNameCache`
-- S1.3 (partial) — Ports: `IPresenceStore`, `IRateLimiter`, `IDisplayNameCache`, `IDisplayNameResolver`
-- S1.5 (partial) — `DisplayNameResolver` (cache → HTTP → sentinel chain)
+- S1.5 — All Redis infrastructure: `RedisPresenceStore` (with Lua scripts), `RedisRateLimiter` (with in-memory fallback), `RedisPlayerInfoCache`
+- S1.3 (partial) — Ports: `IPresenceStore`, `IRateLimiter`, `IPlayerInfoCache`, `IDisplayNameResolver`, `IEligibilityChecker`
+- S1.5 (partial) — `DisplayNameResolver` (cache → HTTP → sentinel chain), `EligibilityChecker` (cache → HTTP → reject)
 - S1.3 (partial) — Use case: `GetOnlinePlayers`
 - S1.7 (partial) — Internal HTTP endpoint: `GET /api/internal/presence/online`
 
-**Why together:** All three Redis concerns share the same DB, the same connection, and the same testing infrastructure (real Redis via Testcontainers). The Lua scripts for presence are the most complex piece — isolating them in their own batch ensures they get focused implementation and testing before the hub depends on them. The display-name resolver needs the Players profile endpoint from Batch 0.
+**Why together:** All three Redis concerns share the same DB, the same connection, and the same testing infrastructure (real Redis via Testcontainers). The Lua scripts for presence are the most complex piece — isolating them in their own batch ensures they get focused implementation and testing before the hub depends on them. The display-name resolver and eligibility checker both need the Players profile endpoint from Batch 0 (including the `IsReady` field).
 
 **Prerequisites:** Batch 0 (Players profile endpoint for resolver HTTP fallback)
 
@@ -374,7 +380,7 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 ---
 
 ### Batch 4: MassTransit Consumer + Background Workers
-**Goal:** Chat receives `PlayerCombatProfileChanged` events and populates the name cache. Retention and presence sweep workers run.
+**Goal:** Chat receives `PlayerCombatProfileChanged` events and populates the player info cache (name + isReady). Retention and presence sweep workers run.
 
 **Included work:**
 - S1.6 — `PlayerCombatProfileChangedConsumer` + handler
@@ -382,12 +388,12 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 - S1.9 — `MessageRetentionWorker`, `PresenceSweepWorker`
 - S1.3 (partial) — `HandlePlayerProfileChanged` use case
 
-**Why together:** The consumer and workers are all background processes that don't affect the core request path. They share the same dependency: the Chat service must be fully assembled (Batch 3). The consumer populates the name cache that Batch 2 set up. The workers clean up data that Batches 1 and 2 created.
+**Why together:** The consumer and workers are all background processes that don't affect the core request path. They share the same dependency: the Chat service must be fully assembled (Batch 3). The consumer populates the player info cache (name + isReady) that Batch 2 set up. The workers clean up data that Batches 1 and 2 created.
 
 **Prerequisites:** Batch 3 (fully assembled Chat service)
 
 **Outputs:**
-- Display-name cache populated from integration events
+- Player info cache (name + isReady) populated from integration events
 - Old messages cleaned up hourly
 - Stale presence entries swept every 60s
 - Consumer idempotency verified
@@ -540,8 +546,9 @@ Batch 0: Foundation
 - `JoinGlobalChat` handler: **enforces eligibility (rejects ineligible users)**, adds to group, queries recent messages, queries online players (does NOT touch presence)
 - `GetConversationMessages` handler: access check (participant validation), delegates to repository
 - `GetConversations` handler: returns user's conversations with correct DTO shape
-- `HandlePlayerProfileChanged` handler: updates cache with name
-- `DisplayNameResolver`: cache hit → returns name; cache miss → HTTP success → returns and caches; HTTP fail → "Unknown"
+- `HandlePlayerProfileChanged` handler: updates player info cache with name and isReady
+- `DisplayNameResolver`: cache hit → returns name; cache miss → HTTP success → returns and caches (name + isReady); HTTP fail → "Unknown"
+- `EligibilityChecker`: cache hit with isReady=true → eligible; cache hit with isReady=false → not eligible; cache miss → HTTP fallback; HTTP fail → not eligible
 - All handlers tested with stubbed/faked ports — zero infrastructure
 
 ### Level 3: Infrastructure Integration Tests — PostgreSQL (Batch 1)
@@ -573,14 +580,16 @@ Batch 0: Foundation
   - At limit → denied with retry-after
   - Window expires → allowed again
   - Redis unavailable → in-memory fallback works
-- **Display-name cache:**
-  - Set → get → correct value
+- **Player info cache:**
+  - Set (name + isReady=true) → get → correct values
+  - Set (name + isReady=false) → get → isReady is false
   - TTL renewed on read
   - Expired key → cache miss
 - All tests use real Redis via Testcontainers
 
 ### Level 5: Consumer Tests (Batch 4)
-- `PlayerCombatProfileChangedConsumer` behavior: updates display-name cache
+- `PlayerCombatProfileChangedConsumer` behavior: updates player info cache (name + isReady)
+- Consumer with `IsReady=false` → cache entry has `isReady: false`
 - Idempotency: same message twice → second is no-op (same cache value, no error)
 - Edge cases: null name, missing fields
 
@@ -588,6 +597,7 @@ Batch 0: Foundation
 - **Chat internal hub:**
   - Auth enforcement: valid JWT → connect, no JWT → reject
   - `JoinGlobalChat` returns correct structure
+  - `JoinGlobalChat` with player who has name but `isReady=false` → `ChatError(code: "not_eligible")`
   - `SendGlobalMessage` with valid content → broadcast received
   - `SendGlobalMessage` with invalid content → `ChatError`
   - Rate-limited send → `ChatError` with `rate_limited` code and `retryAfterMs`
@@ -730,7 +740,7 @@ One person does everything sequentially: B0 → B1∥B2 → B3 → B4 → B5 →
 |---|---|---|
 | Internal hub method signatures | Chat implementer defines, BFF implementer consumes | Before Batch 5 starts |
 | Internal HTTP endpoint paths + DTOs | Chat implementer defines, BFF implementer consumes | Before Batch 5 starts |
-| Players profile endpoint response shape | Players/Chat implementer defines, BFF/Chat consumers | During Batch 0 |
+| Players profile endpoint response shape (must include `IsReady`) | Players/Chat implementer defines, BFF/Chat consumers | During Batch 0 |
 | Review: Lua scripts | Both implementers should review presence Lua scripts | During Batch 2 |
 | Review: relay lifecycle | Both implementers should review ChatHubRelay | During Batch 5 |
 
@@ -772,7 +782,7 @@ The spec says "Chat sends a ping every 30 seconds on each connection." Implement
 **Concrete behavior:**
 - BFF `ChatHub.OnConnectedAsync`: creates the downstream relay connection unconditionally (no eligibility check at connection time — connection is just transport).
 - BFF `ChatHub.JoinGlobalChat` / `SendDirectMessage`: no local eligibility check. Forwards to Chat immediately.
-- Chat service (Layer 2): performs the authoritative eligibility check on `JoinGlobalChat` and `SendDirectMessage` using its display-name cache and Players HTTP fallback. Rejects ineligible users with `ChatError(code: "not_eligible")`.
+- Chat service (Layer 2): performs the authoritative eligibility check on `JoinGlobalChat` and `SendDirectMessage` using `IEligibilityChecker` — checks `isReady` in the player info cache, falls back to Players HTTP profile endpoint (which includes `IsReady`), rejects if unverifiable. Eligibility is based on `isReady == true`, not just name existence. Rejects ineligible users with `ChatError(code: "not_eligible")`.
 
 **Why this is safe:** Chat's Layer 2 enforcement is always active regardless of BFF behavior. The cost is that an ineligible user's BFF relay connection is created before Chat rejects them on the first hub method call — one wasted downstream WebSocket setup. At v1 scale this is negligible. If the BFF later gains per-user state (e.g., for session tracking), Layer 1 can be added as an optimization without changing the Chat-side enforcement.
 
