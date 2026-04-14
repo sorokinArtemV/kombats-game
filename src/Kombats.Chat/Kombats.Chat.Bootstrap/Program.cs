@@ -1,10 +1,24 @@
+using Kombats.Abstractions;
 using Kombats.Abstractions.Auth;
 using Kombats.Chat.Api.Endpoints;
 using Kombats.Chat.Api.Extensions;
+using Kombats.Chat.Application.Ports;
+using Kombats.Chat.Application.Repositories;
+using Kombats.Chat.Application.UseCases.GetConversationMessages;
+using Kombats.Chat.Application.UseCases.GetConversations;
+using Kombats.Chat.Application.UseCases.GetDirectMessages;
+using Kombats.Chat.Application.UseCases.GetOnlinePlayers;
+using Kombats.Chat.Infrastructure.Data;
+using Kombats.Chat.Infrastructure.Data.Repositories;
+using Kombats.Chat.Infrastructure.Redis;
+using Kombats.Chat.Infrastructure.Services;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,7 +89,57 @@ builder.Services.AddOpenTelemetry()
         }
     });
 
-// NOTE: Messaging, DbContext, Redis, and handler registration will be added in later batches.
+// === Batch 1: EF Core + Repositories + Handlers ===
+
+builder.Services.AddDbContext<ChatDbContext>(options =>
+{
+    options
+        .UseNpgsql(builder.Configuration.GetConnectionString("PostgresConnection"), npgsql =>
+        {
+            npgsql.MigrationsHistoryTable("__ef_migrations_history", ChatDbContext.Schema);
+            npgsql.EnableRetryOnFailure();
+        })
+        .UseSnakeCaseNamingConvention()
+        .ReplaceService<IHistoryRepository, SnakeCaseHistoryRepository>();
+});
+
+// Application handlers (Batch 1: read-path only)
+builder.Services.AddScoped<IQueryHandler<GetConversationMessagesQuery, GetConversationMessagesResponse>, GetConversationMessagesHandler>();
+builder.Services.AddScoped<IQueryHandler<GetConversationsQuery, GetConversationsResponse>, GetConversationsHandler>();
+builder.Services.AddScoped<IQueryHandler<GetDirectMessagesQuery, GetConversationMessagesResponse>, GetDirectMessagesHandler>();
+
+// Infrastructure repositories
+builder.Services.AddScoped<IConversationRepository, ConversationRepository>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
+
+// === Batch 2: Redis + Presence + Rate Limiter + Player Info + Resolvers ===
+
+// Redis connection (DB 2 for Chat)
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379,abortConnect=false";
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+    ConnectionMultiplexer.Connect(redisConnectionString));
+
+// Redis port implementations
+builder.Services.AddScoped<IPresenceStore, RedisPresenceStore>();
+builder.Services.AddScoped<IRateLimiter, RedisRateLimiter>();
+builder.Services.AddScoped<IPlayerInfoCache, RedisPlayerInfoCache>();
+
+// HTTP client for Players service
+builder.Services.AddHttpClient("Players", client =>
+{
+    var playersBaseUrl = builder.Configuration["Players:BaseUrl"] ?? "http://localhost:5000";
+    client.BaseAddress = new Uri(playersBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(5);
+});
+
+// Application services
+builder.Services.AddScoped<IDisplayNameResolver, DisplayNameResolver>();
+builder.Services.AddScoped<IEligibilityChecker, EligibilityChecker>();
+
+// Application handler (Batch 2: online players query)
+builder.Services.AddScoped<IQueryHandler<GetOnlinePlayersQuery, GetOnlinePlayersResponse>, GetOnlinePlayersHandler>();
+
+// NOTE: Messaging (MassTransit), SignalR, and workers will be added in later batches.
 
 var app = builder.Build();
 

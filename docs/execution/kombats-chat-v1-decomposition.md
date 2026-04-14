@@ -29,7 +29,7 @@ These are not open for renegotiation. They are the ground the decomposition buil
 | A8 | 24-hour message retention with periodic cleanup worker |
 | A9 | Global chat: single room, deterministic well-known conversation ID (hardcoded constant, OQ-1 option a) |
 | A10 | No new NuGet packages required beyond what is already approved in the baseline |
-| A11 | `PlayerCombatProfileChanged` contract already exists and includes `Name`, `IdentityId`, `IsReady` |
+| A11 | `PlayerCombatProfileChanged` contract already exists and includes `Name`, `IdentityId`, `IsReady` (bool — pre-derived by Players domain) |
 
 ---
 
@@ -79,9 +79,9 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
   - `IConversationRepository` — get by id, get or create direct (sorted-pair + ON CONFLICT), get global, list by participant, update last message
   - `IPresenceStore` — connect, disconnect, heartbeat, get online players (paginated), get online count, is online
   - `IRateLimiter` — check and increment (returns allowed/denied + retry-after)
-  - `IPlayerInfoCache` — get (returns `CachedPlayerInfo` with name + isReady), set (name + isReady), remove
+  - `IPlayerInfoCache` — get (returns `CachedPlayerInfo` with name + onboardingState), set, remove. Chat derives readiness as `onboardingState == "Ready"`.
   - `IDisplayNameResolver` — resolve (cache → HTTP → "Unknown" sentinel)
-  - `IEligibilityChecker` — check eligibility (cache → HTTP → reject). Returns `(eligible, displayName?)`. Checks `isReady` explicitly, not just name existence.
+  - `IEligibilityChecker` — check eligibility (cache → HTTP → reject). Returns `(eligible, displayName?)`. Derives readiness from `onboardingState`, not just name existence.
   - `IMessageFilter` — filter message content (v1: length check, sanitization)
   - `IUserRestriction` — check send permission (v1: no-op, always allows)
 - **Use cases (command/query handlers):**
@@ -95,7 +95,7 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
   - `GetConversations` — list user's active conversations
   - `GetDirectMessages` — resolve conversation by participant pair, delegate to `GetConversationMessages`
   - `GetOnlinePlayers` — paginated presence query
-  - `HandlePlayerProfileChanged` — update player info cache (name + isReady) from integration event
+  - `HandlePlayerProfileChanged` — update player info cache (name + onboardingState) from integration event (maps event's `IsReady` bool → onboardingState string)
 
 #### S1.4 — Infrastructure: PostgreSQL Persistence
 - `ChatDbContext` with `chat` schema, snake_case naming, outbox/inbox tables
@@ -117,15 +117,16 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
   - Keys: `chat:ratelimit:{id}:global` (10s TTL), `chat:ratelimit:{id}:dm` (30s TTL), `chat:ratelimit:{id}:presence` (5s TTL)
   - In-memory fallback (`ConcurrentDictionary`) when Redis unavailable (AD-CHAT-08)
 - `RedisPlayerInfoCache` implementing `IPlayerInfoCache`
-  - Key: `chat:player:{id}`, value: JSON `{ "name": "...", "isReady": true|false }`, TTL 7 days, renewed on read and on event
+  - Key: `chat:playerinfo:{id}`, value: JSON `{ "name": "...", "onboardingState": "<state>" }`, TTL 7 days, renewed on read and on event
 - `DisplayNameResolver` implementing `IDisplayNameResolver`
-  - Chain: Redis cache → Players HTTP (`GET /api/v1/players/{id}/profile`) → "Unknown" sentinel
+  - Chain: Redis cache → Players HTTP (`GET /api/v1/players/{id}/profile`, which returns `OnboardingState`) → "Unknown" sentinel
+  - On HTTP success: populates cache with name + onboardingState from the profile response
   - Typed HTTP client for Players profile endpoint
 - `EligibilityChecker` implementing `IEligibilityChecker`
-  - Chain: Redis cache (checks `isReady`) → Players HTTP (checks `isReady` from response) → reject if unverifiable
+  - Chain: Redis cache (derives readiness from `onboardingState`) → Players HTTP (derives readiness from `OnboardingState` in response) → reject if unverifiable
 
 #### S1.6 — Infrastructure: MassTransit Consumer
-- `PlayerCombatProfileChangedConsumer` — thin consumer, extracts `IdentityId` + `Name` + `IsReady`, calls `HandlePlayerProfileChanged` handler
+- `PlayerCombatProfileChangedConsumer` — thin consumer, extracts `IdentityId` + `Name` + `IsReady` (bool), calls `HandlePlayerProfileChanged` handler which maps `IsReady` → onboardingState string before caching
 - Inbox for idempotency
 - Consumer registration in Bootstrap
 
@@ -236,8 +237,8 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 #### S3.1 — Application: GetPlayerProfile Query
 - `GetPlayerProfileQuery(Guid IdentityId)`
 - `GetPlayerProfileQueryHandler` — loads `Character` by `IdentityId`, maps to response
-- `GetPlayerProfileQueryResponse` — `PlayerId`, `DisplayName`, `IsReady`, `Level`, `Strength`, `Agility`, `Intuition`, `Vitality`, `Wins`, `Losses`
-- `IsReady`: maps from `CharacterStateResult.State == OnboardingState.Ready`. Required by Chat's Layer 2 eligibility enforcement and the display-name resolver HTTP fallback.
+- `GetPlayerProfileQueryResponse` — `PlayerId`, `DisplayName`, `OnboardingState`, `Level`, `Strength`, `Agility`, `Intuition`, `Vitality`, `Wins`, `Losses`
+- `OnboardingState`: exposes the enum directly. Chat derives readiness as `OnboardingState == Ready`. This avoids a lossy boolean mapping — Chat receives the full state and performs the derivation itself.
 - Leverages existing `CharacterStateResult.FromCharacter()` (already includes wins/losses and OnboardingState)
 - Returns not-found if character doesn't exist
 
@@ -271,11 +272,11 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 ## 5. Batch Plan
 
 ### Batch 0: Foundation
-**Goal:** Chat service exists in the solution, builds, and starts as an empty host. Players profile endpoint is available (including `IsReady`). No Chat domain code, no persistence, no functional behavior.
+**Goal:** Chat service exists in the solution, builds, and starts as an empty host. Players profile endpoint is available (including `OnboardingState`). No Chat domain code, no persistence, no functional behavior.
 
 **Included work:**
 - S1.1 — Verify and align existing project skeleton (all six projects already exist — verify SDKs, references, `InternalsVisibleTo`, `Program.cs`)
-- S3.1 — GetPlayerProfile query handler (response includes `IsReady`)
+- S3.1 — GetPlayerProfile query handler (response includes `OnboardingState`)
 - S3.2 — Profile endpoint
 - S3.3 — Players bootstrap wiring
 - S4.1 — Verify existing empty Contracts project
@@ -340,7 +341,7 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 - S1.3 (partial) — Use case: `GetOnlinePlayers`
 - S1.7 (partial) — Internal HTTP endpoint: `GET /api/internal/presence/online`
 
-**Why together:** All three Redis concerns share the same DB, the same connection, and the same testing infrastructure (real Redis via Testcontainers). The Lua scripts for presence are the most complex piece — isolating them in their own batch ensures they get focused implementation and testing before the hub depends on them. The display-name resolver and eligibility checker both need the Players profile endpoint from Batch 0 (including the `IsReady` field).
+**Why together:** All three Redis concerns share the same DB, the same connection, and the same testing infrastructure (real Redis via Testcontainers). The Lua scripts for presence are the most complex piece — isolating them in their own batch ensures they get focused implementation and testing before the hub depends on them. The display-name resolver and eligibility checker both need the Players profile endpoint from Batch 0 (including the `OnboardingState` field, from which Chat derives readiness).
 
 **Prerequisites:** Batch 0 (Players profile endpoint for resolver HTTP fallback)
 
@@ -380,7 +381,7 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 ---
 
 ### Batch 4: MassTransit Consumer + Background Workers
-**Goal:** Chat receives `PlayerCombatProfileChanged` events and populates the player info cache (name + isReady). Retention and presence sweep workers run.
+**Goal:** Chat receives `PlayerCombatProfileChanged` events and populates the player info cache (name + onboardingState). Retention and presence sweep workers run.
 
 **Included work:**
 - S1.6 — `PlayerCombatProfileChangedConsumer` + handler
@@ -388,12 +389,12 @@ Testing is a cross-cutting concern embedded in each batch, not a separate stream
 - S1.9 — `MessageRetentionWorker`, `PresenceSweepWorker`
 - S1.3 (partial) — `HandlePlayerProfileChanged` use case
 
-**Why together:** The consumer and workers are all background processes that don't affect the core request path. They share the same dependency: the Chat service must be fully assembled (Batch 3). The consumer populates the player info cache (name + isReady) that Batch 2 set up. The workers clean up data that Batches 1 and 2 created.
+**Why together:** The consumer and workers are all background processes that don't affect the core request path. They share the same dependency: the Chat service must be fully assembled (Batch 3). The consumer populates the player info cache (name + onboardingState, mapped from the event's `IsReady` bool) that Batch 2 set up. The workers clean up data that Batches 1 and 2 created.
 
 **Prerequisites:** Batch 3 (fully assembled Chat service)
 
 **Outputs:**
-- Player info cache (name + isReady) populated from integration events
+- Player info cache (name + onboardingState) populated from integration events
 - Old messages cleaned up hourly
 - Stale presence entries swept every 60s
 - Consumer idempotency verified
@@ -546,9 +547,9 @@ Batch 0: Foundation
 - `JoinGlobalChat` handler: **enforces eligibility (rejects ineligible users)**, adds to group, queries recent messages, queries online players (does NOT touch presence)
 - `GetConversationMessages` handler: access check (participant validation), delegates to repository
 - `GetConversations` handler: returns user's conversations with correct DTO shape
-- `HandlePlayerProfileChanged` handler: updates player info cache with name and isReady
-- `DisplayNameResolver`: cache hit → returns name; cache miss → HTTP success → returns and caches (name + isReady); HTTP fail → "Unknown"
-- `EligibilityChecker`: cache hit with isReady=true → eligible; cache hit with isReady=false → not eligible; cache miss → HTTP fallback; HTTP fail → not eligible
+- `HandlePlayerProfileChanged` handler: updates player info cache with name and onboardingState (maps event's `IsReady` bool → onboardingState string)
+- `DisplayNameResolver`: cache hit → returns name; cache miss → HTTP success → returns and caches (name + onboardingState from HTTP response); HTTP fail → "Unknown"
+- `EligibilityChecker`: cache hit with onboardingState="Ready" → eligible; cache hit with onboardingState != "Ready" → not eligible; cache miss → HTTP fallback (derives readiness from `OnboardingState`); HTTP fail → not eligible
 - All handlers tested with stubbed/faked ports — zero infrastructure
 
 ### Level 3: Infrastructure Integration Tests — PostgreSQL (Batch 1)
@@ -581,15 +582,15 @@ Batch 0: Foundation
   - Window expires → allowed again
   - Redis unavailable → in-memory fallback works
 - **Player info cache:**
-  - Set (name + isReady=true) → get → correct values
-  - Set (name + isReady=false) → get → isReady is false
+  - Set (name + onboardingState="Ready") → get → correct values
+  - Set (name + onboardingState="PickingName") → get → onboardingState is not "Ready"
   - TTL renewed on read
   - Expired key → cache miss
 - All tests use real Redis via Testcontainers
 
 ### Level 5: Consumer Tests (Batch 4)
-- `PlayerCombatProfileChangedConsumer` behavior: updates player info cache (name + isReady)
-- Consumer with `IsReady=false` → cache entry has `isReady: false`
+- `PlayerCombatProfileChangedConsumer` behavior: updates player info cache (name + onboardingState, mapped from event's `IsReady` bool)
+- Consumer with `IsReady=false` → cache entry has `onboardingState: "NotReady"`
 - Idempotency: same message twice → second is no-op (same cache value, no error)
 - Edge cases: null name, missing fields
 
@@ -597,7 +598,7 @@ Batch 0: Foundation
 - **Chat internal hub:**
   - Auth enforcement: valid JWT → connect, no JWT → reject
   - `JoinGlobalChat` returns correct structure
-  - `JoinGlobalChat` with player who has name but `isReady=false` → `ChatError(code: "not_eligible")`
+  - `JoinGlobalChat` with player who has name but `onboardingState != "Ready"` → `ChatError(code: "not_eligible")`
   - `SendGlobalMessage` with valid content → broadcast received
   - `SendGlobalMessage` with invalid content → `ChatError`
   - Rate-limited send → `ChatError` with `rate_limited` code and `retryAfterMs`
@@ -740,7 +741,7 @@ One person does everything sequentially: B0 → B1∥B2 → B3 → B4 → B5 →
 |---|---|---|
 | Internal hub method signatures | Chat implementer defines, BFF implementer consumes | Before Batch 5 starts |
 | Internal HTTP endpoint paths + DTOs | Chat implementer defines, BFF implementer consumes | Before Batch 5 starts |
-| Players profile endpoint response shape (must include `IsReady`) | Players/Chat implementer defines, BFF/Chat consumers | During Batch 0 |
+| Players profile endpoint response shape (must include `OnboardingState`) | Players/Chat implementer defines, BFF/Chat consumers | During Batch 0 |
 | Review: Lua scripts | Both implementers should review presence Lua scripts | During Batch 2 |
 | Review: relay lifecycle | Both implementers should review ChatHubRelay | During Batch 5 |
 
@@ -782,7 +783,7 @@ The spec says "Chat sends a ping every 30 seconds on each connection." Implement
 **Concrete behavior:**
 - BFF `ChatHub.OnConnectedAsync`: creates the downstream relay connection unconditionally (no eligibility check at connection time — connection is just transport).
 - BFF `ChatHub.JoinGlobalChat` / `SendDirectMessage`: no local eligibility check. Forwards to Chat immediately.
-- Chat service (Layer 2): performs the authoritative eligibility check on `JoinGlobalChat` and `SendDirectMessage` using `IEligibilityChecker` — checks `isReady` in the player info cache, falls back to Players HTTP profile endpoint (which includes `IsReady`), rejects if unverifiable. Eligibility is based on `isReady == true`, not just name existence. Rejects ineligible users with `ChatError(code: "not_eligible")`.
+- Chat service (Layer 2): performs the authoritative eligibility check on `JoinGlobalChat` and `SendDirectMessage` using `IEligibilityChecker` — checks `onboardingState` in the player info cache (derives readiness as `onboardingState == "Ready"`), falls back to Players HTTP profile endpoint (which returns `OnboardingState` enum), rejects if unverifiable. Eligibility is based on derived readiness, not just name existence. Rejects ineligible users with `ChatError(code: "not_eligible")`.
 
 **Why this is safe:** Chat's Layer 2 enforcement is always active regardless of BFF behavior. The cost is that an ineligible user's BFF relay connection is created before Chat rejects them on the first hub method call — one wasted downstream WebSocket setup. At v1 scale this is negligible. If the BFF later gains per-user state (e.g., for session tracking), Layer 1 can be added as an optimization without changing the Chat-side enforcement.
 
