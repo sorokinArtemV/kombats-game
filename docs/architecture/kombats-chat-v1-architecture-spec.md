@@ -1,10 +1,10 @@
 # Kombats Chat v1 — Architecture Specification
 
-**Status:** Draft — pending review
+**Status:** Draft — post-review correction pass, ready for task decomposition
 **Date:** 2026-04-14 (revised 2026-04-14)
 **Scope:** First version of the Kombats chat system
 **Supersedes:** `docs/chat/chat.md` (initial proposal)
-**Revision note:** Correction pass addressing player-card ownership framing, Redis-down rate-limiting policy, eligibility enforcement consistency, and relay topology trade-off framing.
+**Revision note:** Post-review correction pass applying findings from `docs/architecture/reviews/kombats-chat-v1-architecture-review.md`. Changes: atomic Lua presence lifecycle (C1), unambiguous rate-limit algorithm (I2), BFF eligibility when state unknown (I5), display-name cache TTL (I3), explicit v1 deployment constraints (Q4), SignalR group/Redis separation (failure modes), hung-connection detection, reconnect dedup contract, DM presence scope.
 
 ---
 
@@ -273,7 +273,19 @@ The relay creates O(N) downstream SignalR connections where N = total connected 
 | Frontend calls `SendDirectMessage` | Forwards to downstream | Validates, rate-checks, resolves/creates conversation, persists, sends to recipient's connection(s) |
 | Frontend disconnects | Disposes downstream connection, removes from tracking dictionary | Detects disconnect, removes presence, broadcasts `PlayerOffline` |
 | Downstream connection drops | Sends `ChatConnectionLost` event to frontend, removes from tracking | Detects disconnect, removes presence |
+| Downstream connection hangs (open but unresponsive) | Detected via hub invocation timeout (see below). BFF tears down the downstream connection, sends `ChatConnectionLost` to frontend, removes from tracking. | N/A (connection torn down by BFF) |
 | Chat service unavailable on connect | Returns error to frontend `JoinGlobalChat` | N/A |
+
+### Hung-connection detection
+
+A downstream relay connection can become unresponsive without the TCP connection dropping (e.g., Chat process is frozen, network partition allows keepalives but not data). The BFF detects this via **hub invocation timeout**:
+
+- When the BFF forwards a client command (e.g., `SendGlobalMessage`) to the downstream hub, it uses a configurable invocation timeout (default: 15 seconds).
+- If the downstream hub does not respond within the timeout, the BFF treats the connection as hung.
+- The BFF tears down the downstream `HubConnection`, removes it from the tracking dictionary, and sends `ChatConnectionLost` to the frontend with `reason: "downstream_timeout"`.
+- The frontend handles this identically to a dropped connection — it attempts reconnect after a delay.
+
+This reuses the same error path as a dropped connection. No separate monitoring or heartbeat protocol is needed beyond the invocation timeout on forwarded calls.
 
 ---
 
@@ -311,12 +323,62 @@ Type:   INT (via INCR/DECR)
 TTL:    90 seconds (renewed on any heartbeat from any connection)
 ```
 
-### Lifecycle
+### Lifecycle — atomic Lua scripts required
 
-1. **Connect:** Chat receives a new downstream connection. `INCR chat:presence:refs:{id}`. If result is 1 (first connection), `ZADD chat:presence:online`, `SET chat:presence:{id}`, broadcast `PlayerOnline` to global chat group.
-2. **Heartbeat:** Chat sends a ping every 30 seconds on each connection. On response, renew TTL on `chat:presence:{id}` and `chat:presence:refs:{id}`. Update ZSET score.
-3. **Graceful disconnect:** `DECR chat:presence:refs:{id}`. If result is 0 (last connection), `ZREM chat:presence:online`, `DEL chat:presence:{id}`, broadcast `PlayerOffline`.
-4. **Ungraceful disconnect / crash:** The 90-second TTL on the presence key and refcount key acts as a safety net. A periodic sweep (every 60 seconds) scans the ZSET for entries with scores older than 90 seconds and removes them.
+The connect and disconnect sequences each touch multiple Redis keys (refcount, ZSET, presence record, TTLs). These **must** be executed as atomic Lua scripts to prevent divergence between refcount and ZSET state on crash, and to prevent negative refcount on disconnect-after-TTL-expiry.
+
+**1. Connect (Lua script `presence_connect`):**
+
+Inputs: `identityId`, `displayName`, `nowUnixMs`
+
+```
+-- Atomic connect: INCR refcount, conditionally add to ZSET + set presence record
+local refs = redis.call('INCR', KEYS[1])           -- chat:presence:refs:{id}
+redis.call('EXPIRE', KEYS[1], 90)
+if refs == 1 then
+  redis.call('ZADD', KEYS[2], ARGV[1], ARGV[2])    -- chat:presence:online, score=nowMs, member=id
+  redis.call('SET', KEYS[3], ARGV[3], 'EX', 90)    -- chat:presence:{id}, value=JSON, TTL=90s
+  return 1  -- first connection: caller broadcasts PlayerOnline
+end
+return 0    -- additional connection: no broadcast needed
+```
+
+If the script returns 1, the Chat service broadcasts `PlayerOnline` to the global chat group after the script completes. If it returns 0, no broadcast.
+
+**2. Heartbeat (Lua script `presence_heartbeat`):**
+
+Inputs: `identityId`, `nowUnixMs`
+
+```
+-- Atomic heartbeat: renew TTLs, update ZSET score
+redis.call('EXPIRE', KEYS[1], 90)                   -- chat:presence:refs:{id}
+redis.call('EXPIRE', KEYS[2], 90)                   -- chat:presence:{id}
+redis.call('ZADD', KEYS[3], ARGV[1], ARGV[2])       -- chat:presence:online, score=nowMs, member=id
+return 1
+```
+
+Chat sends a ping every 30 seconds on each connection. On response, execute the heartbeat script.
+
+**3. Graceful disconnect (Lua script `presence_disconnect`):**
+
+Inputs: `identityId`
+
+```
+-- Atomic disconnect: clamp-to-zero DECR, conditionally remove from ZSET + delete presence
+local refs = tonumber(redis.call('GET', KEYS[1])) or 0
+if refs <= 1 then
+  redis.call('DEL', KEYS[1])                         -- chat:presence:refs:{id}
+  redis.call('ZREM', KEYS[2], ARGV[1])               -- chat:presence:online
+  redis.call('DEL', KEYS[3])                          -- chat:presence:{id}
+  return 1  -- last connection: caller broadcasts PlayerOffline
+end
+redis.call('DECR', KEYS[1])
+return 0    -- other connections remain: no broadcast
+```
+
+If the script returns 1, the Chat service broadcasts `PlayerOffline` to the global chat group. The `GET`-then-conditional-DECR pattern prevents the refcount from going negative (e.g., if a disconnect fires after the refcount key has already expired via TTL).
+
+**4. Ungraceful disconnect / crash:** The 90-second TTL on the presence key and refcount key acts as a safety net. A periodic sweep (every 60 seconds) scans the ZSET for entries with scores older than 90 seconds and removes them, broadcasting `PlayerOffline` for each removed entry.
 
 ### Staleness tolerance
 
@@ -324,7 +386,7 @@ Up to 90 seconds. A player can appear online for at most 90 seconds after their 
 
 ### Multi-instance behavior
 
-Redis is the shared state. Multiple Chat instances read and write the same keys. The INCR/DECR operations are atomic. The ZSET scan is consistent across instances. No sticky sessions are required.
+Redis is the shared state. Multiple Chat instances read and write the same keys. The Lua scripts execute atomically on the Redis server — no cross-key race conditions are possible regardless of how many Chat instances are connected. No sticky sessions are required.
 
 ### Multi-tab / multi-device
 
@@ -335,6 +397,8 @@ The reference count ensures a player appears online as long as at least one conn
 ### Presence broadcast scope
 
 v1 broadcasts `PlayerOnline`/`PlayerOffline` to the global chat SignalR group only. Users not in global chat do not receive presence updates. This limits fan-out to the active audience.
+
+**DM presence limitation (v1):** A user viewing a DM conversation does not receive realtime presence updates for their conversation partner unless they are also in the global chat group. The HTTP presence endpoint (`GET /api/v1/chat/presence/online`) can be used for one-shot checks, but there is no targeted "is player X online?" query in v1. DM presence freshness is not guaranteed in realtime. This is an accepted v1 limitation. A targeted `GET /api/v1/chat/presence/{playerId}` endpoint or subscription-based per-user presence can be added later if DM UX requires it.
 
 ---
 
@@ -347,6 +411,7 @@ Conversation:
   Id:           Guid
   Type:         ConversationType enum { Global = 0, Direct = 1 }
   CreatedAt:    DateTimeOffset
+  LastMessageAt: DateTimeOffset | null
 
   # Direct conversations only:
   ParticipantAIdentityId:  Guid
@@ -355,6 +420,8 @@ Conversation:
   # Constraint: for Direct, participants are stored in sorted order
   #   (smaller Guid first) to ensure deterministic lookup.
 ```
+
+`LastMessageAt` is a **denormalized field updated on each message insert** (set to the new message's `SentAt`). This avoids a join/subquery when listing conversations ordered by recent activity.
 
 **Global conversation:** A singleton with a well-known deterministic ID. Generated from a fixed namespace UUID v5 or hardcoded as a constant (e.g., `00000000-0000-0000-0000-000000000001`). Created on first service startup if absent.
 
@@ -406,6 +473,8 @@ Cursor-based keyset pagination using `sentAt` as the cursor:
 
 On reconnect, the client includes the timestamp of the last message it received. The BFF passes this to Chat's history endpoint (`?after={lastSeenUtc}&limit=200`) to fetch missed messages. The 24-hour retention window caps the maximum catch-up window.
 
+**Deduplication contract:** The `?after={lastSeenUtc}` parameter uses a **strict greater-than** comparison (`sent_at > @after`), not greater-than-or-equal. This means the server guarantees no overlap between messages already received and catch-up messages, provided the client passes the exact `sentAt` of its last received message. Client-side dedup by `messageId` is **not required** for correctness, though it is harmless if implemented defensively.
+
 For brief disconnects (seconds), SignalR's built-in automatic reconnect (`withAutomaticReconnect` on the client) handles most cases — the connection resumes without explicit message recovery.
 
 ---
@@ -431,7 +500,7 @@ The client never needs to know or manage `conversationId` to send a DM. The flow
 
 ### Conversation listing
 
-The BFF exposes `GET /api/v1/chat/conversations` which returns the user's active conversations:
+The BFF exposes `GET /api/v1/chat/conversations` which returns the user's active conversations. **v1 does not paginate this endpoint.** With 24-hour message retention and automatic deletion of empty conversations, the practical conversation count per user is bounded by the number of distinct DM partners within 24 hours — unlikely to exceed low tens. If retention is extended in the future, pagination must be added.
 
 ```
 [
@@ -601,7 +670,7 @@ All endpoints require `[Authorize]` (Keycloak JWT).
 
 | Method | Parameters | Returns | Description |
 |---|---|---|---|
-| `JoinGlobalChat` | — | `JoinGlobalChatResult` | Subscribe to global chat + presence. Returns recent message page + online player list. |
+| `JoinGlobalChat` | — | `JoinGlobalChatResult` | Subscribe to global chat + presence. Returns recent message page + online player snapshot (capped at 100; use HTTP endpoint for full paginated list). |
 | `LeaveGlobalChat` | — | void | Unsubscribe from global chat + presence broadcasts. |
 | `SendGlobalMessage` | `content: string` | void | Send message to global chat. |
 | `SendDirectMessage` | `recipientPlayerId: Guid, content: string` | `SendDirectMessageResult` | Send DM. Returns the resolved `conversationId`. |
@@ -611,9 +680,12 @@ All endpoints require `[Authorize]` (Keycloak JWT).
 {
   "conversationId": Guid,
   "recentMessages": [ MessagePayload... ],
-  "onlinePlayers": [ { "playerId": Guid, "displayName": string }... ]
+  "onlinePlayers": [ { "playerId": Guid, "displayName": string }... ],
+  "totalOnline": int
 }
 ```
+
+`onlinePlayers` returns at most **100 entries** (first 100 from the ZSET). `totalOnline` returns the full count. For the complete paginated list, clients use `GET /api/v1/chat/presence/online`. At v1 scale (hundreds of users) 100 is likely the full set; the cap prevents unbounded payloads if online population grows.
 
 **`SendDirectMessageResult`:**
 ```
@@ -653,22 +725,20 @@ All endpoints require `[Authorize]` (Keycloak JWT).
 
 Not exposed to frontend. Only the BFF connects to this hub.
 
-**Methods (mirroring BFF hub but with internal naming):**
+**Methods (same signatures as the client-facing hub — BFF performs a blind relay):**
 
 | Method | Parameters | Returns | Description |
 |---|---|---|---|
-| `JoinGlobalChat` | — | `JoinGlobalChatResult` | Register connection in global group, record presence, return bootstrap data |
+| `JoinGlobalChat` | — | `JoinGlobalChatResult` | Register connection in global group, record presence, return bootstrap data (online players capped at 100) |
 | `LeaveGlobalChat` | — | void | Remove from global group |
 | `SendGlobalMessage` | `content: string` | void | Validate, rate-check, persist, broadcast |
-| `SendDirectMessage` | `recipientIdentityId: Guid, content: string` | `SendDirectMessageResult` | Validate, rate-check, resolve conversation, persist, deliver |
+| `SendDirectMessage` | `recipientPlayerId: Guid, content: string` | `SendDirectMessageResult` | Validate, rate-check, resolve conversation, persist, deliver |
 
 User identity is extracted from the JWT on the connection (same `sub` claim extraction as other services).
 
 **Server-to-client events (sent to downstream BFF connections):**
 
-Same event names and payloads as the BFF client-facing events, but using `identityId` field names internally. The BFF relay maps `identityId` -> `playerId` in payloads before forwarding to the frontend.
-
-**Correction:** For simplicity in v1, the Chat internal hub uses the same `playerId` field name as the client-facing contracts. The BFF performs a blind relay of event payloads without field remapping. This means Chat's internal realtime contracts use `playerId` (which is the identity ID value) — consistent with Battle's precedent where `PlayerAId` in realtime contracts IS the identity ID.
+Same event names, payloads, and field names as the client-facing events. The BFF performs a blind relay without field remapping. Both the internal and client-facing contracts use `playerId` (which is the identity ID value) — consistent with Battle's precedent where `PlayerAId` in realtime contracts IS the identity ID.
 
 ### Internal HTTP Endpoints
 
@@ -714,7 +784,7 @@ Snake_case naming via `EFCore.NamingConventions` (consistent with all services).
 | `chat:presence:{identityId}` | String (JSON) | Per-user presence record | 90s (heartbeat-renewed) |
 | `chat:presence:online` | ZSET | Online player set, score = last heartbeat ms | Members removed on disconnect or sweep |
 | `chat:presence:refs:{identityId}` | INT | Multi-tab connection refcount | 90s (heartbeat-renewed) |
-| `chat:name:{identityId}` | String | Cached display name | No TTL (updated on event, deleted if orphaned) |
+| `chat:name:{identityId}` | String | Cached display name | 7 days (renewed on event receipt and on cache hit during message send) |
 | `chat:ratelimit:{identityId}:global` | String (counter) | Global chat rate-limit window | 10s |
 | `chat:ratelimit:{identityId}:dm` | String (counter) | DM rate-limit window | 30s |
 
@@ -735,7 +805,7 @@ Snake_case naming via `EFCore.NamingConventions` (consistent with all services).
 **What:** A mapping from `identityId` to `displayName` in Redis.
 **Why:** To stamp `SenderDisplayName` on messages without a synchronous call to Players on every send.
 **Source:** `PlayerCombatProfileChanged` integration event, field `Name`.
-**Storage:** `chat:name:{identityId}` in Redis DB 2. No TTL — updated on event receipt.
+**Storage:** `chat:name:{identityId}` in Redis DB 2. TTL: 7 days, renewed on event receipt and on cache hit during message send. This ensures active players' names stay cached indefinitely while inactive players' keys are automatically cleaned up.
 
 ### Cache-miss behavior
 
@@ -772,7 +842,7 @@ If name changes become possible in the future, the event-driven update ensures e
 When Redis is unavailable, distributed rate limiting cannot function. Rather than either disabling throttling entirely (too permissive — allows abuse during outages) or rejecting all sends (too harsh — Redis outage should not kill chat), the Chat service falls back to a **coarse in-memory per-instance rate limiter**.
 
 - The fallback is a simple `ConcurrentDictionary<identityId, (count, windowStart)>` in the Chat service process.
-- It enforces the same rate limits as the Redis-based limiter (1 msg / 2s global, 1 msg / 1s DM) but is per-instance, not distributed.
+- It enforces the same rate limits as the Redis-based limiter (5 in 10s global, 10 in 30s DM) but is per-instance, not distributed.
 - This means a user connected to multiple Chat instances (if horizontally scaled) could exceed the intended rate by a factor of N (number of Chat instances). At v1 scale with a single Chat instance, this is equivalent to the distributed limiter.
 - The fallback activates automatically when Redis operations fail and deactivates when Redis becomes available again. No manual intervention.
 - A warning is logged on first fallback activation per service restart.
@@ -850,8 +920,13 @@ Covered above under "Redis unavailable" — falls through to Players HTTP lookup
 
 Chat eligibility (`OnboardingState == Ready`) is enforced at **two layers** as defense-in-depth:
 
-**Layer 1 — BFF (early rejection):**
-The BFF checks whether the player's onboarding is complete before creating a downstream Chat connection. The BFF already has the player's state from the `GetGameState` flow (`PlayersClient.GetCharacterAsync`). If the player is not `Ready`, the BFF rejects the `JoinGlobalChat` / `SendDirectMessage` call with a `ChatError` (`code: "not_eligible"`) without creating a downstream connection. This prevents unnecessary downstream traffic and provides fast client feedback.
+**Layer 1 — BFF (early rejection, best-effort):**
+The BFF checks whether the player's onboarding is complete before creating a downstream Chat connection, **when the state is already locally known**.
+
+- **State known (common case):** The BFF typically has the player's state from the `GetGameState` flow (`PlayersClient.GetCharacterAsync`), which the frontend calls on startup. If the player is not `Ready`, the BFF rejects the `JoinGlobalChat` / `SendDirectMessage` call with a `ChatError` (`code: "not_eligible"`) without creating a downstream connection.
+- **State not known (edge case — client connects without prior `GetGameState`, or BFF restarted):** The BFF does **not** synchronously call Players to check readiness. It skips the local check and allows the downstream connection to proceed. Chat service (Layer 2) is the authoritative enforcement point and will reject ineligible users.
+
+This means Layer 1 is a **fast-path optimization**, not a security gate. It prevents unnecessary downstream traffic when the BFF already has the answer, but it does not introduce a synchronous Players dependency on the ChatHub connection path.
 
 **Layer 2 — Chat service (authoritative enforcement):**
 The Chat service performs its own eligibility check on `JoinGlobalChat` and `SendDirectMessage`. Chat checks the display-name cache: a player present in the cache with a non-null name is considered eligible (the cache is populated from `PlayerCombatProfileChanged` events, which include `IsReady`). If the cache has no entry for the player, Chat calls Players via HTTP (`GET /api/v1/players/{identityId}/profile`) to verify eligibility. If Players is unavailable and the cache is empty, the connection is rejected — Chat does not allow unverified users to send messages.
@@ -876,15 +951,19 @@ The Chat service performs its own eligibility check on `JoinGlobalChat` and `Sen
 
 ### Rate limiting
 
-Implemented as Redis sliding-window counters.
+Each surface uses a **single fixed-window counter** in Redis. One algorithm, one counter per surface per user. No dual constraints.
 
-| Surface | Rate | Burst | Window |
-|---|---|---|---|
-| Global chat | 1 message / 2 seconds | Max 5 in 10 seconds | 10s window |
-| Direct messages | 1 message / 1 second | Max 10 in 30 seconds | 30s window |
-| Presence queries (HTTP) | 1 request / 5 seconds | — | 5s window |
+**Algorithm:** Fixed-window counter via `INCR` + `EXPIRE`. On each request, `INCR chat:ratelimit:{identityId}:{surface}`. If the key was just created, set `EXPIRE` to the window duration. If the counter exceeds the limit, reject with `retryAfterMs` = remaining TTL on the key. The window resets when the key expires.
 
-Violations return `ChatError` event with `code: "rate_limited"` and `retryAfterMs` indicating the remaining cooldown. Messages are rejected, not silently dropped.
+| Surface | Limit | Window | Redis key TTL | Enforcement |
+|---|---|---|---|---|
+| Global chat | 5 messages | 10 seconds | 10s | If count > 5 within the window, reject. Steady-state effective rate: ~1 msg/2s. |
+| Direct messages | 10 messages | 30 seconds | 30s | If count > 10 within the window, reject. |
+| Presence queries (HTTP) | 1 request | 5 seconds | 5s | If count > 1 within the window, reject. |
+
+**Clarification:** "1 message / 2 seconds" in earlier text was a human-readable description of the steady-state throughput of the 5-in-10s window. It is **not** a separate constraint. There is exactly one counter and one check per surface.
+
+Violations return `ChatError` event with `code: "rate_limited"` and `retryAfterMs` set to the remaining TTL of the rate-limit key (milliseconds until the window resets). Messages are rejected, not silently dropped.
 
 Rate-limit state is keyed by `identityId`, not by `connectionId`. This means limits persist across reconnects and multi-tab connections.
 
@@ -903,7 +982,24 @@ Rate limits are per-identity, not per-connection. Reconnecting does not reset ra
 
 ---
 
-## 17. Risks and Trade-offs
+## 17. v1 Deployment Constraints
+
+These are explicit constraints for v1, not accidental omissions. They scope the implementation and affect task decomposition.
+
+| Constraint | Status | Implication |
+|---|---|---|
+| **Single Chat instance** | Required for v1 | SignalR groups are in-memory only. No Redis backplane needed. All connected users are on the same instance. |
+| **Single BFF instance** | Required for v1 | BFF SignalR groups are in-memory only. Same constraint as Chat. This also applies to the existing `BattleHub` — it is not a Chat-specific limitation. |
+| **No SignalR Redis backplane** | Intentionally out of scope for v1 | Multi-instance SignalR requires `Microsoft.AspNetCore.SignalR.StackExchangeRedis`. Deferred to when horizontal scaling is needed. |
+| **Redis used only for data, not SignalR transport** | Explicit for v1 | Redis stores presence, rate-limit counters, and display-name cache. SignalR group membership and broadcast are handled entirely by in-memory SignalR groups. Redis unavailability does **not** affect SignalR message broadcast — it only affects presence queries and rate limiting. |
+
+**Why this matters for failure behavior:** When Redis is down, SignalR broadcast continues to work normally (messages are still delivered to connected users). Only presence tracking and distributed rate limiting degrade. This is why the Redis-down degradation in Section 15 can honestly say "chat messaging continues."
+
+**Migration path:** When Chat or BFF need horizontal scaling, add the Redis backplane for SignalR (`Microsoft.AspNetCore.SignalR.StackExchangeRedis`). This is an operational change in Bootstrap configuration, not an architectural rewrite.
+
+---
+
+## 18. Risks and Trade-offs
 
 ### Accepted: BFF relay adds one network hop
 
@@ -927,15 +1023,17 @@ Redis DB isolation (0/1/2) is logical, not physical. A Redis outage affects all 
 
 ### Risk: Global chat broadcast scaling
 
-A single global room means every message fans out to all connected users. At >1,000 concurrent users with high message rates, this could saturate the Chat service's SignalR broadcast capacity. **Mitigation:** Rate limiting (1 msg / 2s / user) bounds inbound throughput. If outbound fan-out becomes an issue, the architecture supports sharding global chat into regional rooms or adding a Redis backplane for multi-instance SignalR. Both are operational changes, not architectural rewrites.
+A single global room means every message fans out to all connected users. At >1,000 concurrent users with high message rates, this could saturate the Chat service's SignalR broadcast capacity. **Mitigation:** Rate limiting (5 msgs / 10s / user) bounds per-user inbound throughput. However, aggregate inbound is bounded by `(concurrent_users / 2) msgs/sec` at max rate — with 500 users, that is 250 msgs/sec broadcast to 500 connections. At v1 scale (hundreds of users) this is safe. If outbound fan-out becomes an issue, the architecture supports sharding global chat into regional rooms or adding a Redis backplane for multi-instance SignalR. Both are operational changes, not architectural rewrites. **Monitoring trigger:** alert when sustained global-chat broadcast rate exceeds 100 msgs/sec.
 
 ### Accepted v1 trade-off: Relay connection count at scale
 
-O(N) downstream WebSocket connections per BFF instance to Chat, where N = connected chat users on that BFF instance. Unlike Battle relay (short-lived, battle-scoped connections), chat relay connections are long-lived (session-scoped). This is the most significant scaling limitation of the v1 topology. At v1 scale (hundreds of users) this is acceptable. At >10,000 concurrent users, migrate to Option B (shared pub/sub). The migration is internal to BFF/Chat and does not change client contracts. See [Section 6](#6-realtime-topology-decision) for the full trade-off analysis.
+O(N) downstream WebSocket connections per BFF instance to Chat, where N = connected chat users on that BFF instance. Unlike Battle relay (short-lived, battle-scoped connections), chat relay connections are long-lived (session-scoped). This is the most significant scaling limitation of the v1 topology.
+
+**Failure mode is a cliff, not a gradient:** When the Chat instance's WebSocket connection limit is reached, new users simply cannot connect — there is no graceful degradation between "works" and "doesn't work." At v1 scale (hundreds of users) this is far from the limit. At >10,000 concurrent users, migrate to Option B (shared pub/sub). The migration is internal to BFF/Chat and does not change client contracts, but it is a non-trivial internal change (adding messaging infra to BFF, replacing relay lifecycle with subscription model, making presence heartbeat-based). See [Section 6](#6-realtime-topology-decision) for the full trade-off analysis.
 
 ---
 
-## 18. Deferred / Future Extensions
+## 19. Deferred / Future Extensions
 
 | Extension | Architectural readiness | When to revisit |
 |---|---|---|
@@ -952,7 +1050,7 @@ O(N) downstream WebSocket connections per BFF instance to Chat, where N = connec
 
 ---
 
-## 19. Open Questions / Decisions That Still Need Confirmation
+## 20. Open Questions / Decisions That Still Need Confirmation
 
 ### OQ-1: Global conversation bootstrap
 
@@ -984,17 +1082,11 @@ Option (a) is simpler — presence is connection-based, not room-based. Option (
 
 **Recommendation:** Option (a) for v1. Presence is connection-scoped, not room-scoped.
 
-### OQ-4: Multi-instance BFF SignalR
+### OQ-4: Open DM model and harassment risk
 
-If the BFF is deployed as multiple instances, SignalR group membership is per-instance. A message broadcast from the Chat relay on BFF instance 1 only reaches clients connected to instance 1.
+v1 allows any `Ready` player to DM any other `Ready` player with no opt-out. In PvP games, post-match harassment via DM is a known pattern. The `IUserRestriction` port exists as the designated mitigation point, but v1 ships with no restriction implementation. This is a product decision, not an architecture gap — but it should be acknowledged as an early post-v1 priority if abuse occurs.
 
-For v1 with a single BFF instance, this is not a problem. For multi-instance BFF:
-- (a) Add a Redis backplane to the BFF's SignalR (`Microsoft.AspNetCore.SignalR.StackExchangeRedis`), or
-- (b) Accept single-instance BFF for v1.
-
-**Recommendation:** Document this as a known limitation. Option (b) for v1. Option (a) when BFF scales horizontally.
-
-**Note:** This same limitation already applies to the existing `BattleHub` — it too is affected by multi-instance BFF. This is not a chat-specific concern.
+**Note:** Multi-instance BFF/Chat SignalR is addressed in Section 17 (v1 Deployment Constraints) — single-instance for both is an explicit v1 constraint.
 
 ---
 
@@ -1018,7 +1110,7 @@ src/Kombats.Chat/
 │   │   ├── IMessageFilter.cs
 │   │   ├── IUserRestriction.cs
 │   │   ├── IDisplayNameCache.cs
-│   │   └── IPlayersClient.cs        # For synchronous fallback
+│   │   └── IDisplayNameResolver.cs   # Resolves display name (cache -> HTTP -> sentinel)
 │   └── UseCases/
 │       ├── SendGlobalMessage/
 │       ├── SendDirectMessage/
