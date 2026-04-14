@@ -29,7 +29,9 @@ import {
   Send,
   HourglassEmpty,
   Person,
-  Tune
+  Tune,
+  EmojiEvents,
+  Close
 } from '@mui/icons-material';
 
 const darkTheme = createTheme({
@@ -46,7 +48,7 @@ const darkTheme = createTheme({
 });
 
 type GameState = 'lobby' | 'battle';
-type BattleSubstate = 'choosing' | 'waiting';
+type BattleSubstate = 'choosing' | 'waiting' | 'victory' | 'defeat';
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState>('lobby');
@@ -151,6 +153,18 @@ export default function App() {
                   onClick={() => setBattleSubstate('waiting')}
                 >
                   Waiting
+                </Button>
+                <Button
+                  variant={battleSubstate === 'victory' ? 'contained' : 'outlined'}
+                  onClick={() => setBattleSubstate('victory')}
+                >
+                  Victory
+                </Button>
+                <Button
+                  variant={battleSubstate === 'defeat' ? 'contained' : 'outlined'}
+                  onClick={() => setBattleSubstate('defeat')}
+                >
+                  Defeat
                 </Button>
               </ButtonGroup>
             )}
@@ -425,173 +439,385 @@ export default function App() {
 
                 {/* Center Panel - Combat Area */}
                 <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {/* Top Section - Action Selection or Waiting State */}
-                  <Card sx={{ bgcolor: 'background.paper' }}>
-                    <CardContent sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
-                      {battleSubstate === 'choosing' ? (
-                        /* Choosing Turn - Compact Centered Action Selection */
-                        <Box sx={{ width: '100%', maxWidth: 600 }}>
-                          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                            {/* Attack Selection */}
-                            <Box sx={{ flex: 1 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontWeight: 600,
-                                  mb: 1,
-                                  textAlign: 'center',
-                                  color: '#f44336'
-                                }}
-                              >
-                                ATTACK
-                              </Typography>
-                              <Stack spacing={0.75}>
-                                {attackZones.map((zone) => (
-                                  <Button
-                                    key={zone}
-                                    variant={selectedAttack === zone ? 'contained' : 'outlined'}
-                                    color="error"
-                                    size="small"
-                                    onClick={() => setSelectedAttack(zone)}
-                                    sx={{
-                                      justifyContent: 'center',
-                                      py: 0.75
-                                    }}
-                                  >
-                                    {zone}
-                                  </Button>
-                                ))}
-                              </Stack>
-                            </Box>
-
-                            {/* Block Selection */}
-                            <Box sx={{ flex: 1 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontWeight: 600,
-                                  mb: 1,
-                                  textAlign: 'center',
-                                  color: '#2196f3'
-                                }}
-                              >
-                                BLOCK
-                              </Typography>
-                              <Stack spacing={0.75}>
-                                {blockZones.map((zone) => (
-                                  <Button
-                                    key={zone}
-                                    variant={selectedBlock === zone ? 'contained' : 'outlined'}
-                                    color="primary"
-                                    size="small"
-                                    onClick={() => setSelectedBlock(zone)}
-                                    sx={{
-                                      justifyContent: 'center',
-                                      py: 0.75,
-                                      fontSize: '0.8rem'
-                                    }}
-                                  >
-                                    {zone}
-                                  </Button>
-                                ))}
-                              </Stack>
-                            </Box>
-                          </Box>
-
-                          {/* GO Button - Centered and Prominent */}
-                          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                            <Button
-                              variant="contained"
-                              size="large"
-                              disabled={!selectedAttack || !selectedBlock}
-                              onClick={() => setBattleSubstate('waiting')}
+                  {battleSubstate === 'victory' || battleSubstate === 'defeat' ? (
+                    /* MATCH RESULT STATE - Victory or Defeat */
+                    <Card
+                      sx={{
+                        flex: 1,
+                        bgcolor: battleSubstate === 'victory' ? '#1b2e1b' : '#2e1b1b',
+                        border: battleSubstate === 'victory' ? '2px solid #4caf50' : '2px solid #f44336',
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }}
+                    >
+                      <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', p: 4 }}>
+                        {battleSubstate === 'victory' ? (
+                          /* VICTORY STATE */
+                          <>
+                            <Box
                               sx={{
-                                minWidth: 200,
-                                py: 1.5,
-                                px: 6,
-                                fontSize: '1.25rem',
-                                fontWeight: 700,
-                                letterSpacing: 2,
+                                width: 120,
+                                height: 120,
+                                borderRadius: '50%',
                                 bgcolor: '#4caf50',
-                                '&:hover': {
-                                  bgcolor: '#45a049'
-                                },
-                                '&:disabled': {
-                                  bgcolor: '#333'
-                                }
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                mb: 3,
+                                boxShadow: '0 0 40px rgba(76, 175, 80, 0.4)'
                               }}
                             >
-                              GO
-                            </Button>
-                          </Box>
-                        </Box>
-                      ) : (
-                        /* Waiting for Opponent */
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            py: 4
-                          }}
-                        >
-                          <HourglassEmpty
-                            sx={{
-                              fontSize: 64,
-                              color: '#666',
-                              mb: 2
-                            }}
-                          />
-                          <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                            Waiting for opponent turn
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Your turn has been submitted
-                          </Typography>
-                          <Box sx={{ mt: 2 }}>
-                            <Chip
-                              label="Turn in progress"
-                              size="small"
-                              color="warning"
-                              sx={{ animation: 'pulse 2s ease-in-out infinite' }}
-                            />
-                          </Box>
-                        </Box>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Battle Log - Primary Content Area */}
-                  <Card sx={{ flex: 1, bgcolor: 'background.paper', display: 'flex', flexDirection: 'column' }}>
-                    <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2 }}>
-                      <Typography variant="body1" sx={{ fontWeight: 600, mb: 2 }}>
-                        Battle Log
-                      </Typography>
-                      <Paper
-                        sx={{
-                          flex: 1,
-                          p: 2,
-                          bgcolor: '#252525',
-                          overflow: 'auto'
-                        }}
-                      >
-                        <Stack spacing={2}>
-                          {battleLog.map((log, index) => (
-                            <Box key={index}>
-                              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-                                Turn {log.turn}
-                              </Typography>
-                              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                                {log.message}
-                              </Typography>
-                              <Divider sx={{ mt: 1.5, opacity: 0.3 }} />
+                              <EmojiEvents sx={{ fontSize: 80, color: '#fff' }} />
                             </Box>
-                          ))}
-                        </Stack>
-                      </Paper>
-                    </CardContent>
-                  </Card>
+
+                            <Typography
+                              variant="h2"
+                              sx={{
+                                fontWeight: 700,
+                                letterSpacing: 4,
+                                color: '#4caf50',
+                                mb: 2,
+                                textShadow: '0 0 20px rgba(76, 175, 80, 0.5)'
+                              }}
+                            >
+                              VICTORY
+                            </Typography>
+
+                            <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
+                              You have defeated {opponentStats.name}
+                            </Typography>
+
+                            <Paper sx={{ p: 3, bgcolor: '#252525', mb: 4, minWidth: 400 }}>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                Match Summary
+                              </Typography>
+                              <Stack spacing={1.5}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2">Turns Taken</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>3</Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2">Damage Dealt</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#4caf50' }}>40</Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2">Damage Received</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>0</Typography>
+                                </Box>
+                                <Divider sx={{ my: 1 }} />
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Rating Change</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#4caf50' }}>+24</Typography>
+                                </Box>
+                              </Stack>
+                            </Paper>
+
+                            <Stack direction="row" spacing={2}>
+                              <Button
+                                variant="contained"
+                                size="large"
+                                onClick={() => setGameState('lobby')}
+                                sx={{
+                                  px: 4,
+                                  py: 1.5,
+                                  bgcolor: '#4caf50',
+                                  '&:hover': {
+                                    bgcolor: '#45a049'
+                                  }
+                                }}
+                              >
+                                Return to Lobby
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="large"
+                                onClick={() => setBattleSubstate('choosing')}
+                                sx={{
+                                  px: 4,
+                                  py: 1.5,
+                                  borderColor: '#4caf50',
+                                  color: '#4caf50',
+                                  '&:hover': {
+                                    borderColor: '#45a049',
+                                    bgcolor: 'rgba(76, 175, 80, 0.1)'
+                                  }
+                                }}
+                              >
+                                Play Again
+                              </Button>
+                            </Stack>
+                          </>
+                        ) : (
+                          /* DEFEAT STATE */
+                          <>
+                            <Box
+                              sx={{
+                                width: 120,
+                                height: 120,
+                                borderRadius: '50%',
+                                bgcolor: '#f44336',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                mb: 3,
+                                boxShadow: '0 0 40px rgba(244, 67, 54, 0.4)'
+                              }}
+                            >
+                              <Close sx={{ fontSize: 80, color: '#fff', fontWeight: 700 }} />
+                            </Box>
+
+                            <Typography
+                              variant="h2"
+                              sx={{
+                                fontWeight: 700,
+                                letterSpacing: 4,
+                                color: '#f44336',
+                                mb: 2,
+                                textShadow: '0 0 20px rgba(244, 67, 54, 0.5)'
+                              }}
+                            >
+                              DEFEAT
+                            </Typography>
+
+                            <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
+                              You were defeated by {opponentStats.name}
+                            </Typography>
+
+                            <Paper sx={{ p: 3, bgcolor: '#1a1a1a', mb: 4, minWidth: 400, border: '1px solid #3a1a1a' }}>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                Match Summary
+                              </Typography>
+                              <Stack spacing={1.5}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2">Turns Taken</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>3</Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2">Damage Dealt</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>15</Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2">Damage Received</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#f44336' }}>100</Typography>
+                                </Box>
+                                <Divider sx={{ my: 1 }} />
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Rating Change</Typography>
+                                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#f44336' }}>-18</Typography>
+                                </Box>
+                              </Stack>
+                            </Paper>
+
+                            <Stack direction="row" spacing={2}>
+                              <Button
+                                variant="contained"
+                                size="large"
+                                onClick={() => setGameState('lobby')}
+                                sx={{
+                                  px: 4,
+                                  py: 1.5,
+                                  bgcolor: '#666',
+                                  '&:hover': {
+                                    bgcolor: '#555'
+                                  }
+                                }}
+                              >
+                                Return to Lobby
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="large"
+                                onClick={() => setBattleSubstate('choosing')}
+                                sx={{
+                                  px: 4,
+                                  py: 1.5,
+                                  borderColor: '#f44336',
+                                  color: '#f44336',
+                                  '&:hover': {
+                                    borderColor: '#d32f2f',
+                                    bgcolor: 'rgba(244, 67, 54, 0.1)'
+                                  }
+                                }}
+                              >
+                                Try Again
+                              </Button>
+                            </Stack>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    /* NORMAL BATTLE STATE - Choosing or Waiting */
+                    <>
+                      {/* Top Section - Action Selection or Waiting State */}
+                      <Card sx={{ bgcolor: 'background.paper' }}>
+                        <CardContent sx={{ p: 3, display: 'flex', justifyContent: 'center' }}>
+                          {battleSubstate === 'choosing' ? (
+                            /* Choosing Turn - Compact Centered Action Selection */
+                            <Box sx={{ width: '100%', maxWidth: 600 }}>
+                              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                                {/* Attack Selection */}
+                                <Box sx={{ flex: 1 }}>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      fontWeight: 600,
+                                      mb: 1,
+                                      textAlign: 'center',
+                                      color: '#f44336'
+                                    }}
+                                  >
+                                    ATTACK
+                                  </Typography>
+                                  <Stack spacing={0.75}>
+                                    {attackZones.map((zone) => (
+                                      <Button
+                                        key={zone}
+                                        variant={selectedAttack === zone ? 'contained' : 'outlined'}
+                                        color="error"
+                                        size="small"
+                                        onClick={() => setSelectedAttack(zone)}
+                                        sx={{
+                                          justifyContent: 'center',
+                                          py: 0.75
+                                        }}
+                                      >
+                                        {zone}
+                                      </Button>
+                                    ))}
+                                  </Stack>
+                                </Box>
+
+                                {/* Block Selection */}
+                                <Box sx={{ flex: 1 }}>
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      fontWeight: 600,
+                                      mb: 1,
+                                      textAlign: 'center',
+                                      color: '#2196f3'
+                                    }}
+                                  >
+                                    BLOCK
+                                  </Typography>
+                                  <Stack spacing={0.75}>
+                                    {blockZones.map((zone) => (
+                                      <Button
+                                        key={zone}
+                                        variant={selectedBlock === zone ? 'contained' : 'outlined'}
+                                        color="primary"
+                                        size="small"
+                                        onClick={() => setSelectedBlock(zone)}
+                                        sx={{
+                                          justifyContent: 'center',
+                                          py: 0.75,
+                                          fontSize: '0.8rem'
+                                        }}
+                                      >
+                                        {zone}
+                                      </Button>
+                                    ))}
+                                  </Stack>
+                                </Box>
+                              </Box>
+
+                              {/* GO Button - Centered and Prominent */}
+                              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                                <Button
+                                  variant="contained"
+                                  size="large"
+                                  disabled={!selectedAttack || !selectedBlock}
+                                  onClick={() => setBattleSubstate('waiting')}
+                                  sx={{
+                                    minWidth: 200,
+                                    py: 1.5,
+                                    px: 6,
+                                    fontSize: '1.25rem',
+                                    fontWeight: 700,
+                                    letterSpacing: 2,
+                                    bgcolor: '#4caf50',
+                                    '&:hover': {
+                                      bgcolor: '#45a049'
+                                    },
+                                    '&:disabled': {
+                                      bgcolor: '#333'
+                                    }
+                                  }}
+                                >
+                                  GO
+                                </Button>
+                              </Box>
+                            </Box>
+                          ) : (
+                            /* Waiting for Opponent */
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                py: 4
+                              }}
+                            >
+                              <HourglassEmpty
+                                sx={{
+                                  fontSize: 64,
+                                  color: '#666',
+                                  mb: 2
+                                }}
+                              />
+                              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                                Waiting for opponent turn
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Your turn has been submitted
+                              </Typography>
+                              <Box sx={{ mt: 2 }}>
+                                <Chip
+                                  label="Turn in progress"
+                                  size="small"
+                                  color="warning"
+                                  sx={{ animation: 'pulse 2s ease-in-out infinite' }}
+                                />
+                              </Box>
+                            </Box>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      {/* Battle Log - Primary Content Area */}
+                      <Card sx={{ flex: 1, bgcolor: 'background.paper', display: 'flex', flexDirection: 'column' }}>
+                        <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2 }}>
+                          <Typography variant="body1" sx={{ fontWeight: 600, mb: 2 }}>
+                            Battle Log
+                          </Typography>
+                          <Paper
+                            sx={{
+                              flex: 1,
+                              p: 2,
+                              bgcolor: '#252525',
+                              overflow: 'auto'
+                            }}
+                          >
+                            <Stack spacing={2}>
+                              {battleLog.map((log, index) => (
+                                <Box key={index}>
+                                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                    Turn {log.turn}
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                                    {log.message}
+                                  </Typography>
+                                  <Divider sx={{ mt: 1.5, opacity: 0.3 }} />
+                                </Box>
+                              ))}
+                            </Stack>
+                          </Paper>
+                        </CardContent>
+                      </Card>
+                    </>
+                  )}
                 </Box>
 
                 {/* Right Fighter Panel - Opponent */}
