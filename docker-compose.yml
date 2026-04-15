@@ -122,6 +122,7 @@ services:
       Messaging__RabbitMq__Password: guest
       Keycloak__Authority: "http://keycloak:8080/realms/kombats"
       Keycloak__Audience: "kombats-api"
+      Players__BaseUrl: "http://players:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,6 +131,8 @@ services:
       rabbitmq:
         condition: service_healthy
       keycloak:
+        condition: service_started
+      players:
         condition: service_started
 
 volumes:

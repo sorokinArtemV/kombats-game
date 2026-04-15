@@ -49,6 +49,15 @@ internal sealed class EligibilityChecker(
                         : new EligibilityResult(false);
                 }
             }
+            else
+            {
+                // Previously silent: 401/403/404 fell through to false and surfaced as
+                // not_eligible with no trail. Log at Warning so auth-forwarding or
+                // Players-side issues are diagnosable from Chat logs alone.
+                logger.LogWarning(
+                    "Players profile lookup for {IdentityId} returned non-success {StatusCode}; treating as not eligible",
+                    identityId, (int)response.StatusCode);
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {

@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Kombats.Players.Domain.Entities;
 
 namespace Kombats.Players.Application.UseCases.GetPlayerProfile;
@@ -12,4 +13,4 @@ public sealed record GetPlayerProfileQueryResponse(
     int Vitality,
     int Wins,
     int Losses,
-    OnboardingState OnboardingState);
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] OnboardingState OnboardingState);

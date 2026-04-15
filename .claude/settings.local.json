@@ -103,7 +103,9 @@
       "Bash(mkdir -p src/Kombats.Chat/Kombats.Chat.Application)",
       "Bash(mkdir -p src/Kombats.Chat/Kombats.Chat.Infrastructure)",
       "Bash(mkdir -p src/Kombats.Chat/Kombats.Chat.Api)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(netstat -ano)",
+      "Bash(wait)"
     ]
   }
 }

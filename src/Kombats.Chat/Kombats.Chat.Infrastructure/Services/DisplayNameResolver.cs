@@ -39,6 +39,12 @@ internal sealed class DisplayNameResolver(
                     return profile.DisplayName;
                 }
             }
+            else
+            {
+                logger.LogWarning(
+                    "Players profile lookup for {IdentityId} returned non-success {StatusCode}; falling back to Unknown",
+                    identityId, (int)response.StatusCode);
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {

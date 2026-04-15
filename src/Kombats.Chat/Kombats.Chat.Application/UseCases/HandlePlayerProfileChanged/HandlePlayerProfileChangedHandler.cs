@@ -7,8 +7,10 @@ namespace Kombats.Chat.Application.UseCases.HandlePlayerProfileChanged;
 /// Updates the player info cache from the <c>PlayerCombatProfileChanged</c> integration event.
 /// Maps the event's <c>IsReady</c> bool to the canonical <c>OnboardingState</c> string
 /// ("Ready"/"NotReady") used by the eligibility model in Batch 2.
-/// If <c>Name</c> is null or blank, the cache entry is removed so the display-name resolver
-/// falls back to the HTTP source on next read instead of serving stale data.
+/// If <c>Name</c> is null or blank, the event is ignored: this is the pre-naming
+/// EnsureCharacter event, which carries no usable info. Removing existing cache would be
+/// destructive under MassTransit retry/redelivery reordering, where a retried early event
+/// could wipe a valid later state (Character.Name is never reset to null in the domain).
 /// </summary>
 internal sealed class HandlePlayerProfileChangedHandler(IPlayerInfoCache cache)
     : ICommandHandler<HandlePlayerProfileChangedCommand>
@@ -19,7 +21,6 @@ internal sealed class HandlePlayerProfileChangedHandler(IPlayerInfoCache cache)
     {
         if (string.IsNullOrWhiteSpace(command.Name))
         {
-            await cache.RemoveAsync(command.IdentityId, cancellationToken);
             return Result.Success();
         }
 

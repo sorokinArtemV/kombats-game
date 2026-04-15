@@ -49,16 +49,38 @@ builder.Services.AddEndpoints(apiAssembly);
 // API Documentation
 builder.Services.AddApiDocumentation();
 
-// CORS
+// CORS — log the active environment and chosen branch so local-dev startup
+// issues (e.g. Rider/IDE run profile not setting ASPNETCORE_ENVIRONMENT) are
+// diagnosable from the first lines of output.
+bool corsDevBranch = builder.Environment.IsDevelopment();
+Console.WriteLine(
+    $"[Kombats.Chat.Bootstrap] EnvironmentName='{builder.Environment.EnvironmentName}' " +
+    $"CORS branch='{(corsDevBranch ? "Development (permissive localhost)" : "Non-Development (Cors:AllowedOrigins required)")}'");
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        if (builder.Environment.IsDevelopment())
+        if (corsDevBranch)
         {
-            policy.AllowAnyOrigin()
+            // Development-only: allow typical local dev origins (test client,
+            // Vite/CRA/Next dev servers, BFF, sibling services) with credentials
+            // so SignalR and cookie-based flows work. Fail-closed behavior for
+            // non-Development is preserved in the else branch below.
+            policy.WithOrigins(
+                    "http://localhost:3000", "https://localhost:3000",
+                    "http://localhost:5000", "https://localhost:5000",
+                    "http://localhost:5001", "https://localhost:5001",
+                    "http://localhost:5002", "https://localhost:5002",
+                    "http://localhost:5003", "https://localhost:5003",
+                    "http://localhost:5004", "https://localhost:5004",
+                    "http://localhost:5173", "https://localhost:5173",
+                    "http://localhost:8080", "https://localhost:8080",
+                    "http://127.0.0.1:3000", "https://127.0.0.1:3000",
+                    "http://127.0.0.1:5173", "https://127.0.0.1:5173")
                 .AllowAnyMethod()
-                .AllowAnyHeader();
+                .AllowAnyHeader()
+                .AllowCredentials();
         }
         else
         {
@@ -164,13 +186,17 @@ builder.Services.AddScoped<IPresenceStore, RedisPresenceStore>();
 builder.Services.AddScoped<IRateLimiter, RedisRateLimiter>();
 builder.Services.AddScoped<IPlayerInfoCache, RedisPlayerInfoCache>();
 
-// HTTP client for Players service
+// HTTP client for Players service. The forwarding handler attaches the caller's
+// bearer token (from HttpContext, saved via JwtBearerOptions.SaveToken) so the
+// authenticated Players profile endpoint doesn't 401 on cache-miss fallback.
+builder.Services.AddTransient<Kombats.Chat.Bootstrap.Http.PlayersAuthForwardingHandler>();
 builder.Services.AddHttpClient("Players", client =>
 {
     var playersBaseUrl = builder.Configuration["Players:BaseUrl"] ?? "http://localhost:5000";
     client.BaseAddress = new Uri(playersBaseUrl);
     client.Timeout = TimeSpan.FromSeconds(5);
-});
+})
+.AddHttpMessageHandler<Kombats.Chat.Bootstrap.Http.PlayersAuthForwardingHandler>();
 
 // Application services
 builder.Services.AddScoped<IDisplayNameResolver, DisplayNameResolver>();

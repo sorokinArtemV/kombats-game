@@ -53,7 +53,7 @@ public sealed class HandlePlayerProfileChangedHandlerTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task NullOrBlankName_RemovesCacheEntry(string? name)
+    public async Task NullOrBlankName_IsIgnored_DoesNotTouchCache(string? name)
     {
         var id = Guid.NewGuid();
 
@@ -61,8 +61,10 @@ public sealed class HandlePlayerProfileChangedHandlerTests
             new HandlePlayerProfileChangedCommand(id, name, IsReady: true),
             CancellationToken.None);
 
+        // Pre-naming EnsureCharacter event: ignored to avoid destructive overwrite of
+        // a valid later state under retry/redelivery reordering.
         result.IsSuccess.Should().BeTrue();
-        await _cache.Received(1).RemoveAsync(id, Arg.Any<CancellationToken>());
+        await _cache.DidNotReceive().RemoveAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
         await _cache.DidNotReceive().SetAsync(
             Arg.Any<Guid>(),
             Arg.Any<CachedPlayerInfo>(),
