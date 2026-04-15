@@ -11,13 +11,19 @@ using Kombats.Chat.Application.UseCases.GetConversationMessages;
 using Kombats.Chat.Application.UseCases.GetConversations;
 using Kombats.Chat.Application.UseCases.GetDirectMessages;
 using Kombats.Chat.Application.UseCases.GetOnlinePlayers;
+using Kombats.Chat.Application.UseCases.HandlePlayerProfileChanged;
 using Kombats.Chat.Application.UseCases.JoinGlobalChat;
 using Kombats.Chat.Application.UseCases.SendDirectMessage;
 using Kombats.Chat.Application.UseCases.SendGlobalMessage;
 using Kombats.Chat.Infrastructure.Data;
 using Kombats.Chat.Infrastructure.Data.Repositories;
+using Kombats.Chat.Infrastructure.Messaging.Consumers;
+using Kombats.Chat.Infrastructure.Options;
 using Kombats.Chat.Infrastructure.Redis;
+using Kombats.Chat.Infrastructure.Workers;
 using Kombats.Chat.Infrastructure.Services;
+using Kombats.Messaging.DependencyInjection;
+using Kombats.Players.Contracts;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -165,7 +171,33 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<IChatNotifier, SignalRChatNotifier>();
 builder.Services.AddSingleton<HeartbeatScheduler>();
 
-// NOTE: Messaging (MassTransit) and background workers will be added in Batch 4.
+// === Batch 4: MassTransit consumer + background workers ===
+
+// Additional command handler
+builder.Services.AddScoped<ICommandHandler<HandlePlayerProfileChangedCommand>, HandlePlayerProfileChangedHandler>();
+
+// Worker options
+builder.Services.Configure<MessageRetentionOptions>(
+    builder.Configuration.GetSection(MessageRetentionOptions.SectionName));
+builder.Services.Configure<PresenceSweepOptions>(
+    builder.Configuration.GetSection(PresenceSweepOptions.SectionName));
+
+// Messaging (Kombats.Messaging with transactional outbox/inbox — AD-01)
+builder.Services.AddMessaging<ChatDbContext>(
+    builder.Configuration,
+    "chat",
+    configureConsumers: bus =>
+    {
+        bus.AddConsumer<PlayerCombatProfileChangedConsumer>();
+    },
+    configure: messagingBuilder =>
+    {
+        messagingBuilder.Map<PlayerCombatProfileChanged>("PlayerCombatProfileChanged");
+    });
+
+// Hosted workers
+builder.Services.AddHostedService<MessageRetentionWorker>();
+builder.Services.AddHostedService<PresenceSweepWorker>();
 
 var app = builder.Build();
 

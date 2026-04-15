@@ -11,11 +11,15 @@
         </PackageReference>
         <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
         <PackageReference Include="StackExchange.Redis" />
+        <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+        <PackageReference Include="Microsoft.Extensions.Options" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\Kombats.Chat.Application\Kombats.Chat.Application.csproj" />
         <ProjectReference Include="..\Kombats.Chat.Domain\Kombats.Chat.Domain.csproj" />
+        <ProjectReference Include="..\..\Kombats.Players\Kombats.Players.Contracts\Kombats.Players.Contracts.csproj" />
     </ItemGroup>
 
 </Project>

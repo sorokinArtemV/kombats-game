@@ -20,12 +20,17 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="MassTransit" />
+    <PackageReference Include="MassTransit.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Kombats.Chat\Kombats.Chat.Infrastructure\Kombats.Chat.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\Kombats.Chat\Kombats.Chat.Application\Kombats.Chat.Application.csproj" />
     <ProjectReference Include="..\..\..\src\Kombats.Chat\Kombats.Chat.Domain\Kombats.Chat.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\Kombats.Players\Kombats.Players.Contracts\Kombats.Players.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

@@ -31,6 +31,15 @@ internal interface IPresenceStore
     /// Checks if a specific player is online.
     /// </summary>
     Task<bool> IsOnlineAsync(Guid identityId, CancellationToken ct);
+
+    /// <summary>
+    /// Removes entries from the online set whose heartbeat score is older than the given
+    /// cutoff (stale), and also deletes their presence and refcount keys.
+    /// Returns only the identities that THIS call actually removed
+    /// (i.e. <c>ZREM</c> returned 1) — this gates the <c>PlayerOffline</c> broadcast so
+    /// duplicate broadcasts are avoided when multiple sweepers race (future multi-instance).
+    /// </summary>
+    Task<IReadOnlyList<Guid>> SweepStaleAsync(TimeSpan staleAfter, CancellationToken ct);
 }
 
 internal sealed record OnlinePlayer(Guid PlayerId, string DisplayName);

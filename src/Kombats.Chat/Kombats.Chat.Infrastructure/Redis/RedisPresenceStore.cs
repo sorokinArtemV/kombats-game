@@ -168,4 +168,52 @@ internal sealed class RedisPresenceStore(IConnectionMultiplexer redis, ILogger<R
         var score = await db.SortedSetScoreAsync(OnlineSetKey, identityId.ToString());
         return score.HasValue;
     }
+
+    public async Task<IReadOnlyList<Guid>> SweepStaleAsync(TimeSpan staleAfter, CancellationToken ct)
+    {
+        var db = redis.GetDatabase(2);
+        long cutoffMs = DateTimeOffset.UtcNow.Subtract(staleAfter).ToUnixTimeMilliseconds();
+
+        // Snapshot candidate members (by rank/score) whose last heartbeat is older than cutoff.
+        // ZRANGEBYSCORE -inf cutoff. ZRemoveRangeByScore cannot return the removed members,
+        // so we must iterate ZRem-per-member to get the atomic "did I remove it?" signal.
+        var staleMembers = await db.SortedSetRangeByScoreAsync(
+            OnlineSetKey,
+            start: double.NegativeInfinity,
+            stop: cutoffMs,
+            exclude: Exclude.None,
+            order: Order.Ascending);
+
+        if (staleMembers.Length == 0)
+            return Array.Empty<Guid>();
+
+        var removed = new List<Guid>(staleMembers.Length);
+        foreach (var member in staleMembers)
+        {
+            string memberStr = member.ToString();
+            if (!Guid.TryParse(memberStr, out Guid playerId))
+                continue;
+
+            // Atomic ZREM — true only if THIS call removed the entry.
+            bool didRemove = await db.SortedSetRemoveAsync(OnlineSetKey, memberStr);
+            if (!didRemove)
+                continue;
+
+            // Intentionally do NOT delete chat:presence:refs:{id} here: a concurrent
+            // ConnectAsync may have just INCR'd it back from 0→1 and re-added the user to
+            // the online ZSET. Clobbering refs in that window would desync refcount from
+            // ZSET membership and cause the next DisconnectAsync to silently skip the
+            // PlayerOffline broadcast. The 90s TTL on the refs key reaps it naturally.
+            //
+            // The display-name presence key is safe to delete: ConnectScript rewrites it
+            // (SET EX) on reconnect, and readers treat a missing value as "Unknown".
+            await db.KeyDeleteAsync($"chat:presence:{memberStr}");
+
+            removed.Add(playerId);
+            logger.LogInformation(
+                "Presence sweep removed stale entry for Player {IdentityId}", playerId);
+        }
+
+        return removed;
+    }
 }
