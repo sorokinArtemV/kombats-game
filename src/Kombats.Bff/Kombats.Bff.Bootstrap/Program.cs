@@ -46,7 +46,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 string? accessToken = context.Request.Query["access_token"];
                 string path = context.HttpContext.Request.Path;
 
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWith("/battlehub"))
+                if (!string.IsNullOrEmpty(accessToken)
+                    && (path.StartsWith("/battlehub") || path.StartsWith("/chathub")))
                 {
                     context.Token = accessToken;
                 }
@@ -276,6 +277,40 @@ builder.Services.AddHttpClient<IBattleClient, BattleClient>(client =>
         .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.AttemptTimeoutSeconds));
 });
 
+// Typed HttpClients — Chat (Batch 5)
+builder.Services.AddHttpClient<IChatClient, ChatClient>(client =>
+{
+    string baseUrl = builder.Configuration["Services:Chat:BaseUrl"]
+        ?? throw new InvalidOperationException("Services:Chat:BaseUrl is required.");
+    client.BaseAddress = new Uri(baseUrl);
+})
+.AddHttpMessageHandler<JwtForwardingHandler>()
+.AddResilienceHandler("chat", (pipeline, _) =>
+{
+    pipeline
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.TotalRequestTimeoutSeconds))
+        .AddRetry(new HttpRetryStrategyOptions
+        {
+            MaxRetryAttempts = resilienceOptions.RetryMaxAttempts,
+            BackoffType = DelayBackoffType.Exponential,
+            Delay = TimeSpan.FromMilliseconds(500),
+            ShouldHandle = args =>
+            {
+                if (args.Outcome.Result?.RequestMessage?.Method != HttpMethod.Get)
+                    return ValueTask.FromResult(false);
+                return new HttpRetryStrategyOptions().ShouldHandle(args);
+            }
+        })
+        .AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
+        {
+            FailureRatio = 0.5,
+            SamplingDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds),
+            MinimumThroughput = resilienceOptions.CircuitBreakerFailureThreshold,
+            BreakDuration = TimeSpan.FromSeconds(resilienceOptions.CircuitBreakerBreakDurationSeconds)
+        })
+        .AddTimeout(TimeSpan.FromSeconds(resilienceOptions.AttemptTimeoutSeconds));
+});
+
 // SignalR — frontend-facing hub
 builder.Services.AddSignalR()
     .AddJsonProtocol(options =>
@@ -297,6 +332,10 @@ builder.Services.AddSingleton<INarrationPipeline, NarrationPipeline>();
 
 // Battle hub relay — manages per-connection downstream SignalR connections to Battle
 builder.Services.AddSingleton<IBattleHubRelay, BattleHubRelay>();
+
+// Chat hub relay — Batch 5: per-frontend-connection downstream SignalR connections to Chat
+builder.Services.AddSingleton<IFrontendChatSender, HubContextChatSender>();
+builder.Services.AddSingleton<IChatHubRelay, ChatHubRelay>();
 
 // Game state composer — aggregates data from Players + Matchmaking
 builder.Services.AddScoped<GameStateComposer>();
@@ -322,5 +361,8 @@ app.MapEndpoints();
 
 // SignalR hub — battle realtime proxy (AD-16)
 app.MapHub<BattleHub>("/battlehub");
+
+// SignalR hub — chat realtime proxy (Batch 5)
+app.MapHub<ChatHub>("/chathub");
 
 app.Run();

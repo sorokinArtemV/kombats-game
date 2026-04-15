@@ -26,6 +26,14 @@ public sealed class PlayersClient(HttpClient httpClient, ILogger<PlayersClient> 
             httpClient, HttpMethod.Post, "/api/v1/character/name", new { Name = name }, ServiceName, logger, cancellationToken);
     }
 
+    public async Task<InternalPlayerProfileResponse?> GetProfileAsync(
+        Guid playerId, CancellationToken cancellationToken = default)
+    {
+        return await HttpClientHelper.SendAsync<InternalPlayerProfileResponse>(
+            httpClient, HttpMethod.Get, $"/api/v1/players/{playerId}/profile",
+            null, ServiceName, logger, cancellationToken);
+    }
+
     public async Task<InternalCharacterResponse?> AllocateStatsAsync(
         int expectedRevision, int strength, int agility, int intuition, int vitality,
         CancellationToken cancellationToken = default)
