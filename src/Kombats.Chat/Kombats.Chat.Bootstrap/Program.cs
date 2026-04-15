@@ -2,12 +2,18 @@ using Kombats.Abstractions;
 using Kombats.Abstractions.Auth;
 using Kombats.Chat.Api.Endpoints;
 using Kombats.Chat.Api.Extensions;
+using Kombats.Chat.Api.Hubs;
 using Kombats.Chat.Application.Ports;
 using Kombats.Chat.Application.Repositories;
+using Kombats.Chat.Application.UseCases.ConnectUser;
+using Kombats.Chat.Application.UseCases.DisconnectUser;
 using Kombats.Chat.Application.UseCases.GetConversationMessages;
 using Kombats.Chat.Application.UseCases.GetConversations;
 using Kombats.Chat.Application.UseCases.GetDirectMessages;
 using Kombats.Chat.Application.UseCases.GetOnlinePlayers;
+using Kombats.Chat.Application.UseCases.JoinGlobalChat;
+using Kombats.Chat.Application.UseCases.SendDirectMessage;
+using Kombats.Chat.Application.UseCases.SendGlobalMessage;
 using Kombats.Chat.Infrastructure.Data;
 using Kombats.Chat.Infrastructure.Data.Repositories;
 using Kombats.Chat.Infrastructure.Redis;
@@ -139,7 +145,27 @@ builder.Services.AddScoped<IEligibilityChecker, EligibilityChecker>();
 // Application handler (Batch 2: online players query)
 builder.Services.AddScoped<IQueryHandler<GetOnlinePlayersQuery, GetOnlinePlayersResponse>, GetOnlinePlayersHandler>();
 
-// NOTE: Messaging (MassTransit), SignalR, and workers will be added in later batches.
+// === Batch 3: SignalR hub + chat command handlers + filters ===
+
+builder.Services.AddSingleton(TimeProvider.System);
+
+// Filters / restriction
+builder.Services.AddScoped<IMessageFilter, MessageFilter>();
+builder.Services.AddScoped<IUserRestriction, UserRestriction>();
+
+// Chat command handlers
+builder.Services.AddScoped<ICommandHandler<ConnectUserCommand>, ConnectUserHandler>();
+builder.Services.AddScoped<ICommandHandler<DisconnectUserCommand>, DisconnectUserHandler>();
+builder.Services.AddScoped<ICommandHandler<JoinGlobalChatCommand, JoinGlobalChatResponse>, JoinGlobalChatHandler>();
+builder.Services.AddScoped<ICommandHandler<SendGlobalMessageCommand>, SendGlobalMessageHandler>();
+builder.Services.AddScoped<ICommandHandler<SendDirectMessageCommand, SendDirectMessageResponse>, SendDirectMessageHandler>();
+
+// SignalR + chat notifier (singleton scope: hub context is safe to capture)
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IChatNotifier, SignalRChatNotifier>();
+builder.Services.AddSingleton<HeartbeatScheduler>();
+
+// NOTE: Messaging (MassTransit) and background workers will be added in Batch 4.
 
 var app = builder.Build();
 
@@ -159,6 +185,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapEndpoints();
+
+app.MapHub<InternalChatHub>("/chathub-internal");
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 app.MapHealthChecks("/health/ready").AllowAnonymous();

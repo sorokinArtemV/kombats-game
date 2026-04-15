@@ -77,3 +77,16 @@
 - Run infrastructure tests in a Docker-capable environment before proceeding to Batch 3
 - Batch 3 should integrate `IDisplayNameResolver` into `GetConversationsHandler` when the connect flow is wired
 - Consider adding a rate limiter fallback recovery integration test in Batch 3/4
+
+---
+
+## Addendum — 2026-04-15 Post-Review Verification
+
+The "Passed with caveats" verdict overstated readiness: the Batch 1/2 gates depended on integration tests that had never actually executed, and two latent defects were still in the tree. Superseded by the verification pass documented in `docs/execution/kombats-chat-v1-batch1-batch2-execution.md` (section "Post-Review Verification Pass"):
+
+- Docker-backed suite now executed end-to-end — 96/96 Chat tests pass.
+- Disconnect Lua script tightened to stop reporting false "last connection" when the refs key is already gone.
+- Rate-limiter fallback recovery test added; it uncovered and fixed a real defect where `RedisTimeoutException` / pipe-teardown exceptions bypassed the fallback catch.
+- Redis test fixtures fixed to use `allowAdmin=true` so `FLUSHDB` actually runs.
+
+G1 and G2 are now genuinely closed; Batch 3 is unblocked.

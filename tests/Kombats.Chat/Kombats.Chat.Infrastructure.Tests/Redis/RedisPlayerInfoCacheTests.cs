@@ -19,7 +19,7 @@ public sealed class RedisPlayerInfoCacheTests(RedisFixture redisFixture)
 
     private async Task FlushDb()
     {
-        var mux = ConnectionMultiplexer.Connect(redisFixture.ConnectionString);
+        var mux = ConnectionMultiplexer.Connect(redisFixture.AdminConnectionString);
         var server = mux.GetServers()[0];
         await server.FlushDatabaseAsync(2);
     }

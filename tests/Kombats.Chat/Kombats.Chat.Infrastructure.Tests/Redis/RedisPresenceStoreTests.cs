@@ -18,7 +18,7 @@ public sealed class RedisPresenceStoreTests(RedisFixture redisFixture)
 
     private async Task FlushDb()
     {
-        var mux = ConnectionMultiplexer.Connect(redisFixture.ConnectionString);
+        var mux = ConnectionMultiplexer.Connect(redisFixture.AdminConnectionString);
         var server = mux.GetServers()[0];
         await server.FlushDatabaseAsync(2);
     }
@@ -103,23 +103,54 @@ public sealed class RedisPresenceStoreTests(RedisFixture redisFixture)
     }
 
     [Fact]
-    public async Task Disconnect_AfterTtlExpiry_NoNegativeRefcount()
+    public async Task Disconnect_AfterTtlExpiry_NoNegativeRefcount_NoFalseLastConnection()
     {
         await FlushDb();
         var store = CreateStore();
         var id = Guid.NewGuid();
 
-        // Disconnect without connect — refs key doesn't exist
+        // Disconnect without connect — refs key doesn't exist (simulates post-TTL state)
         bool isLast = await store.DisconnectAsync(id, CancellationToken.None);
 
-        // Should return true (cleaning up nonexistent → like last disconnect)
-        isLast.Should().BeTrue();
+        // Must be false: player is already offline in Redis, so callers must not
+        // emit a spurious "offline" broadcast from this teardown path.
+        isLast.Should().BeFalse();
 
-        // Verify no negative refcount
+        // Verify no negative refcount and no dangling presence/online entries.
         var mux = ConnectionMultiplexer.Connect(redisFixture.ConnectionString);
         var db = mux.GetDatabase(2);
         var refs = await db.StringGetAsync($"chat:presence:refs:{id}");
         refs.HasValue.Should().BeFalse();
+
+        var presence = await db.StringGetAsync($"chat:presence:{id}");
+        presence.HasValue.Should().BeFalse();
+
+        bool online = await store.IsOnlineAsync(id, CancellationToken.None);
+        online.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Disconnect_AfterRefsTtlExpiry_ButPresenceDangling_CleansUpAndReturnsFalse()
+    {
+        await FlushDb();
+        var store = CreateStore();
+        var id = Guid.NewGuid();
+
+        // Simulate the real race: refs key expired, but the online ZSET entry
+        // and the presence blob haven't been swept yet (Redis evicts keys
+        // lazily at different moments). Disconnect must clean both WITHOUT
+        // claiming this was the last connection.
+        var mux = ConnectionMultiplexer.Connect(redisFixture.ConnectionString);
+        var db = mux.GetDatabase(2);
+        await db.SortedSetAddAsync("chat:presence:online", id.ToString(), 0);
+        await db.StringSetAsync($"chat:presence:{id}", "{\"name\":\"Stale\",\"connectedAtUnixMs\":0}");
+
+        bool isLast = await store.DisconnectAsync(id, CancellationToken.None);
+
+        isLast.Should().BeFalse();
+
+        (await store.IsOnlineAsync(id, CancellationToken.None)).Should().BeFalse();
+        (await db.StringGetAsync($"chat:presence:{id}")).HasValue.Should().BeFalse();
     }
 
     [Fact]

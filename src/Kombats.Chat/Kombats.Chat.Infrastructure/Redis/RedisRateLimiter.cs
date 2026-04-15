@@ -36,8 +36,14 @@ internal sealed class RedisRateLimiter(IConnectionMultiplexer redis, ILogger<Red
 
             return result;
         }
-        catch (RedisException ex)
+        catch (Exception ex) when (IsRedisInfrastructureFailure(ex))
         {
+            // StackExchange.Redis surfaces outages as a grab-bag of exception types
+            // depending on where the socket/pipe tears down: RedisException,
+            // RedisTimeoutException (not a RedisException), RedisConnectionException,
+            // plus InvalidOperationException / ObjectDisposedException from the
+            // underlying pipe. All of them must activate the fallback; otherwise
+            // the caller would see a raw infra error during a real outage.
             if (!_usingFallback)
             {
                 _usingFallback = true;
@@ -47,6 +53,15 @@ internal sealed class RedisRateLimiter(IConnectionMultiplexer redis, ILogger<Red
             return CheckFallback(identityId, surface, limits.MaxCount, limits.WindowSeconds);
         }
     }
+
+    private static bool IsRedisInfrastructureFailure(Exception ex) =>
+        ex is RedisException
+            or RedisTimeoutException
+            or RedisConnectionException
+            or TimeoutException
+            or System.IO.IOException
+            or InvalidOperationException
+            or ObjectDisposedException;
 
     private async Task<RateLimitResult> CheckRedisAsync(Guid identityId, string surface, int maxCount, int windowSeconds)
     {

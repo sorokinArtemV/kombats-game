@@ -13,6 +13,8 @@ public sealed class RedisFixture : IAsyncLifetime
 
     public string ConnectionString => _redis.GetConnectionString();
 
+    public string AdminConnectionString => _redis.GetConnectionString() + ",allowAdmin=true";
+
     public async Task InitializeAsync()
     {
         _redis = new RedisBuilder()
@@ -26,6 +28,10 @@ public sealed class RedisFixture : IAsyncLifetime
     {
         await _redis.DisposeAsync();
     }
+
+    public Task PauseAsync() => _redis.PauseAsync();
+
+    public Task UnpauseAsync() => _redis.UnpauseAsync();
 }
 
 [CollectionDefinition(Name)]

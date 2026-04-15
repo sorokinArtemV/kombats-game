@@ -217,3 +217,69 @@ The Players public profile exposes `OnboardingState` (enum). Chat does not requi
 
 ### Verification honesty
 Infrastructure integration tests (Postgres + Redis, 47 tests) are compiled and structurally correct but have not been executed. Batch 1/2 gates that depend on integration test execution (DM resolution race handling, Lua script edge cases, migration apply, cache TTL renewal) are **not verified by execution** — only by compilation and code review. These must be run in a Docker-capable environment before the gates can be considered fully closed.
+
+---
+
+## Post-Review Verification Pass (2026-04-15)
+
+Executed in a Docker-capable environment in response to the independent Batch 1 + Batch 2 review. This pass addresses the three follow-up items flagged by the reviewer before Batch 3 can start.
+
+### 1. Docker-backed infrastructure tests — executed
+Testcontainers (`postgres:16-alpine`, `redis:7-alpine`) ran end-to-end. Results:
+
+| Test project | Result |
+|---|---|
+| `Kombats.Chat.Domain.Tests` | **23 / 23 passed** |
+| `Kombats.Chat.Application.Tests` | **16 / 16 passed** |
+| `Kombats.Chat.Api.Tests` | **8 / 8 passed** |
+| `Kombats.Chat.Infrastructure.Tests` | **49 / 49 passed** (Postgres + Redis integration + services) |
+| **Total Chat suite** | **96 / 96 passed** |
+
+Postgres-backed tests (migration apply, snake_case naming, schema isolation, conversation/message round-trip, DM resolution first-call + idempotent-second-call + concurrent race, keyset pagination, LastMessageAt, message retention) all pass against a real PostgreSQL 16 container.
+
+Redis-backed tests (presence Lua scripts including multi-tab refcount, heartbeat no-op guard, online list/count/pagination; rate limiter under/at-limit, per-surface and per-user isolation; player info cache TTL renewal) all pass against a real Redis 7 container.
+
+### 2. Fixture fix — `FLUSHDB` admin mode
+The initial test run surfaced a latent defect: test fixtures opened their flush connections without `allowAdmin=true`, so every Redis test that called `FlushDatabaseAsync` failed with `This operation is not available unless admin mode is enabled`. The previous "tests compile, need Docker" claim masked this. Fixed by adding `RedisFixture.AdminConnectionString` and switching all three Redis test classes' `FlushDb` helpers to it.
+
+### 3. Disconnect Lua script — tightened
+The reviewer correctly flagged that the old script returned `1` ("last connection closed") even when the refs key was already `nil` (TTL expired or never connected). In Batch 3 the hub uses that return value to decide whether to broadcast an offline event, so the old behaviour would fire spurious offline broadcasts.
+
+The script now distinguishes:
+- `refs == nil` → defensively `ZREM`/`DEL` any dangling online/presence entries, but **return 0** (player is already offline, no fresh broadcast).
+- `refs <= 1` → last real connection, full cleanup, **return 1** (broadcast offline).
+- `refs > 1` → `DECR`, **return 0**.
+
+Tests updated:
+- `Disconnect_AfterTtlExpiry_NoNegativeRefcount_NoFalseLastConnection` — now asserts `isLast == false` and that no residual keys remain.
+- `Disconnect_AfterRefsTtlExpiry_ButPresenceDangling_CleansUpAndReturnsFalse` — **new test** covering the realistic race where `refs` expired first but the ZSET entry / presence blob are still lingering; script must clean both and still return 0.
+
+Both pass.
+
+### 4. Rate-limiter fallback recovery test — added + real bug fixed
+Added `Fallback_ActivatesOnRedisOutage_And_RecoversWhenRedisReturns`. Uses Testcontainers `PauseAsync` / `UnpauseAsync` on the Redis container to simulate a real outage: asserts that during pause the fallback serves requests (and enforces its in-memory window), then after unpause a fresh request increments the Redis counter (proving the limiter flipped `_usingFallback` back off and the distributed path is live again).
+
+The test surfaced a **real defect in `RedisRateLimiter`** (within Batch 2 scope): the `catch (RedisException)` branch missed the exception types SE.Redis actually throws during an outage:
+- `RedisTimeoutException` inherits from `TimeoutException`, not `RedisException`.
+- `InvalidOperationException` / `ObjectDisposedException` can surface from the underlying socket pipe when the connection tears down.
+
+Fixed by introducing `IsRedisInfrastructureFailure(Exception)` that covers `RedisException`, `RedisTimeoutException`, `RedisConnectionException`, `TimeoutException`, `IOException`, `InvalidOperationException`, `ObjectDisposedException`. Without this fix the limiter would have thrown raw infra exceptions at the caller during a Redis outage — precisely the scenario the fallback exists for. The fix is minimal and tied directly to the recovery test the reviewer asked for.
+
+### 5. Gate status after verification
+
+| Gate | Status |
+|---|---|
+| G1 — Batch 1 Postgres persistence + migration + read endpoints | **Closed** (all integration tests executed and passed) |
+| G2 — Batch 2 Redis presence + rate limiter + player info cache + resolvers | **Closed** (all integration tests executed and passed, including new fallback-recovery test) |
+
+### 6. Files changed in this pass
+
+- `src/Kombats.Chat/Kombats.Chat.Infrastructure/Redis/RedisPresenceStore.cs` — disconnect Lua script hardened.
+- `src/Kombats.Chat/Kombats.Chat.Infrastructure/Redis/RedisRateLimiter.cs` — broadened outage catch to cover all SE.Redis failure modes.
+- `tests/Kombats.Chat/Kombats.Chat.Infrastructure.Tests/Fixtures/RedisFixture.cs` — added `AdminConnectionString`, `PauseAsync`, `UnpauseAsync`.
+- `tests/Kombats.Chat/Kombats.Chat.Infrastructure.Tests/Redis/RedisPresenceStoreTests.cs` — updated TTL-expiry assertion, added dangling-cleanup test.
+- `tests/Kombats.Chat/Kombats.Chat.Infrastructure.Tests/Redis/RedisRateLimiterTests.cs` — admin connection for `FlushDb`, added fallback recovery test.
+- `tests/Kombats.Chat/Kombats.Chat.Infrastructure.Tests/Redis/RedisPlayerInfoCacheTests.cs` — admin connection for `FlushDb`.
+
+### 7. Batch 3 readiness
+Batch 3 is **no longer blocked** by Batch 1/2 verification gaps. The three reviewer-flagged items (unverified Docker tests, missing fallback recovery test, disconnect Lua edge case) are resolved with code + tests, and two latent defects uncovered along the way (admin-mode fixture bug, narrow rate-limiter catch) are fixed.

@@ -36,7 +36,16 @@ internal sealed class RedisPresenceStore(IConnectionMultiplexer redis, ILogger<R
 
     private static readonly LuaScript DisconnectScript = LuaScript.Prepare(
         """
-        local refs = tonumber(redis.call('GET', @refsKey)) or 0
+        local refs = tonumber(redis.call('GET', @refsKey))
+        if refs == nil then
+          -- Refs already gone (TTL expired or never existed). Clean up any
+          -- dangling online/presence entries defensively, but do not signal
+          -- "last connection" — the player is already offline from Redis'
+          -- perspective, so callers must not emit a fresh offline broadcast.
+          redis.call('ZREM', @onlineKey, @memberId)
+          redis.call('DEL', @presenceKey)
+          return 0
+        end
         if refs <= 1 then
           redis.call('DEL', @refsKey)
           redis.call('ZREM', @onlineKey, @memberId)
