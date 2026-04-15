@@ -173,6 +173,27 @@ function App() {
   const [debugTab, setDebugTab] = useState('feed');
   const [lastResponse, setLastResponse] = useState(null);
 
+  // --- Chat state (Kombats Chat v1 via BFF /chathub + /api/v1/chat/*) ---
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatConnection, setChatConnection] = useState(null);
+  const [chatStatus, setChatStatus] = useState('disconnected'); // disconnected | connecting | connected
+  const [chatJoinedGlobal, setChatJoinedGlobal] = useState(false);
+  const [chatTab, setChatTab] = useState('global'); // global | dm | online | card
+  const [chatGlobalMessages, setChatGlobalMessages] = useState([]); // {messageId, sender:{playerId,displayName}, content, sentAt}
+  const [chatGlobalConversationId, setChatGlobalConversationId] = useState(null);
+  const [chatGlobalInput, setChatGlobalInput] = useState('');
+  const [chatOnlinePlayers, setChatOnlinePlayers] = useState([]);
+  const [chatOnlineTotal, setChatOnlineTotal] = useState(0);
+  const [chatConversations, setChatConversations] = useState([]);
+  const [chatDmSelectedPlayerId, setChatDmSelectedPlayerId] = useState('');
+  const [chatDmMessagesByPlayer, setChatDmMessagesByPlayer] = useState({}); // otherPlayerId -> messages[]
+  const [chatDmInput, setChatDmInput] = useState('');
+  const [chatPlayerCard, setChatPlayerCard] = useState(null);
+  const [chatCardLookupId, setChatCardLookupId] = useState('');
+  const [chatLastError, setChatLastError] = useState(null); // {code, message, source} — ChatError or ChatConnectionLost
+  const chatGlobalEndRef = useRef(null);
+  const chatDmEndRef = useRef(null);
+
   const addLog = useCallback((type, msg) => {
     const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
     setLogs(prev => [...prev.slice(-200), { type, msg, ts }]);
@@ -403,6 +424,209 @@ function App() {
     }
   }
 
+  // --- Chat Hub (BFF /chathub) ---
+  useEffect(() => {
+    chatGlobalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatGlobalMessages]);
+  useEffect(() => {
+    chatDmEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatDmMessagesByPlayer, chatDmSelectedPlayerId]);
+
+  async function connectChatHub() {
+    if (!token) { addLog('error', 'Chat: login first'); return; }
+    if (chatConnection) { await chatConnection.stop(); }
+    setChatStatus('connecting');
+    setChatLastError(null);
+    addLog('info', 'Connecting to BFF /chathub...');
+
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl(`${bffUrl}/chathub`, { accessTokenFactory: () => token })
+      .withAutomaticReconnect()
+      .configureLogging(signalR.LogLevel.Information)
+      .build();
+
+    conn.on('GlobalMessageReceived', (payload) => {
+      addLog('event', `GlobalMessageReceived: ${payload?.sender?.displayName}: ${payload?.content}`);
+      setChatGlobalMessages(prev => [...prev, payload]);
+    });
+    conn.on('DirectMessageReceived', (payload) => {
+      addLog('event', `DirectMessageReceived from ${payload?.sender?.displayName}: ${payload?.content}`);
+      const otherId = payload?.sender?.playerId;
+      if (!otherId) return;
+      setChatDmMessagesByPlayer(prev => ({
+        ...prev,
+        [otherId]: [...(prev[otherId] || []), payload],
+      }));
+    });
+    conn.on('PlayerOnline', (payload) => {
+      addLog('event', `PlayerOnline: ${payload?.displayName} (${payload?.playerId})`);
+      setChatOnlinePlayers(prev => {
+        if (prev.some(p => p.playerId === payload.playerId)) return prev;
+        return [...prev, payload];
+      });
+      setChatOnlineTotal(t => t + 1);
+    });
+    conn.on('PlayerOffline', (payload) => {
+      addLog('event', `PlayerOffline: ${payload?.playerId}`);
+      setChatOnlinePlayers(prev => prev.filter(p => p.playerId !== payload.playerId));
+      setChatOnlineTotal(t => Math.max(0, t - 1));
+    });
+    conn.on('ChatError', (payload) => {
+      addLog('error', `ChatError: ${payload?.code} — ${payload?.message}`);
+      setChatLastError({ source: 'ChatError', code: payload?.code, message: payload?.message, retryAfterMs: payload?.retryAfterMs, at: new Date().toISOString() });
+    });
+    conn.on('ChatConnectionLost', (payload) => {
+      addLog('error', `ChatConnectionLost: ${JSON.stringify(payload || {})}`);
+      setChatLastError({ source: 'ChatConnectionLost', code: payload?.code || 'ConnectionLost', message: payload?.message || 'Downstream chat connection lost', at: new Date().toISOString() });
+    });
+
+    conn.onclose(err => { setChatStatus('disconnected'); setChatJoinedGlobal(false); addLog('warn', `Chat hub closed${err ? ': ' + err.message : ''}`); });
+    conn.onreconnecting(err => { setChatStatus('connecting'); addLog('warn', `Chat hub reconnecting${err ? ': ' + err.message : ''}`); });
+    conn.onreconnected(() => { setChatStatus('connected'); addLog('event', 'Chat hub reconnected'); });
+
+    try {
+      await conn.start();
+      setChatConnection(conn);
+      setChatStatus('connected');
+      addLog('event', 'Chat hub connected');
+    } catch (e) {
+      addLog('error', `Chat hub connect failed: ${e.message}`);
+      setChatStatus('disconnected');
+      setChatLastError({ source: 'ConnectFailed', code: 'ConnectFailed', message: e.message, at: new Date().toISOString() });
+    }
+  }
+
+  async function disconnectChatHub() {
+    if (chatConnection) {
+      try { await chatConnection.stop(); } catch { /* swallow */ }
+      setChatConnection(null);
+    }
+    setChatStatus('disconnected');
+    setChatJoinedGlobal(false);
+  }
+
+  async function chatJoinGlobal() {
+    if (!chatConnection) return;
+    try {
+      addLog('info', 'Invoking JoinGlobalChat...');
+      const snap = await chatConnection.invoke('JoinGlobalChat');
+      addLog('event', `JoinGlobalChat: conv=${snap?.conversationId} recent=${snap?.recentMessages?.length} online=${snap?.totalOnline}`);
+      setLastResponse({ event: 'JoinGlobalChat', data: snap });
+      setChatJoinedGlobal(true);
+      if (snap?.conversationId) setChatGlobalConversationId(snap.conversationId);
+      if (Array.isArray(snap?.recentMessages)) {
+        // RecentMessages are MessageDto shape {messageId, sender, content, sentAt}; prepend to state.
+        setChatGlobalMessages(prev => {
+          const seen = new Set(prev.map(m => m.messageId));
+          const incoming = snap.recentMessages.filter(m => !seen.has(m.messageId));
+          return [...incoming, ...prev];
+        });
+      }
+      if (Array.isArray(snap?.onlinePlayers)) {
+        setChatOnlinePlayers(snap.onlinePlayers);
+        setChatOnlineTotal(snap.totalOnline ?? snap.onlinePlayers.length);
+      }
+    } catch (e) {
+      addLog('error', `JoinGlobalChat failed: ${e.message}`);
+      setChatLastError({ source: 'InvokeFailed', code: 'JoinGlobalChatFailed', message: e.message, at: new Date().toISOString() });
+    }
+  }
+
+  async function chatLeaveGlobal() {
+    if (!chatConnection) return;
+    try {
+      await chatConnection.invoke('LeaveGlobalChat');
+      addLog('event', 'LeaveGlobalChat OK');
+      setChatJoinedGlobal(false);
+    } catch (e) {
+      addLog('error', `LeaveGlobalChat failed: ${e.message}`);
+    }
+  }
+
+  async function chatSendGlobal() {
+    if (!chatConnection || !chatGlobalInput.trim()) return;
+    const content = chatGlobalInput;
+    try {
+      await chatConnection.invoke('SendGlobalMessage', content);
+      addLog('info', `SendGlobalMessage sent (${content.length} chars)`);
+      setChatGlobalInput('');
+    } catch (e) {
+      addLog('error', `SendGlobalMessage failed: ${e.message}`);
+    }
+  }
+
+  async function chatSendDm() {
+    if (!chatConnection || !chatDmSelectedPlayerId || !chatDmInput.trim()) return;
+    const content = chatDmInput;
+    const recipient = chatDmSelectedPlayerId;
+    try {
+      const res = await chatConnection.invoke('SendDirectMessage', recipient, content);
+      addLog('event', `SendDirectMessage OK: ${JSON.stringify(res)}`);
+      setLastResponse({ event: 'SendDirectMessage', data: res });
+      // Optimistic local echo — server will NOT fan back to sender in v1 (DirectMessageReceived goes to recipient only).
+      if (res && res.messageId) {
+        setChatDmMessagesByPlayer(prev => ({
+          ...prev,
+          [recipient]: [...(prev[recipient] || []), {
+            messageId: res.messageId,
+            conversationId: res.conversationId,
+            sender: { playerId: '(me)', displayName: '(me)' },
+            content,
+            sentAt: res.sentAt || new Date().toISOString(),
+          }],
+        }));
+      }
+      setChatDmInput('');
+    } catch (e) {
+      addLog('error', `SendDirectMessage failed: ${e.message}`);
+    }
+  }
+
+  async function chatLoadConversations() {
+    const r = await apiCall('GET', 'api/v1/chat/conversations', null, 'Conversations');
+    if (r.ok) setChatConversations(r.data?.conversations || []);
+  }
+
+  async function chatLoadDmHistory(otherPlayerId) {
+    if (!otherPlayerId) return;
+    const r = await apiCall('GET', `api/v1/chat/direct/${otherPlayerId}/messages?limit=50`, null, 'DM History');
+    if (r.ok) {
+      const msgs = r.data?.messages || [];
+      setChatDmMessagesByPlayer(prev => ({ ...prev, [otherPlayerId]: msgs }));
+    }
+  }
+
+  async function chatLoadConversationMessages(conversationId) {
+    if (!conversationId) return;
+    const r = await apiCall('GET', `api/v1/chat/conversations/${conversationId}/messages?limit=50`, null, 'Conv Messages');
+    if (r.ok && conversationId === chatGlobalConversationId) {
+      const msgs = r.data?.messages || [];
+      setChatGlobalMessages(msgs);
+    }
+  }
+
+  async function chatLoadOnline() {
+    const r = await apiCall('GET', 'api/v1/chat/presence/online?limit=100', null, 'Online Players');
+    if (r.ok) {
+      setChatOnlinePlayers(r.data?.players || []);
+      setChatOnlineTotal(r.data?.totalOnline || 0);
+    }
+  }
+
+  async function chatLoadPlayerCard(playerId) {
+    const id = playerId || chatCardLookupId;
+    if (!id) { addLog('error', 'Player card: id required'); return; }
+    const r = await apiCall('GET', `api/v1/players/${id}/card`, null, 'Player Card');
+    if (r.ok) { setChatPlayerCard(r.data); setChatTab('card'); }
+  }
+
+  function chatPickDmTarget(playerId, displayName) {
+    setChatDmSelectedPlayerId(playerId);
+    setChatTab('dm');
+    if (!chatDmMessagesByPlayer[playerId]) chatLoadDmHistory(playerId);
+    addLog('info', `DM target set: ${displayName || playerId}`);
+  }
+
   // --- Derived state ---
   const char = gameState?.character;
   const phaseNames = ['ArenaOpen', 'TurnOpen', 'Resolving', 'Ended'];
@@ -578,6 +802,183 @@ function App() {
         )}
         {hubStatus !== 'disconnected' && (
           <button className="danger" onClick={disconnectHub} style={{ marginLeft: 8 }}>Disconnect</button>
+        )}
+      </div>
+
+      {/* Chat Panel — Kombats Chat v1 via BFF /chathub + /api/v1/chat/* */}
+      <div className="panel" style={{ flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setChatOpen(o => !o)}>
+          <div className="panel-title" style={{ margin: 0 }}>Chat (v1)</div>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: chatStatus === 'connected' ? 'var(--green)' : chatStatus === 'connecting' ? 'var(--yellow)' : 'var(--red)' }} title={`Chat hub: ${chatStatus}`} />
+          <span style={{ fontSize: 11, color: 'var(--text2)' }}>{chatStatus}{chatJoinedGlobal ? ' · global joined' : ''}</span>
+          {chatLastError && (
+            <span style={{ fontSize: 11, color: 'var(--red)', marginLeft: 8 }}>
+              ⚠ {chatLastError.source}: {chatLastError.code}{chatLastError.message ? ' — ' + chatLastError.message : ''}
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: 'var(--text2)', marginLeft: 'auto' }}>{chatOpen ? '\u25B2' : '\u25BC'}</span>
+        </div>
+        {chatOpen && (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Controls row */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              {chatStatus === 'disconnected' && (
+                <button className="primary" onClick={connectChatHub} disabled={!token}>Connect Chat</button>
+              )}
+              {chatStatus !== 'disconnected' && (
+                <button className="danger" onClick={disconnectChatHub}>Disconnect</button>
+              )}
+              <button onClick={chatJoinGlobal} disabled={chatStatus !== 'connected' || chatJoinedGlobal}>Join Global</button>
+              <button onClick={chatLeaveGlobal} disabled={chatStatus !== 'connected' || !chatJoinedGlobal}>Leave Global</button>
+              <button onClick={chatLoadConversations} disabled={!token}>Load Conversations</button>
+              <button onClick={chatLoadOnline} disabled={!token}>Load Online</button>
+              {chatLastError && (
+                <button onClick={() => setChatLastError(null)} style={{ fontSize: 11 }}>Clear Error</button>
+              )}
+            </div>
+
+            {/* Error banner */}
+            {chatLastError && (
+              <div style={{ padding: 8, background: 'rgba(239,83,80,.12)', border: '1px solid var(--red)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--red)' }}>
+                <b>{chatLastError.source}</b> · {chatLastError.code}
+                {chatLastError.message ? ` — ${chatLastError.message}` : ''}
+                {chatLastError.retryAfterMs ? ` (retry after ${chatLastError.retryAfterMs}ms)` : ''}
+                <span style={{ color: 'var(--text2)', marginLeft: 8 }}>{chatLastError.at}</span>
+              </div>
+            )}
+
+            {/* Tab bar */}
+            <div className="tab-bar">
+              <button className={chatTab === 'global' ? 'active' : ''} onClick={() => setChatTab('global')}>Global ({chatGlobalMessages.length})</button>
+              <button className={chatTab === 'dm' ? 'active' : ''} onClick={() => setChatTab('dm')}>DMs</button>
+              <button className={chatTab === 'online' ? 'active' : ''} onClick={() => setChatTab('online')}>Online ({chatOnlineTotal})</button>
+              <button className={chatTab === 'conversations' ? 'active' : ''} onClick={() => setChatTab('conversations')}>Conversations ({chatConversations.length})</button>
+              <button className={chatTab === 'card' ? 'active' : ''} onClick={() => setChatTab('card')}>Player Card</button>
+            </div>
+
+            {/* Global tab */}
+            {chatTab === 'global' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="feed-content" style={{ maxHeight: 220, minHeight: 120 }}>
+                  {chatGlobalMessages.length === 0 && <div className="feed-empty">No global messages. Join global chat to receive a recent snapshot.</div>}
+                  {chatGlobalMessages.map((m, i) => (
+                    <div key={m.messageId || i} className="feed-entry tone-neutral">
+                      <span style={{ color: 'var(--text2)', fontSize: 11, marginRight: 6 }}>{m.sentAt ? new Date(m.sentAt).toLocaleTimeString() : ''}</span>
+                      <b style={{ color: 'var(--accent)' }}>{m.sender?.displayName || '?'}</b>: {m.content}
+                    </div>
+                  ))}
+                  <div ref={chatGlobalEndRef} />
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input style={{ flex: 1 }} placeholder="Global message..." value={chatGlobalInput}
+                    onChange={e => setChatGlobalInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && chatSendGlobal()} />
+                  <button className="primary" onClick={chatSendGlobal} disabled={!chatJoinedGlobal || !chatGlobalInput.trim()}>Send</button>
+                </div>
+                {chatGlobalConversationId && (
+                  <div style={{ fontSize: 11, color: 'var(--text2)' }}>
+                    Global conv id: <code>{chatGlobalConversationId}</code>
+                    <button style={{ marginLeft: 8, fontSize: 11, padding: '3px 8px' }} onClick={() => chatLoadConversationMessages(chatGlobalConversationId)}>Reload history via HTTP</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DM tab */}
+            {chatTab === 'dm' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <label style={{ fontSize: 12, color: 'var(--text2)' }}>Other player id:</label>
+                  <input style={{ flex: 1, minWidth: 240, fontFamily: 'monospace', fontSize: 12 }}
+                    placeholder="<guid>" value={chatDmSelectedPlayerId}
+                    onChange={e => setChatDmSelectedPlayerId(e.target.value.trim())} />
+                  <button onClick={() => chatLoadDmHistory(chatDmSelectedPlayerId)} disabled={!chatDmSelectedPlayerId}>Load history</button>
+                </div>
+                <div className="feed-content" style={{ maxHeight: 220, minHeight: 120 }}>
+                  {(!chatDmSelectedPlayerId || !(chatDmMessagesByPlayer[chatDmSelectedPlayerId] || []).length) && (
+                    <div className="feed-empty">{chatDmSelectedPlayerId ? 'No DM history loaded.' : 'Paste another player id, or pick from Online / Conversations tab.'}</div>
+                  )}
+                  {(chatDmMessagesByPlayer[chatDmSelectedPlayerId] || []).map((m, i) => (
+                    <div key={m.messageId || i} className="feed-entry tone-neutral">
+                      <span style={{ color: 'var(--text2)', fontSize: 11, marginRight: 6 }}>{m.sentAt ? new Date(m.sentAt).toLocaleTimeString() : ''}</span>
+                      <b style={{ color: m.sender?.playerId === '(me)' ? 'var(--green)' : 'var(--accent)' }}>{m.sender?.displayName || '?'}</b>: {m.content}
+                    </div>
+                  ))}
+                  <div ref={chatDmEndRef} />
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input style={{ flex: 1 }} placeholder="Direct message..." value={chatDmInput}
+                    onChange={e => setChatDmInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && chatSendDm()} />
+                  <button className="primary" onClick={chatSendDm} disabled={chatStatus !== 'connected' || !chatDmSelectedPlayerId || !chatDmInput.trim()}>Send DM</button>
+                </div>
+              </div>
+            )}
+
+            {/* Online tab */}
+            {chatTab === 'online' && (
+              <div className="feed-content" style={{ maxHeight: 240, minHeight: 120 }}>
+                {chatOnlinePlayers.length === 0 && <div className="feed-empty">No online players loaded. Click "Load Online" or "Join Global".</div>}
+                {chatOnlinePlayers.map((p) => (
+                  <div key={p.playerId} className="feed-entry tone-neutral" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1 }}>
+                      <b style={{ color: 'var(--accent)' }}>{p.displayName || '?'}</b>{' '}
+                      <code style={{ fontSize: 11, color: 'var(--text2)' }}>{p.playerId}</code>
+                    </span>
+                    <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatPickDmTarget(p.playerId, p.displayName)}>DM</button>
+                    <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatLoadPlayerCard(p.playerId)}>Card</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Conversations tab */}
+            {chatTab === 'conversations' && (
+              <div className="feed-content" style={{ maxHeight: 240, minHeight: 120 }}>
+                {chatConversations.length === 0 && <div className="feed-empty">No conversations loaded. Click "Load Conversations".</div>}
+                {chatConversations.map((c) => (
+                  <div key={c.conversationId} className="feed-entry tone-neutral" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1 }}>
+                      <b style={{ color: 'var(--accent)' }}>{c.type}</b>{' '}
+                      {c.otherPlayer ? <>with <b>{c.otherPlayer.displayName}</b> <code style={{ fontSize: 11, color: 'var(--text2)' }}>{c.otherPlayer.playerId}</code></> : <code style={{ fontSize: 11, color: 'var(--text2)' }}>{c.conversationId}</code>}
+                      {c.lastMessageAt && <span style={{ color: 'var(--text2)', fontSize: 11, marginLeft: 6 }}>last: {new Date(c.lastMessageAt).toLocaleString()}</span>}
+                    </span>
+                    <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatLoadConversationMessages(c.conversationId)}>Load msgs</button>
+                    {c.otherPlayer && <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatPickDmTarget(c.otherPlayer.playerId, c.otherPlayer.displayName)}>Open DM</button>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Player Card tab */}
+            {chatTab === 'card' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <label style={{ fontSize: 12, color: 'var(--text2)' }}>Player id:</label>
+                  <input style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }} placeholder="<guid>"
+                    value={chatCardLookupId} onChange={e => setChatCardLookupId(e.target.value.trim())} />
+                  <button className="primary" onClick={() => chatLoadPlayerCard()} disabled={!chatCardLookupId}>Load card</button>
+                </div>
+                {!chatPlayerCard && <div className="feed-empty">No card loaded.</div>}
+                {chatPlayerCard && (
+                  <div className="panel" style={{ background: 'var(--surface2)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{chatPlayerCard.displayName}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}>
+                      <code>{chatPlayerCard.playerId}</code> · Level {chatPlayerCard.level}
+                    </div>
+                    <div className="stats-current">
+                      <span className="stat-label">STR</span><span className="stat-value">{chatPlayerCard.strength}</span>
+                      <span className="stat-label">AGI</span><span className="stat-value">{chatPlayerCard.agility}</span>
+                      <span className="stat-label">INT</span><span className="stat-value">{chatPlayerCard.intuition}</span>
+                      <span className="stat-label">VIT</span><span className="stat-value">{chatPlayerCard.vitality}</span>
+                      <span className="stat-label">Wins</span><span className="stat-value" style={{ color: 'var(--green)' }}>{chatPlayerCard.wins}</span>
+                      <span className="stat-label">Losses</span><span className="stat-value" style={{ color: 'var(--red)' }}>{chatPlayerCard.losses}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

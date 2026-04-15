@@ -78,11 +78,39 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Health checks
+// Health checks — readiness covers every hard runtime dependency of delivered chat
+// functionality: Postgres (messages/conversations), Redis (presence, rate-limit, cache),
+// and RabbitMQ (MassTransit consumer + outbox publication).
 var postgresConnection = builder.Configuration.GetConnectionString("PostgresConnection")
     ?? "Host=localhost;Port=5432;Database=kombats;Username=postgres;Password=postgres";
+var redisHealthConnection = builder.Configuration.GetConnectionString("Redis")
+    ?? "localhost:6379,abortConnect=false";
+var rabbitOptions = builder.Configuration
+    .GetSection(Kombats.Messaging.Options.MessagingOptions.SectionName)
+    .Get<Kombats.Messaging.Options.MessagingOptions>()?.RabbitMq
+    ?? new Kombats.Messaging.Options.RabbitMqOptions();
+string rabbitScheme = rabbitOptions.UseTls ? "amqps" : "amqp";
+string rabbitHost = string.IsNullOrWhiteSpace(rabbitOptions.Host) ? "localhost" : rabbitOptions.Host;
+string rabbitVHost = string.IsNullOrWhiteSpace(rabbitOptions.VirtualHost) ? "/" : rabbitOptions.VirtualHost;
+string rabbitUser = Uri.EscapeDataString(rabbitOptions.Username);
+string rabbitPass = Uri.EscapeDataString(rabbitOptions.Password);
+var rabbitUri = new Uri(
+    $"{rabbitScheme}://{rabbitUser}:{rabbitPass}@{rabbitHost}:{rabbitOptions.Port}/{Uri.EscapeDataString(rabbitVHost.TrimStart('/'))}");
+var rabbitConnectionFactory = new RabbitMQ.Client.ConnectionFactory
+{
+    Uri = rabbitUri,
+    RequestedHeartbeat = TimeSpan.FromSeconds(rabbitOptions.HeartbeatSeconds),
+    AutomaticRecoveryEnabled = true,
+};
+builder.Services.AddSingleton<RabbitMQ.Client.IConnectionFactory>(rabbitConnectionFactory);
+builder.Services.AddSingleton<RabbitMQ.Client.IConnection>(sp =>
+    sp.GetRequiredService<RabbitMQ.Client.IConnectionFactory>()
+        .CreateConnectionAsync().GetAwaiter().GetResult());
+
 builder.Services.AddHealthChecks()
-    .AddNpgSql(postgresConnection, name: "postgresql");
+    .AddNpgSql(postgresConnection, name: "postgresql")
+    .AddRedis(redisHealthConnection, name: "redis")
+    .AddRabbitMQ(name: "rabbitmq");
 
 // OpenTelemetry tracing
 builder.Services.AddOpenTelemetry()

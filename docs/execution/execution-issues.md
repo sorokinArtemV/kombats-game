@@ -649,3 +649,57 @@ The BFF relay tests verify failure paths (unreachable Battle, no active connecti
 `BattleHubRelay`, `IBattleHubRelay`, `IFrontendBattleSender`, and other Application-layer types in the BFF are `public` rather than `internal sealed`. This deviates from the standard "Application classes are internal sealed" rule (CLAUDE.md).
 
 **Justification:** The BFF has no Infrastructure layer and no `DependencyInjection` project. Bootstrap directly registers Application types. `InternalsVisibleTo` from Application to Bootstrap is an option but would be the only such relationship in the BFF — the pragmatic deviation is accepted given the BFF's simpler 3-project structure. If a BFF Infrastructure or DI project is added later, these types should be made internal with appropriate `InternalsVisibleTo` entries.
+
+## Chat v1 — Phase 7A Carry-Forward Items
+
+Recorded during the Chat v1 final gate review (2026-04-15). Non-blocking for Chat v1 merge;
+tracked here so the items are not lost when Phase 7A begins.
+
+### EI-067: BFF `/health` does not aggregate Chat downstream
+**Severity:** Low
+**Status:** Open — Phase 7A
+
+`src/Kombats.Bff/Kombats.Bff.Api/Endpoints/Health/HealthEndpoint.cs` probes Players, Matchmaking,
+and Battle but omits Chat. Chat flows fail cleanly as 502 when Chat is down, so this is an
+operability gap rather than a functional defect. Add Chat to the aggregate during Phase 7A
+observability work.
+
+### EI-068: No OTLP exporter wired by default
+**Severity:** Low
+**Status:** Open — Phase 7A
+
+Chat Bootstrap adds OpenTelemetry tracing but `OpenTelemetry:OtlpEndpoint` is empty by default;
+no exporter is attached. Wire to the chosen collector during Phase 7A observability work across
+all services consistently.
+
+### EI-069: Redis Sentinel not configured for production (AD-08)
+**Severity:** Medium
+**Status:** Open — Phase 7A
+
+Chat and other services use a single Redis instance. Production must switch to Sentinel per AD-08.
+Requires appsettings + client topology changes across Chat, Matchmaking, and Battle. Phase 7A.
+
+### EI-070: No cross-service docker-compose E2E / chaos harness
+**Severity:** Medium
+**Status:** Open — Phase 7A
+
+Chat v1 was validated by layered unit + integration tests (Testcontainers Postgres/Redis, real
+Kestrel SignalR two-client flows, in-process BFF→Chat relay behavior). No cross-host
+docker-compose topology smoke or chaos harness exists. Build one as part of Phase 7B smoke and
+reliability work.
+
+### EI-071: No performance baselines for chat critical paths
+**Severity:** Low
+**Status:** Open — Phase 7A
+
+No p50/p95 baselines for `SendGlobalMessage`, `SendDirectMessage`, history pagination, or
+presence lookup. Establish during Phase 7B performance pass.
+
+### EI-072: Chat readiness dependency-outage 503 not covered by automated test
+**Severity:** Low
+**Status:** Open — Phase 7A
+
+The Batch 6 pre-merge fix adds Postgres + Redis + RabbitMQ to `/health/ready` and a registration
+smoke test (`HealthReadinessRegistrationTests`). A live-outage test (pull Redis or RabbitMQ,
+assert 503) requires a separate integration fixture and was not added in the final pre-merge fix
+pass. Add during Phase 7A.
