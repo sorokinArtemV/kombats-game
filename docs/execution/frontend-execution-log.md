@@ -139,3 +139,324 @@ Moved root `App.tsx` into `src/app/App.tsx` to match the architecture's `app/` d
 Deleted: `src/App.tsx`
 
 Validation: `npx tsc --noEmit` passes, `npx eslint .` passes, `npm run dev` starts on port 3000.
+
+---
+
+## Batch 2 — Phase 1: Auth + Transport Foundation
+
+**Date:** 2026-04-16
+**Status:** Completed
+**Branch:** frontend-client
+
+### P1.1: Shared type definitions
+
+**Status:** Done
+
+Created all TypeScript type definitions matching the backend contract (BFF DTOs, battle realtime events, chat events, player card). Types derived from actual C# records in `src/Kombats.Bff/`, `src/Kombats.Battle/Kombats.Battle.Realtime.Contracts/`, and `src/Kombats.Chat/`.
+
+Key files:
+- `src/types/common.ts` — `Uuid`, `DateTimeOffset` type aliases
+- `src/types/api.ts` — `GameStateResponse`, `CharacterResponse`, `QueueStatusResponse`, `LeaveQueueResponse`, `OnboardResponse`, `AllocateStatsRequest/Response`, `SetCharacterNameRequest`, `ApiError`, `OnboardingState`/`QueueStatus`/`MatchState` enums
+- `src/types/player.ts` — `PlayerCardResponse`
+- `src/types/battle.ts` — `BattleSnapshotRealtime`, `TurnOpenedRealtime`, `PlayerDamagedRealtime`, `TurnResolvedRealtime`, `AttackResolutionRealtime`, `TurnResolutionLogRealtime`, `BattleStateUpdatedRealtime`, `BattleEndedRealtime`, `BattleReadyRealtime`, `BattleFeedEntry`, `BattleFeedUpdate`, `BattleFeedResponse`, `BattleRulesetRealtime`; enums: `BattleZone`, `BattlePhaseRealtime`, `BattleEndReasonRealtime`, `AttackOutcomeRealtime`, `FeedEntryKind`, `FeedEntrySeverity`, `FeedEntryTone`
+- `src/types/chat.ts` — `ChatMessageResponse`, `ChatSender`, `ChatConversationResponse`, `ConversationListResponse`, `MessageListResponse`, `OnlinePlayerResponse`, `OnlinePlayersResponse`, `JoinGlobalChatResponse`, `SendDirectMessageResponse`, `GlobalMessageEvent`, `DirectMessageEvent`, `PlayerOnlineEvent`, `PlayerOfflineEvent`, `ChatErrorEvent`, `ChatErrorCode`
+
+Validation: `npx tsc --noEmit` passes.
+
+### P1.2: HTTP client and endpoint modules
+
+**Status:** Done
+
+Implemented the typed HTTP transport layer.
+
+- `src/transport/http/client.ts` — `fetch` wrapper with `Authorization: Bearer` injection from auth store, error normalization into `ApiError`, 401 interception (clears auth state), 204 handling. Exposes `httpClient.get/post/put/delete`.
+- `src/transport/http/endpoints/game.ts` — `getState()`, `onboard()`
+- `src/transport/http/endpoints/character.ts` — `setName()`, `allocateStats()`
+- `src/transport/http/endpoints/queue.ts` — `join()`, `leave()`, `getStatus()`
+- `src/transport/http/endpoints/battle.ts` — `getFeed(battleId)`
+- `src/transport/http/endpoints/chat.ts` — `getConversations()`, `getMessages()`, `getDirectMessages()`, `getOnlinePlayers()`
+- `src/transport/http/endpoints/players.ts` — `getCard(playerId)`
+
+Key design decisions:
+- Token read is at call-time via `useAuthStore.getState()`, not captured at setup
+- No retry logic in client — TanStack Query handles retry
+- Error shape matches BFF's `{ error: { code, message, details } }` format
+
+### P1.3: Auth module
+
+**Status:** Done
+
+Implemented Keycloak OIDC auth per `05-keycloak-web-client-integration.md` Section 11.
+
+- `src/modules/auth/user-manager.ts` — `oidc-client-ts` `UserManager` singleton with: Authorization Code + PKCE, `InMemoryWebStorage` for token storage (DEC-6), `sessionStorage` for PKCE state, `automaticSilentRenew: true`, 60s expiry notification
+- `src/modules/auth/store.ts` — Zustand store with `accessToken`, `userIdentityId`, `displayName`, `authStatus` (loading/authenticated/unauthenticated), actions: `setUser()`, `updateToken()`, `clearAuth()`
+- `src/modules/auth/AuthProvider.tsx` — Wraps `react-oidc-context`'s `AuthProvider` + `AuthSync` component that syncs OIDC state to Zustand store. Listens for `userLoaded` (token renewal) and `silentRenewError` events.
+- `src/modules/auth/AuthCallback.tsx` — Handles `/auth/callback` route. Waits for OIDC processing, redirects to `/` on success or error.
+- `src/modules/auth/hooks.ts` — `useAuth()` hook exposing `login()` (standard `signinRedirect`), `register()` (`signinRedirect` with `kc_action=register`), `logout()` (clears state + `signoutRedirect`), `authStatus`, `isAuthenticated`, `isLoading`, `userIdentityId`, `displayName`
+
+### P1.4: TanStack Query setup
+
+**Status:** Done
+
+- `src/app/query-client.ts` — `QueryClient` with default options (3 retries for queries, no retry for mutations, `staleTime: 0`, `refetchOnWindowFocus: true`). Query key factories: `gameKeys`, `playerKeys`, `chatKeys`, `battleKeys`.
+- `src/app/App.tsx` — Wrapped with `<AuthProvider>` and `<QueryClientProvider>`
+
+### P1.5: Battle SignalR manager
+
+**Status:** Done
+
+- `src/transport/signalr/connection-state.ts` — `ConnectionState` type
+- `src/transport/signalr/battle-hub.ts` — `BattleHubManager` class: `connect()`, `disconnect()`, `joinBattle(battleId)`, `submitTurnAction(battleId, turnIndex, payload)`. Uses `accessTokenFactory` reading from auth store at call-time. Reconnect policy: `[0, 1000, 2000, 5000, 10000, 30000]`. Typed event registration for all battle events (`BattleReady`, `TurnOpened`, `PlayerDamaged`, `TurnResolved`, `BattleStateUpdated`, `BattleEnded`, `BattleFeedUpdated`, `BattleConnectionLost`). Connection lifecycle tracking (`onreconnecting`, `onreconnected`, `onclose`). Injectable event handlers via `setEventHandlers()`.
+
+### P1.6: Chat SignalR manager
+
+**Status:** Done
+
+- `src/transport/signalr/chat-hub.ts` — `ChatHubManager` class: `connect()`, `disconnect()`, `joinGlobalChat()`, `leaveGlobalChat()`, `sendGlobalMessage(content)`, `sendDirectMessage(recipientPlayerId, content)`. Same auth + reconnect pattern as battle hub. Typed event registration for all chat events (`GlobalMessageReceived`, `DirectMessageReceived`, `PlayerOnline`, `PlayerOffline`, `ChatError`, `ChatConnectionLost`). Connection lifecycle tracking. Injectable event handlers.
+
+### P1.7: Matchmaking polling service
+
+**Status:** Done
+
+- `src/transport/polling/matchmaking-poller.ts` — `MatchmakingPoller` class: `start(intervalMs, onResult, onError)`, `stop()`. Fires immediately on start then on interval. Tracks `consecutiveFailures` for resilience reporting. Exposes `isRunning` state. Calls `queueApi.getStatus()`.
+
+### Files created (22 new, 1 modified)
+
+New files:
+- `src/types/common.ts`
+- `src/types/api.ts`
+- `src/types/player.ts`
+- `src/types/battle.ts`
+- `src/types/chat.ts`
+- `src/modules/auth/store.ts`
+- `src/modules/auth/user-manager.ts`
+- `src/modules/auth/AuthProvider.tsx`
+- `src/modules/auth/AuthCallback.tsx`
+- `src/modules/auth/hooks.ts`
+- `src/transport/http/client.ts`
+- `src/transport/http/endpoints/game.ts`
+- `src/transport/http/endpoints/character.ts`
+- `src/transport/http/endpoints/queue.ts`
+- `src/transport/http/endpoints/battle.ts`
+- `src/transport/http/endpoints/chat.ts`
+- `src/transport/http/endpoints/players.ts`
+- `src/transport/signalr/connection-state.ts`
+- `src/transport/signalr/battle-hub.ts`
+- `src/transport/signalr/chat-hub.ts`
+- `src/transport/polling/matchmaking-poller.ts`
+- `src/app/query-client.ts`
+
+Modified:
+- `src/app/App.tsx` — wrapped with AuthProvider + QueryClientProvider
+
+Removed `.gitkeep` from: `src/modules/auth/`, `src/transport/http/endpoints/`, `src/transport/signalr/`, `src/transport/polling/`, `src/types/`
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint .`: passes (zero errors)
+- `npm run dev`: starts on port 3000
+- Auth flow wired: `AuthProvider` + `AuthSync` + `AuthCallback` in place
+- HTTP client reads token from auth store at call-time
+- Both SignalR managers configured with `accessTokenFactory` + reconnect policy
+- TanStack Query wired with `QueryClientProvider` + query key factories
+- Matchmaking poller implemented with start/stop lifecycle
+
+---
+
+## Batch 2 — Phase 1 Cleanup Patch
+
+**Date:** 2026-04-16
+**Status:** Completed
+**Branch:** frontend-client
+
+Reviewer-identified fixes applied before Phase 2.
+
+### Fix 1: Transport → modules boundary violation (required)
+
+`transport/http/client.ts`, `transport/signalr/battle-hub.ts`, and `transport/signalr/chat-hub.ts` all imported `@/modules/auth/store` directly, violating the architecture rule that `transport/` must not import from `modules/`.
+
+**Resolution:**
+- HTTP client now exposes `configureHttpClient({ getAccessToken, onAuthFailure })` — dependency injection instead of direct import.
+- `BattleHubManager` and `ChatHubManager` accept `accessTokenFactory: () => string` as a constructor argument instead of importing the auth store.
+- Module-level singleton exports (`battleHubManager`, `chatHubManager`) removed from transport files — they are no longer instantiated in the transport layer.
+- Created `src/app/transport-init.ts` in the `app/` layer, which wires auth store into all three transport dependencies and exports the hub manager singletons. This file is imported by `App.tsx` to ensure wiring runs at startup.
+- Token access remains dynamic (read at call-time via closure over `useAuthStore.getState()`), not captured at construction.
+
+Boundary verification: `grep -r '@/modules/' src/transport/` returns zero matches.
+
+### Fix 2: Deduplicate OnboardResponse
+
+`OnboardResponse` was a full interface duplicating `CharacterResponse` field-for-field.
+
+- `src/types/api.ts`: replaced with `export type OnboardResponse = CharacterResponse;`
+
+### Fix 3: Unconditional Content-Type header
+
+`Content-Type: application/json` was set on every request including GET and DELETE (which have no body).
+
+- `src/transport/http/client.ts`: `Content-Type` header now only set when `init.body` is present.
+
+### Fix 4: Trailing slash in BFF base URL
+
+URL construction could produce double slashes if `VITE_BFF_BASE_URL` ends with `/`.
+
+- `src/config.ts`: base URL is now normalized with `.replace(/\/+$/, '')` at config read time.
+
+### Files modified (6)
+
+| File | Change |
+|---|---|
+| `src/transport/http/client.ts` | Replaced auth store import with `configureHttpClient()` injection; Content-Type conditional |
+| `src/transport/signalr/battle-hub.ts` | Replaced auth store import with constructor-injected `accessTokenFactory`; removed singleton export |
+| `src/transport/signalr/chat-hub.ts` | Same as battle-hub |
+| `src/types/api.ts` | `OnboardResponse` → type alias for `CharacterResponse` |
+| `src/config.ts` | Trailing slash normalization on `bff.baseUrl` |
+| `src/app/App.tsx` | Added `import './transport-init'` |
+
+New file:
+| `src/app/transport-init.ts` | Wires auth store into HTTP client + creates hub manager singletons |
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint .`: passes (zero errors)
+- `npm run dev`: starts on port 3000
+- `grep -r '@/modules/' src/transport/`: zero matches — boundary clean
+
+---
+
+## Batch 3 — Phase 2: Startup State Resolution + Route Guards
+
+**Date:** 2026-04-16
+**Status:** Completed
+**Branch:** frontend-client
+
+### P2.1: Player store and game state loading
+
+**Status:** Done
+
+- `src/modules/player/store.ts` — Zustand store with `character`, `queueStatus`, `isCharacterCreated`, `degradedServices`, `isLoaded`. Actions: `setGameState()`, `updateCharacter()`, `clearState()`.
+- `src/modules/player/hooks.ts` — `useGameState()` TanStack Query hook that fetches `GET /api/v1/game/state` and populates the player store via `useEffect` on data. `useCharacter()` and `useQueueStatus()` selectors.
+- `src/app/GameStateLoader.tsx` — Layout route component that calls `useGameState()`, shows loading text while pending, error state on failure, renders `<Outlet />` when loaded.
+
+Auto-onboard is NOT wired here per the task breakdown (deferred to P3.3).
+
+### P2.2: Route tree and shell layouts
+
+**Status:** Done
+
+- `src/app/router.tsx` — Full route tree using `createBrowserRouter`:
+  - `/` → `UnauthenticatedShell`
+  - `/auth/callback` → `AuthCallback`
+  - Authenticated subtree: `AuthGuard` → `GameStateLoader` → `OnboardingGuard` → (onboarding routes via `OnboardingShell` + post-onboarding routes via `BattleGuard`)
+  - Under `BattleGuard`: battle routes via `BattleShell`, lobby/matchmaking via `AuthenticatedShell`
+- `src/app/route-placeholders.tsx` — Placeholder components for routes not yet implemented (onboarding name/stats, lobby, matchmaking, battle, battle result). Separated from `router.tsx` to satisfy react-refresh single-export rule.
+- `src/app/shells/UnauthenticatedShell.tsx` — Landing with Login + Register buttons wired to `useAuth()`.
+- `src/app/shells/OnboardingShell.tsx` — Centered card layout with `<Outlet />`.
+- `src/app/shells/AuthenticatedShell.tsx` — Header + main + sidebar skeleton with `<Outlet />`.
+- `src/app/shells/BattleShell.tsx` — Full-screen layout with `<Outlet />`.
+
+### P2.3: Route guards
+
+**Status:** Done
+
+- `src/app/guards/AuthGuard.tsx` — Reads `authStatus` from auth store. Loading → spinner. Unauthenticated → redirect to `/`. Authenticated → `<Outlet />`.
+- `src/app/guards/OnboardingGuard.tsx` — Reads `character` from player store. No character → allows onboarding routes, redirects others to `/onboarding/name`. `Draft` → force `/onboarding/name`. `Named` → force `/onboarding/stats`. `Ready` → blocks onboarding routes (redirects to `/lobby`), allows post-onboarding flow.
+- `src/app/guards/BattleGuard.tsx` — Reads `queueStatus` from player store. `Matched` + `battleId` → force `/battle/:battleId`. `Searching` → force `/matchmaking`. No active queue → blocks battle/matchmaking routes (redirects to `/lobby`), allows lobby flow.
+
+Guard hierarchy matches `04` Section 4.2: `AuthGuard > GameStateLoader > OnboardingGuard > BattleGuard > AuthenticatedShell`.
+
+### App.tsx updated
+
+`App.tsx` now renders `<RouterProvider router={router} />` inside the existing `AuthProvider` + `QueryClientProvider` wrapper.
+
+### Files created (12 new, 1 modified)
+
+New files:
+- `src/modules/player/store.ts`
+- `src/modules/player/hooks.ts`
+- `src/app/GameStateLoader.tsx`
+- `src/app/router.tsx`
+- `src/app/route-placeholders.tsx`
+- `src/app/shells/UnauthenticatedShell.tsx`
+- `src/app/shells/OnboardingShell.tsx`
+- `src/app/shells/AuthenticatedShell.tsx`
+- `src/app/shells/BattleShell.tsx`
+- `src/app/guards/AuthGuard.tsx`
+- `src/app/guards/OnboardingGuard.tsx`
+- `src/app/guards/BattleGuard.tsx`
+
+Modified:
+- `src/app/App.tsx` — replaced placeholder content with `RouterProvider`
+
+Removed `.gitkeep` from: `src/app/shells/`, `src/app/guards/`, `src/modules/player/screens/`, `src/modules/player/components/`
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint .`: passes (zero errors)
+- `npm run dev`: starts on port 3000
+- Route structure: all approved routes defined
+- Guard hierarchy: `AuthGuard > GameStateLoader > OnboardingGuard > BattleGuard` — matches `04` Section 4.2
+- Shell layouts: structural placeholders in place for all four shells
+- Game state loading: `GameStateLoader` blocks rendering until `GET /api/v1/game/state` resolves
+- Routing logic covers: unauthenticated → landing, no character/Draft → onboarding/name, Named → onboarding/stats, Ready + no queue → lobby, Searching → matchmaking, Matched + battleId → battle
+
+---
+
+## Batch 3 — Phase 2 Cleanup Patch
+
+**Date:** 2026-04-16
+**Status:** Completed
+**Branch:** frontend-client
+
+Reviewer-identified fixes applied before Phase 3.
+
+### Fix 1: Post-login redirect flow (blocking)
+
+`AuthCallback` redirected to `/` on success, which rendered `UnauthenticatedShell` instead of entering the authenticated pipeline.
+
+- `src/modules/auth/AuthCallback.tsx`: success redirect changed from `window.location.replace('/')` to `window.location.replace('/lobby')`. Guards and `GameStateLoader` determine the correct final destination. Error/unauthenticated case still redirects to `/`.
+
+### Fix 2: Tighten OnboardingGuard for null character
+
+When `character` was null, the guard allowed any `/onboarding/*` route. Now only `/onboarding/name` is permitted; `/onboarding/stats` with null character redirects to `/onboarding/name`.
+
+- `src/app/guards/OnboardingGuard.tsx`: changed `location.pathname.startsWith('/onboarding')` to `location.pathname === '/onboarding/name'` in the null-character branch.
+
+### Fix 3: Retry button on GameStateLoader error screen
+
+The error state was a dead-end with no recovery path.
+
+- `src/app/GameStateLoader.tsx`: added a "Retry" button calling `refetch()` from the TanStack Query result.
+
+### Fix 4: Remove useGameState retry override
+
+`useGameState` had `retry: 2` overriding the global default of `3` with no justification.
+
+- `src/modules/player/hooks.ts`: removed the local `retry: 2` override. Now uses the QueryClient default (3 retries).
+
+### Files modified (4)
+
+| File | Change |
+|---|---|
+| `src/modules/auth/AuthCallback.tsx` | Success redirect → `/lobby` |
+| `src/app/guards/OnboardingGuard.tsx` | Null character: only allow `/onboarding/name` |
+| `src/app/GameStateLoader.tsx` | Added retry button on error state |
+| `src/modules/player/hooks.ts` | Removed local retry override |
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint .`: passes (zero errors)
+- `npm run dev`: starts on port 3000
+- Post-login flow: AuthCallback → `/lobby` → AuthGuard passes → GameStateLoader fetches → guards route to correct screen

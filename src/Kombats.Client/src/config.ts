@@ -22,6 +22,6 @@ export const config: AppConfig = {
     clientId: requireEnv('VITE_KEYCLOAK_CLIENT_ID'),
   },
   bff: {
-    baseUrl: requireEnv('VITE_BFF_BASE_URL'),
+    baseUrl: requireEnv('VITE_BFF_BASE_URL').replace(/\/+$/, ''),
   },
 };
