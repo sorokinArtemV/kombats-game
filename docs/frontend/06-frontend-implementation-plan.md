@@ -3,6 +3,7 @@
 ## Changelog
 
 **2026-04-16 -- Initial version**
+**2026-04-16 -- Corrective pass:** Fixed critical path notation for Phase 1 parallelism, added mid-Phase 4 review checkpoint, clarified onboard call placement in Phase 2/3 boundary, repositioned `sendBeacon` queue leave as non-blocking best-effort.
 
 ---
 
@@ -234,6 +235,7 @@ Auth and transport (Phase 1) block everything. Battle transport and state machin
 - `GameStateLoader` layout component: fetches `GET /api/v1/game/state`, blocks rendering until resolved
 - Player Zustand store: populated from `GameStateResponse` (character data, queue status, degraded services)
 - Loading screen shown during state fetch
+- **Auto-onboard hook:** If game state returns no character (`character` is null), automatically calls `POST /api/v1/game/onboard` to create the character (idempotent). This is implemented as a `useAutoOnboard()` hook called from `GameStateLoader` or as inline logic within the loader. The onboard call runs once, refetches game state after success, and produces a `Draft` character that the `OnboardingGuard` then routes to `/onboarding/name`.
 
 *Route definitions:*
 - Full route tree from `04` Section 4.2
@@ -414,7 +416,18 @@ Auth and transport (Phase 1) block everything. Battle transport and state machin
 
 **Dependencies:** Phase 3 (functional onboarding produces `Ready` state). Chat hub manager from Phase 1.
 
-**Validation / exit criteria:**
+**Mid-phase review checkpoint (after lobby shell + global chat):**
+
+Before starting DM, player card, and chat error handling work, validate:
+- Lobby renders character summary (name, level, XP, stats, wins/losses)
+- Global chat sends and receives messages in real time between two clients
+- Chat connection indicator shows correct state
+- Online players list populates and updates on login/logout
+- Session-scoped chat connection survives navigation (verified with route changes)
+
+This checkpoint validates the session-scoped chat pattern and the chat store before investing in DM, player cards, and error handling. Corresponds to completing tasks P4.1 through P4.5 in the task breakdown.
+
+**Validation / exit criteria (full phase):**
 - Global chat: send message -> appears in all connected clients
 - DM: send to another player -> they receive it in real time
 - Online players list: log in with second account -> first account sees them appear
@@ -467,8 +480,9 @@ Auth and transport (Phase 1) block everything. Battle transport and state machin
 *Automatic battle transition (REQ-L7):*
 - When `Matched` + `BattleId` detected -> immediate navigation to battle route
 
-*Best-effort queue leave on browser close (DES-1):*
+*Best-effort queue leave on browser close (DES-1) -- NON-BLOCKING:*
 - `navigator.sendBeacon()` on `pagehide` event calling `POST /api/v1/queue/leave`
+- **Note:** `sendBeacon` cannot set custom `Authorization` headers. This feature only works if BFF supports unauthenticated leave or a query-param auth approach. If neither is available, skip this and rely on the 30-minute queue TTL. This is best-effort (DES-1) and is NOT required for Phase 5 completion. Deferred to Phase 9 (hardening) if BFF changes are needed.
 
 **Key outputs:**
 - Enter queue -> searching state with animation and cancel

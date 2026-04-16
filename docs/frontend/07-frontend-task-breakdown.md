@@ -3,6 +3,7 @@
 ## Changelog
 
 **2026-04-16 -- Initial version**
+**2026-04-16 -- Corrective pass:** Fixed critical path notation to reflect Phase 1 parallelism, repositioned P5.3 as non-blocking/skippable, added mid-Phase 4 review checkpoint, clarified onboard call placement in P3.3.
 
 ---
 
@@ -314,6 +315,8 @@ Per binding decision DEC-2 and the clarification provided with this task:
 - `src/modules/player/hooks.ts`: `useGameState()` TanStack Query hook that fetches `GET /api/v1/game/state` and populates the player store. `useCharacter()` selector. `useQueueStatus()` selector.
 - `GameStateLoader` component: calls `useGameState()`, shows loading spinner while pending, renders `<Outlet />` when loaded
 
+**Note on auto-onboard:** `GameStateLoader` does NOT call `POST /api/v1/game/onboard`. That responsibility belongs to P3.3. At this phase, if game state returns no character, the `OnboardingGuard` (P2.3) routes the user to `/onboarding/name`. The actual onboard call is wired in Phase 3 via a `useAutoOnboard()` hook.
+
 **Outputs:**
 - `src/modules/player/store.ts`
 - `src/modules/player/hooks.ts`
@@ -442,7 +445,7 @@ Per binding decision DEC-2 and the clarification provided with this task:
 **Goal:** Player completes initial stat allocation (Named -> Ready) and the `POST /api/v1/game/onboard` call is wired for character creation.
 
 **Scope:**
-- Ensure `POST /api/v1/game/onboard` is called when `GameStateLoader` detects no character (or character is null). This creates the character if it doesn't exist. Idempotent.
+- Create a `useAutoOnboard()` hook (in `src/modules/onboarding/hooks.ts` or `src/modules/player/hooks.ts`) that calls `POST /api/v1/game/onboard` when the player store has no character (`character` is null after game state load). The call is idempotent. On success, refetch game state to populate the store with the newly created `Draft` character. Wire this hook into `GameStateLoader` (modifying the P2.1 output) so it fires automatically after game state loads with no character. The `OnboardingGuard` then routes the `Draft` character to `/onboarding/name`.
 - `src/modules/onboarding/screens/InitialStatsScreen.tsx`:
   - Display current stats (3/3/3/3) and 3 unspent points
   - Increment/decrement buttons per stat (Strength, Agility, Intuition, Vitality)
@@ -458,7 +461,8 @@ Per binding decision DEC-2 and the clarification provided with this task:
 **Outputs:**
 - `src/modules/onboarding/screens/InitialStatsScreen.tsx`
 - `src/modules/onboarding/components/StatPointAllocator.tsx`
-- Onboard call integration in `GameStateLoader` or a dedicated hook
+- `useAutoOnboard()` hook (in `src/modules/onboarding/hooks.ts` or `src/modules/player/hooks.ts`)
+- Updated `src/app/GameStateLoader.tsx` (add `useAutoOnboard()` call)
 - Updated `router.tsx`
 
 **Dependencies:** P3.2 (name screen done first so the flow is testable sequentially), P1.2 (game.onboard, character.allocateStats endpoints)
@@ -469,7 +473,21 @@ Per binding decision DEC-2 and the clarification provided with this task:
 
 ### Phase 4: Lobby Shell + Chat + Presence + Player Card
 
-Phase 4 is split into 7 sub-tasks. The chat store (P4.2) and hub connection hook (P4.3) must come first. After that, global chat (P4.4), presence (P4.5), DM (P4.6), and player card (P4.7) can be built in parallel.
+Phase 4 is split into 8 sub-tasks with a **mid-phase review checkpoint**.
+
+**Execution order:** P4.1 (lobby shell) and P4.2 (chat store) can be parallel. Then P4.3 (chat connection hook). Then P4.4 (global chat) and P4.5 (online players) can be parallel.
+
+**Mid-Phase 4 review checkpoint (after P4.1 + P4.2 + P4.3 + P4.4 + P4.5):**
+Before starting DM, player card, and error handling, validate:
+- Lobby renders character summary with correct data
+- Global chat sends and receives messages in real time between two clients
+- Chat connection indicator shows correct state
+- Online players list populates and updates on login/logout
+- Session-scoped chat connection survives navigation between authenticated routes
+
+This checkpoint validates the session-scoped chat pattern before investing in the remaining sub-tasks.
+
+**After checkpoint:** P4.6 (DM) and P4.7 (player card) can be parallel. P4.8 (error/reconnection) comes last.
 
 ---
 
@@ -739,13 +757,15 @@ Phase 4 is split into 7 sub-tasks. The chat store (P4.2) and hub connection hook
 
 ---
 
-#### P5.3: sendBeacon queue leave on browser close
+#### P5.3: sendBeacon queue leave on browser close — NON-BLOCKING / SKIPPABLE
+
+**Status:** This task is **not required for Phase 5 completion.** It is best-effort (DES-1). Skip if BFF does not support unauthenticated leave. The 30-minute queue TTL is the fallback.
 
 **Goal:** Best-effort queue leave when the browser tab closes during search.
 
 **Scope:**
 - Add `pagehide` event listener (active only when `matchmakingStore.status === 'searching'`)
-- On `pagehide`: `navigator.sendBeacon(bffBaseUrl + "/api/v1/queue/leave", ...)` with auth header (note: `sendBeacon` has limited header support; may need to use a URL with token or accept the limitation)
+- On `pagehide`: `navigator.sendBeacon(bffBaseUrl + "/api/v1/queue/leave", ...)`
 - Register/unregister listener based on searching state
 
 **Outputs:**
@@ -755,7 +775,7 @@ Phase 4 is split into 7 sub-tasks. The chat store (P4.2) and hub connection hook
 
 **Validation:** Start searching -> close tab -> verify via backend logs or re-login that queue entry was removed (or eventually expires via TTL). This is best-effort.
 
-**Notes:** `sendBeacon` cannot set custom headers. The `POST /api/v1/queue/leave` endpoint requires auth. Options: (a) accept that this doesn't work with auth and rely on 30-min TTL, (b) use a query param approach if BFF supports it. Document the limitation.
+**Known limitation:** `sendBeacon` cannot set custom `Authorization` headers. The `POST /api/v1/queue/leave` endpoint requires auth. **If BFF does not support unauthenticated leave or a query-param token approach, skip this task entirely and defer to Phase 9 (P9.3) where it is revisited as part of browser lifecycle hardening.** The 30-minute queue TTL handles the case where `sendBeacon` is not viable.
 
 ---
 
@@ -1290,18 +1310,22 @@ Phase 9 tasks are largely independent and can be worked in any order.
 
 ## 3. Blocking tasks and critical path
 
-### Critical path (strict sequence)
+### Critical path (sequential gates with parallelism noted)
 
 ```
-P0.1 -> P0.2 -> P0.3 -> P1.1 -> P1.3 -> P1.2 -> P1.5 -> P1.6
+P0.1 -> P0.2 -> [P0.3 + P0.4]
+  -> P1.1 -> [P1.2 + P1.3 + P1.4] -> [P1.5 + P1.6 + P1.7]
   -> P2.1 -> P2.2 -> P2.3
   -> P3.2 -> P3.3
-  -> P4.2 -> P4.3 -> P4.4
+  -> P4.1 + P4.2 -> P4.3 -> P4.4 + P4.5 (mid-phase checkpoint)
+    -> P4.6 + P4.7 -> P4.8
   -> P5.1 -> P5.2
   -> P6.1 -> P6.3 -> P6.6
   -> P7.1 -> P7.3 -> P7.6
   -> P8.1 -> P8.2
 ```
+
+Tasks in `[brackets]` or joined with `+` are parallelizable within that step. Each `->` is a blocking gate.
 
 ### Blocking tasks
 
@@ -1332,9 +1356,12 @@ P0.1 -> P0.2 -> P0.3 -> P1.1 -> P1.3 -> P1.2 -> P1.5 -> P1.6
 - P1.4 (TanStack Query setup) is independent and can be parallel with P1.2/P1.3
 - P1.7 (poller) can be parallel with P1.5/P1.6
 
-### Within Phase 4 (after P4.2 + P4.3)
-- P4.4 (global chat), P4.5 (online players), P4.6 (DM), P4.7 (player card) can all be parallel
-- P4.8 (error/reconnect) should come after P4.4 + P4.6
+### Within Phase 4
+- P4.1 (lobby shell) and P4.2 (chat store) can be parallel
+- After P4.3 (chat connection hook): P4.4 (global chat) and P4.5 (online players) can be parallel
+- **Mid-phase checkpoint after P4.1-P4.5** (see Phase 4 header)
+- After checkpoint: P4.6 (DM) and P4.7 (player card) can be parallel
+- P4.8 (error/reconnect) comes after P4.4 + P4.6
 
 ### Within Phase 6
 - P6.1 (store) and P6.2 (zones) can be parallel

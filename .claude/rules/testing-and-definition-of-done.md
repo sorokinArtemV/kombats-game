@@ -1,121 +1,163 @@
-# Testing and Definition of Done
+# Frontend Testing and Definition of Done
 
-Tests are delivery gates. A feature or fix is not complete until its required tests pass. No "tests in a follow-up ticket."
+## Testing Approach
+
+Frontend testing follows a pragmatic strategy: unit test pure logic, manual test UI and integration flows. No mandatory end-to-end test framework in the initial delivery.
 
 ---
 
 ## Mandatory Tests by Change Type
 
-### Domain changes
-- Unit tests for all state transitions, invariants, business rules
-- Zero infrastructure dependencies in domain test projects
-- Every valid state transition tested; every invalid transition rejection tested
+### Battle State Machine
 
-### Application changes
-- Unit tests with stubbed/faked ports (repository interfaces, messaging abstractions)
-- Verify orchestration: right calls in right order with right data
+Highest testing priority. The battle store's reducer/transition logic must be exhaustively unit-tested.
 
-### Infrastructure changes (persistence)
-- Integration tests with real PostgreSQL via Testcontainers
-- Round-trip: create → save → reload → assert all fields
-- Snake_case naming verified
-- Schema isolation verified
-- Concurrency token behavior verified where applicable
+| Test | Proves |
+|------|--------|
+| Each phase transition fires on correct event | State machine correctness |
+| Invalid transitions are rejected/ignored | No illegal states |
+| `BattleStateUpdated` reconciles all mechanical state | Server is source of truth |
+| `buildActionPayload` returns `typeof === 'string'` | SignalR contract (JSON string, not object) |
+| `buildActionPayload` round-trips through `JSON.parse` | Payload structure correct |
+| Zone pair validation (`isValidBlockPair`) | Ring topology constraints |
+| NoAction fallback on timer expiry | Degraded path handled |
+| Full turn sequence: action → result → next phase | End-to-end state flow |
 
-### Infrastructure changes (Redis)
-- Integration tests with real Redis via Testcontainers
-- Lua scripts tested as deployed — no simplified stand-ins
-- CAS semantics, SETNX behavior, TTL behavior all verified
+### Zustand Stores
 
-### Infrastructure changes (consumers)
-- Behavior test: consumer performs correct action
-- Idempotency test: same message twice (same MessageId), second is no-op
-- Edge case coverage (nulls, wrong state, out-of-order delivery)
+Pure store logic (actions, computed values) is unit-testable without React.
 
-### API changes
-- Auth enforcement: valid JWT accepted, missing/invalid/expired JWT → 401, wrong audience → 401
-- Input validation tests
-- Response contract tests
-- SignalR hub auth (Battle): valid JWT connects, no JWT rejected, no dev bypass in release config
+```typescript
+// Test stores by calling actions directly on the store instance
+const { getState, setState } = useBattleStore;
+getState().someAction(payload);
+expect(getState().someField).toBe(expected);
+```
 
-### Contract changes
-- Serialization/deserialization round-trip with all fields including `Version`
-- Additive-only — existing field removal breaks tests
+| Store | Required Tests |
+|-------|---------------|
+| `useBattleStore` | All phase transitions, action submission, state reconciliation, timer logic |
+| `useChatStore` | Message append, deduplication, conversation switching, presence update |
+| `useMatchmakingStore` | Queue join/leave, status polling state transitions |
+| `usePlayerStore` | Game state update, character data population |
+| `useAuthStore` | Token set/clear, auth status transitions |
+
+### Transport Layer
+
+Transport functions are pure async — testable with mocked fetch/SignalR.
+
+| Transport | Required Tests |
+|-----------|---------------|
+| `client.ts` | Auth header injection, error normalization, base URL construction |
+| `endpoints/*.ts` | Correct URL, method, body for each function |
+| `BattleHubManager` | Event subscription/unsubscription, action send format |
+| `ChatHubManager` | Event subscription/unsubscription, message send format |
+| `matchmaking-poller.ts` | Start/stop lifecycle, callback invocation |
+
+### Zone Model
+
+Pure logic — must be unit tested.
+
+- Valid attack/block zone pairs per ring topology rules
+- All 5 zones enumerated correctly
+- Edge cases: same zone for attack and block (if allowed), all-zone combinations
+
+### Type Definitions
+
+- No runtime tests needed, but TypeScript strict mode (`strict: true`) must pass
+- API response types must match BFF contract (verified manually or via integration test)
 
 ---
 
-## Battle-Specific Mandatory Tests
+## Manual Testing Requirements by Phase
 
-Full determinism test suite (AD-11) — highest priority:
+Every phase has a manual testing gate before moving to the next.
 
-| Test | Proves |
-|---|---|
-| Same seed + actions + participants → same outcome | Core determinism |
-| Same battle resolved twice → identical results per turn | Retry safety |
-| A→B and B→A resolution order → same outcome | Independent RNG streams |
-| Resolution after simulated crash → same result | Recovery safety |
-| Multi-turn fixed sequence → same terminal state | Full-sequence determinism |
-| NoAction degradation → deterministic fallback | Degraded path |
-| 10 idle turns → deterministic terminal state | Inactivity termination |
+| Phase | Manual Tests |
+|-------|-------------|
+| P0: Scaffold | Dev server runs (`pnpm dev`), TypeScript compiles (`pnpm tsc`), Tailwind renders |
+| P1: Auth + Transport | Login via Keycloak, register, token refresh (wait 5min), authenticated API call succeeds, SignalR connects with token |
+| P2: Routing | Every user state reaches correct screen, guards block unauthorized navigation, page refresh recovers state |
+| P3: Onboarding | Full onboarding flow, validation errors display, state persists across refresh, revision mismatch (409) handled |
+| P4: Chat | Two browsers: send/receive global message, send/receive DM, presence updates, rate limit shows error, reconnect after network drop |
+| P5: Matchmaking | Two browsers: both queue → match → transition to battle screen, cancel queue, timeout behavior |
+| P6: Battle State | Events process correctly (via debug view), all phase transitions fire, reconnection resyncs state |
+| P7: Battle UI | Full battle through real UI, zone selector works, timer counts down, animations play, result overlay shows |
+| P8: Post-Battle | Result screen displays, XP refreshes, level-up notification, chat resumes, re-queue works |
+| P9: Hardening | Error scenarios (401, 409, 503, 500), disconnection/reconnection, browser close during battle, long sessions |
 
-Combat math: damage formula, HP from Vitality, dodge/crit probabilities, edge cases (zero/max stats).
+---
 
-Any change to RNG derivation, consumption order, combat arithmetic, or turn sequencing must break at least one determinism test.
+## What Counts as Tested
+
+- Unit test exists and passes → tested
+- Manual test performed and behavior verified in browser → tested (document what was checked)
+- "I wrote the code and it compiles" → NOT tested
+
+---
+
+## Test Infrastructure
+
+### Unit Tests
+
+- Vitest as test runner (ships with Vite)
+- No JSDOM unless testing React hooks that need it — prefer testing pure logic directly
+- Mock `fetch` for transport tests, not for store tests
+- No mocking Zustand stores in feature tests — test stores directly
+
+### Test File Location
+
+```
+src/
+  modules/battle/
+    store.ts
+    store.test.ts          # Co-located
+    zones.ts
+    zones.test.ts          # Co-located
+  transport/http/
+    client.ts
+    client.test.ts         # Co-located
+```
+
+Tests co-located with source files as `{name}.test.ts` or `{name}.test.tsx`.
+
+---
+
+## Definition of Done by Deliverable Type
+
+| Deliverable | Done When |
+|-------------|-----------|
+| Zustand store | Unit tests for all actions and transitions pass. Store integrates with consuming hook. |
+| Transport endpoint file | Functions typed, match BFF contract, unit tested for request shape. |
+| SignalR manager | Connect/disconnect lifecycle works, events fire typed callbacks, tested. |
+| UI primitive | Renders correctly with all variant props, forwards className, no store deps. |
+| Feature screen | Composes feature components, wired to store/hooks, manually tested in browser with all user states. |
+| Route guard | Correct redirect for each user state, page refresh recovery verified manually. |
+| Feature module (full) | Store tested, transport wired, screens render, guards work, manual test passes. |
 
 ---
 
 ## Forbidden Testing Patterns
 
-- Mocking `DbContext`, `IDatabase`, or `IPublishEndpoint` in integration tests
-- EF Core in-memory provider for any test
-- Test code or test framework references in production assemblies
-- Using legacy tests as authoritative for target implementation structure
+| Pattern | Why |
+|--------|-----|
+| Snapshot tests for UI components | Brittle, low signal — test behavior not markup |
+| Mocking Zustand stores in component tests | Test stores directly; test components with real stores |
+| Testing implementation details (internal state shape) | Test observable behavior |
+| `any` in test assertions | Type tests properly |
+| Tests that require running backend | Unit/store tests must be isolated; integration needs explicit setup |
+| Skipped tests (`it.skip`) without ticket reference | Fix or remove, don't skip indefinitely |
 
 ---
 
-## Release Gates
+## Release Gates (Frontend)
 
-All must pass before release:
+Before declaring a phase complete:
 
-1. **All mandatory tests pass** — zero failures
-2. **Battle determinism suite passes** — separately called out as correctness gate
-3. **Outbox atomicity verified** — at least one test per service: write + event in one tx, rollback = no event
-4. **Consumer idempotency verified** — every consumer has duplicate-message test
-5. **Auth enforced** — every endpoint and SignalR hub rejects unauthenticated requests
-6. **Contract compatibility** — solution builds, no serialization failures
-7. **Migration forward-apply** — all migrations apply to empty database, correct schema
-8. **No test infra in production** — no test code in production assemblies
-
----
-
-## Test Project Structure
-
-```
-tests/
-├── Kombats.<Service>/
-│   ├── Kombats.<Service>.Domain.Tests/
-│   ├── Kombats.<Service>.Application.Tests/
-│   ├── Kombats.<Service>.Infrastructure.Tests/
-│   └── Kombats.<Service>.Api.Tests/
-└── Kombats.Common/
-    └── Kombats.Messaging.Tests/
-```
-
-Bootstrap projects tested via `WebApplicationFactory<Program>` in infrastructure/API tests, not unit-tested directly.
-
----
-
-## Definition of Done Per Ticket Type
-
-| Ticket Type | DoD |
-|---|---|
-| Domain replacement | Unit tests for all transitions, invariants, edge cases |
-| Application replacement | Unit tests with stubbed ports |
-| Infrastructure replacement (persistence) | Integration tests with real Postgres |
-| Infrastructure replacement (Redis) | Integration tests with real Redis |
-| Infrastructure replacement (consumers) | Behavior test + idempotency test |
-| API replacement | Auth, validation, response shape tests |
-| Integration verification | Cross-service event flow verified |
-| Foundation | Build verification |
-| Legacy removal | Solution builds, all tests pass |
-| Migration/cutover | Service starts and responds from new entry point |
+1. All unit tests pass (`pnpm test`)
+2. TypeScript compiles without errors (`pnpm tsc --noEmit`)
+3. No ESLint errors (`pnpm lint`)
+4. Manual test checklist for the phase verified in browser
+5. No console errors during manual testing
+6. Page refresh recovery works for all states introduced in the phase
+7. Auth token refresh does not break the feature (test by waiting for token expiry)

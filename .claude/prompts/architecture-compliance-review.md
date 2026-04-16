@@ -1,49 +1,96 @@
-# Architecture Compliance Review
+# Frontend Architecture Compliance Review
 
-Focused review for Clean Architecture, service boundaries, and repo structure compliance.
+You are reviewing frontend code for strict compliance with the Kombats frontend architecture. This is a focused structural review — not a feature review.
 
-## Check Each Changed File
+---
 
-For every file in the diff:
+## Reference Documents
+
+- `.claude/rules/architecture-boundaries.md` — layer and module boundaries
+- `.claude/rules/state-and-transport.md` — state ownership and transport conventions
+- `.claude/rules/ui-and-theming.md` — component and styling rules
+- `docs/frontend/04-frontend-client-architecture.md` — binding architecture decisions
+
+---
+
+## For Each File Changed, Check:
 
 ### 1. Layer Placement
-- Is this file in the correct project/layer?
-- Domain: no infrastructure, no transport, no NuGet beyond logging abstractions
-- Application: no infrastructure types, no transport concerns
-- Infrastructure: implements ports, no composition logic
-- Api: thin transport only, no domain logic, no infra
-- Bootstrap: composition only, no business logic
 
-### 2. Dependency Direction
-- Does the file's `using` statements respect: Domain ← Application ← Infrastructure, Domain ← Application ← Api ← Bootstrap?
-- Any reverse dependencies? (e.g., Domain referencing Infrastructure types)
-- Any project reference violations in `.csproj` files?
+- Is the file in the correct directory?
+  - Screens → `modules/{name}/screens/`
+  - Feature components → `modules/{name}/components/`
+  - Stores → `modules/{name}/store.ts`
+  - Hooks → `modules/{name}/hooks.ts`
+  - HTTP endpoints → `transport/http/endpoints/`
+  - SignalR managers → `transport/signalr/`
+  - UI primitives → `ui/components/`
+  - Types → `types/`
+  - Route/guard/shell → `app/`
 
-### 3. Service Isolation
-- Does any file reference another service's internal project?
-- Only Contract project references should cross service boundaries
-- No cross-schema database access
-- No shared mutable state between services
+### 2. Import Graph
 
-### 4. Composition Root
-- Is all DI registration in Bootstrap?
-- Any `DependencyInjection.cs` or `ServiceCollectionExtensions` in Infrastructure?
-- Any `WebApplication` or `IServiceCollection` usage outside Bootstrap?
+- Does the file only import from allowed layers?
+  - `app/` → `modules/`, `ui/`, `types/`
+  - `modules/` → `transport/` (via hooks), `ui/`, `types/`
+  - `transport/` → `types/` only
+  - `ui/` → `types/` only (styling, no logic)
+- Are there any circular imports?
+- Are cross-module imports limited to public hooks (not internal stores/components)?
 
-### 5. Legacy Pattern Regression
-- Any new Controllers or MVC patterns?
-- Any new references to `Kombats.Shared`?
-- Any `Database.MigrateAsync()` on startup?
-- Any direct `Publish()`/`Send()` outside outbox?
-- Any MediatR or mediator patterns?
-- Any composition logic in Infrastructure?
+### 3. State Ownership
 
-### 6. Repo Structure
-- New projects follow `Kombats.<Service>.<Layer>` naming?
-- SDK assignments correct? (Bootstrap = Web, everything else = Sdk)
-- Namespace uses `Kombats` prefix?
-- Test projects in `tests/` with `.Tests` suffix?
+- Is state managed by the correct tool?
+  - Client/realtime → Zustand
+  - Server-state caching → TanStack Query
+  - No mixing unless explicitly justified (game state exception documented)
+- Does only the owning module write to its store?
+- Are SignalR events processed through store actions, not component state?
 
-## Output
+### 4. Transport Isolation
 
-List violations with file path, line number, what's wrong, and what should change.
+- Are all network calls going through `transport/`?
+- Does `transport/` have zero React/Zustand/TanStack imports?
+- Are auth tokens injected in the HTTP client, not in individual endpoints?
+- Do SignalR managers expose typed callbacks, not raw `HubConnection` methods?
+
+### 5. Component Architecture
+
+- Are `ui/` components stateless (no store, no transport)?
+- Do feature components delegate logic to store actions?
+- Do screens compose components without containing business logic?
+- Are interactive primitives using Radix UI?
+
+### 6. Theming Compliance
+
+- All colors via CSS variable tokens?
+- Tailwind utility classes only (no CSS modules, no inline styles)?
+- No hardcoded hex/rgb values?
+- Font references through token variables?
+
+### 7. TypeScript Discipline
+
+- Strict mode compatible?
+- No `any` without justification?
+- Named exports only?
+- No `React.FC`?
+- `import type` for type-only imports?
+
+---
+
+## Output Format
+
+```markdown
+## Architecture Compliance Review
+
+### Files Reviewed
+- [list with layer classification]
+
+### Violations
+- [NONE or numbered list with file, line, violation, required fix]
+
+### Warnings
+- [Patterns that aren't violations but risk becoming ones]
+
+### Verdict: COMPLIANT / NON-COMPLIANT
+```

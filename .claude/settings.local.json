@@ -105,7 +105,22 @@
       "Bash(mkdir -p src/Kombats.Chat/Kombats.Chat.Api)",
       "Bash(git stash *)",
       "Bash(netstat -ano)",
-      "Bash(wait)"
+      "Bash(wait)",
+      "Bash(mv .claude/prompts/frontend/planner.md .claude/prompts/planner.md)",
+      "Bash(mv .claude/prompts/frontend/implementer.md .claude/prompts/implementer.md)",
+      "Bash(mv .claude/prompts/frontend/reviewer.md .claude/prompts/reviewer.md)",
+      "Bash(mv .claude/prompts/frontend/architecture-compliance-review.md .claude/prompts/architecture-compliance-review.md)",
+      "Bash(rmdir .claude/prompts/frontend)",
+      "Bash(mv .claude/rules/frontend/architecture-boundaries.md .claude/rules/architecture-boundaries.md)",
+      "Bash(mv .claude/rules/frontend/state-and-transport.md .claude/rules/state-and-transport.md)",
+      "Bash(mv .claude/rules/frontend/ui-and-theming.md .claude/rules/ui-and-theming.md)",
+      "Bash(mv .claude/rules/frontend/testing-and-definition-of-done.md .claude/rules/testing-and-definition-of-done.md)",
+      "Bash(rmdir .claude/rules/frontend)",
+      "Bash(mv .claude/skills/frontend/add-route-and-guard.md .claude/skills/add-route-and-guard.md)",
+      "Bash(mv .claude/skills/frontend/add-zustand-store.md .claude/skills/add-zustand-store.md)",
+      "Bash(mv .claude/skills/frontend/add-tanstack-query-endpoint.md .claude/skills/add-tanstack-query-endpoint.md)",
+      "Bash(mv .claude/skills/frontend/add-signalr-manager.md .claude/skills/add-signalr-manager.md)",
+      "Bash(mv .claude/skills/frontend/add-feature-screen.md .claude/skills/add-feature-screen.md)"
     ]
   }
 }

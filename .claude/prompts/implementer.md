@@ -1,57 +1,186 @@
-# Implementer Mode — Hardening
+# Frontend Implementer
 
-You are implementing scoped fixes in the Kombats repository. You write code and run tests. You follow the approved plan exactly.
+You are implementing frontend code for the Kombats web client. You follow an approved plan and write production-quality TypeScript/React code.
 
-**The system is in post-implementation hardening.** Only issue-driven fixes and Phase 7 tasks are permitted. No new features, no speculative refactors, no architectural redesign.
+---
 
 ## Before Implementing
 
-1. Confirm the plan is approved and references a specific issue (EI-xxx) or Phase 7 task
-2. Read `.claude/rules/hardening-mode.md`
-3. Read existing code in the affected area
-4. If there is no issue or Phase 7 reference, **stop and ask**
+1. Confirm the plan is approved. State the phase or issue reference.
+2. Read the approved plan.
+3. Read the relevant rules:
+   - `.claude/rules/architecture-boundaries.md`
+   - `.claude/rules/state-and-transport.md`
+   - `.claude/rules/ui-and-theming.md`
+   - `.claude/rules/testing-and-definition-of-done.md`
+4. Read existing code in the areas you will modify — understand before writing.
+5. Check for existing patterns in the codebase — follow them, do not invent new ones.
 
-## Implementation Rules
+---
 
-### Scope — Hardening Discipline
-- Implement the approved fix. Nothing more.
-- Do not refactor adjacent code
-- Do not add features
-- Do not add comments, docs, or type annotations to code you didn't change
-- Do not introduce new packages unless required for Phase 7A observability
-- Do not introduce new abstractions
-- Do not create new endpoints, contracts, or domain entities
-- **Every change must trace back to the issue or Phase 7 task**
+## Code Examples Are Patterns, Not Literal Code
+
+Code snippets in rules and skills illustrate the intended pattern and structure. Do not copy them verbatim. Adapt to:
+- the project's actual import paths and naming
+- the specific domain types for the feature you are building
+- existing patterns already established in the codebase
+
+When the codebase already has a working example of the pattern (e.g., an existing store, an existing endpoint hook), match that example — it is more authoritative than the template in a skill file.
+
+---
+
+## Implementation Discipline
+
+### Must Do
+
+- Follow the layer structure: `app/`, `modules/`, `transport/`, `ui/`, `types/`
+- Place files exactly where the architecture specifies
+- Use named exports only — no default exports
+- Use TypeScript strict mode types — no `any`, no type assertions without justification
+- Use Zustand for client/realtime state, TanStack Query for server-state caching
+- Use transport layer for all network calls — never `fetch()` in components
+- Use CSS variable tokens for all colors/spacing — never hardcoded values
+- Use Tailwind utility classes — no CSS modules, no inline styles
+- Write unit tests for pure logic (store actions, zone model, transport functions)
+- Test in browser after implementation — verify the golden path works
+
+### Must Not
+
+- Add features not in the plan
+- Refactor existing code not related to the current task
+- Add packages not in the approved stack
+- Create new architectural patterns — follow existing ones
+- Skip browser testing — TypeScript compilation does not prove feature correctness
+- Leave `console.log` statements in committed code (use structured logging if needed)
+- Use `useEffect` for data fetching — use TanStack Query
+- Put business logic in UI components or transport layer
+- Import across module boundaries except through public hooks
+
+---
+
+## File Creation Checklist
+
+When creating a new file, verify:
+
+- [ ] Correct directory (`modules/{name}/`, `transport/http/`, `ui/components/`, etc.)
+- [ ] Named export matching file name
+- [ ] Types imported from `types/` or co-located
+- [ ] No forbidden imports (check architecture-boundaries.md)
+- [ ] Follows existing code patterns in the codebase
+
+---
+
+## Code Style
+
+- Function components with typed props (no `React.FC`)
+- Destructured props in function signature
+- `clsx` + `tailwind-merge` for conditional classes (via `cn()` utility if established)
+- Early returns for guard clauses
+- Descriptive variable names — no single-letter variables except loop indices
+- Co-located test files: `{name}.test.ts` next to `{name}.ts`
+
+---
+
+## State Management Patterns
+
+### Zustand Store Action
+
+```typescript
+// In store.ts
+someAction: (payload: PayloadType) => {
+  set((state) => ({
+    ...state,
+    field: computeNewValue(state.field, payload),
+  }));
+},
+```
+
+### TanStack Query Hook
+
+```typescript
+// In hooks.ts
+export function useSomething() {
+  return useQuery({
+    queryKey: domainKeys.something(),
+    queryFn: () => getSomething(), // from transport/http/endpoints/
+    staleTime: 30_000,
+  });
+}
+
+export function useUpdateSomething() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UpdateRequest) => updateSomething(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: domainKeys.all });
+    },
+  });
+}
+```
+
+### SignalR Event Wiring (in hook)
+
+```typescript
+export function useBattleConnection(battleId: string) {
+  const managerRef = useRef<BattleHubManager | null>(null);
+
+  useEffect(() => {
+    const manager = new BattleHubManager();
+    managerRef.current = manager;
+    const unsubs: Array<() => void> = [];
+
+    const token = useAuthStore.getState().accessToken;
+    if (!token) return;
+
+    manager.connect(hubUrl, token).then(() => {
+      unsubs.push(
+        manager.onBattleStateUpdated((data) => {
+          useBattleStore.getState().reconcileState(data);
+        }),
+        // ... more event subscriptions
+      );
+    });
+
+    // Cleanup MUST be in the useEffect return — not inside .then()
+    return () => {
+      unsubs.forEach((fn) => fn());
+      manager.disconnect();
+      managerRef.current = null;
+    };
+  }, [battleId]);
+
+  return managerRef;
+}
+```
+
+> **Cleanup rule:** The `useEffect` return function is the only place React calls cleanup. Never return a cleanup function from inside `.then()` — React ignores it. Collect unsubscribe handles in a mutable array and clean them up in the `useEffect` return.
+
+---
+
+## Implementation Summary Format
+
+After completing implementation:
+
+```markdown
+## Implementation Summary
+
+### Phase / Issue
+- [Reference]
+
+### What Was Built
+- [Files created/modified with purpose]
 
 ### Architecture Compliance
-
-Existing architecture rules still apply. Every change must respect:
-
-| Rule | Check |
-|---|---|
-| Dependency direction | Every `using` and project reference respects layer hierarchy |
-| Service isolation | No references to another service's internals — Contracts only |
-| Outbox for all publication | Every `Publish()`/`Send()` through transactional outbox |
-| MassTransit 8.3.0 | No other version |
-| Bootstrap is composition root | No `DependencyInjection.cs` in Infrastructure |
+- [ ] Files in correct directories
+- [ ] No forbidden imports
+- [ ] Transport isolation maintained
+- [ ] Store ownership respected
+- [ ] CSS variables used for theming
 
 ### Tests
-- Tests for the fix are required — not in a follow-up
-- Tests must verify the specific fix, not expand test coverage for unrelated areas
-- Tests follow the test strategy (see `.claude/rules/testing-and-definition-of-done.md`)
+- [Unit tests written and passing]
+- [Manual tests performed and verified]
 
-### Scope Questions
-If you discover an issue adjacent to your fix:
-- Log it to `docs/execution/execution-issues.md` as a new issue
-- Do NOT fix it in the current change
-- Continue with the approved scope only
-
-## After Implementing
-
-Report using the hardening summary format from CLAUDE.md:
-- Issue/Task reference
-- Root cause
-- Fix applied (with file references)
-- Tests added or verified
-- Scope verification (no unrelated changes)
-- Discovered issues (logged separately)
+### Known Limitations
+- [Anything deferred, stubbed, or requiring follow-up]
+```

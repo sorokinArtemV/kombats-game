@@ -1,81 +1,138 @@
-# Architecture Boundaries
+# Frontend Architecture Boundaries
 
-## Service Isolation
+## Layer Responsibilities
 
-Each service (Players, Matchmaking, Battle) is a bounded context. Exclusive ownership of domain, data, and infrastructure.
-
-- No project references between services except through Contract projects
-- No cross-schema database access — each DbContext targets its own schema (`players`, `matchmaking`, `battle`)
-- No shared mutable state — Redis DB 0 is Battle, DB 1 is Matchmaking, Players does not use Redis
-- No synchronous HTTP/gRPC between services — all inter-service communication is async messaging (AD-09)
-
-### What Crosses Service Boundaries
-
-Only:
-- Contract projects: `Kombats.Players.Contracts`, `Kombats.Matchmaking.Contracts`, `Kombats.Battle.Contracts`, `Kombats.Battle.Realtime.Contracts`
-- Shared common libraries: `Kombats.Messaging`, `Kombats.Abstractions`
-
-Nothing else.
-
-### Cross-Service References for Contracts
-
-- `Matchmaking.Infrastructure` may reference `Players.Contracts`, `Battle.Contracts`
-- `Players.Infrastructure` may reference `Battle.Contracts`
-- No service references another service's internal projects (Api, Application, Domain, Infrastructure)
-
----
-
-## Dependency Direction (Clean Architecture)
+The Kombats frontend has four layers with strict separation. No layer may reach into another's internals.
 
 ```
-Bootstrap → Api → Application → Domain
-                      |
-               Infrastructure
+app/          → Shell, routing, guards, entry point
+modules/      → Feature state, screens, feature components
+transport/    → HTTP, SignalR, polling — no UI
+ui/           → Stateless, theme-driven primitives — no business logic
+types/        → Shared TypeScript definitions
 ```
 
-### Domain
-Depends on nothing. Zero NuGet packages except `Microsoft.Extensions.Logging.Abstractions` when `ILogger<T>` is needed. No EF Core. No Redis. No MassTransit. No ASP.NET Core.
+---
 
-### Application
-Depends on Domain and abstraction packages (`Microsoft.Extensions.*`). Defines repository interfaces, messaging ports, external service ports. Does not know about Postgres, Redis, or RabbitMQ.
+## Dependency Direction
 
-### Infrastructure
-Depends on Application (port interfaces) and Domain. Implements persistence, messaging consumers, Redis operations, auth configuration, external integrations. Only layer that references EF Core, MassTransit, StackExchange.Redis, Npgsql, Serilog, health check packages.
+```
+app/ → modules/ → transport/
+                → ui/
+                → types/
+transport/ → types/
+ui/ → types/ (styling only — no transport, no stores)
+```
 
-**Must not contain** `DependencyInjection.cs`, `ServiceCollectionExtensions`, or any composition logic.
+### What Each Layer May Import
 
-### Api
-Depends on Application (to dispatch commands/queries). Thin Minimal API transport layer.
-
-**Must not contain** DI registration, `Program.cs`, middleware, `WebApplication`, infrastructure code, domain logic.
-
-### Bootstrap
-Composition root. Depends on Api, Application, Infrastructure, Domain, Contracts, Common. Owns all DI registration, middleware pipeline, endpoint mapping, hosted worker registration.
-
-**Must not contain** business logic, domain code, infrastructure implementations.
+| Layer | May Import | Must NOT Import |
+|-------|-----------|-----------------|
+| `app/` | `modules/` (screens, guards), `ui/`, `types/` | `transport/` directly |
+| `modules/` | `transport/` (via hooks), `ui/`, `types/`, other modules' public hooks (rare) | Other modules' stores directly, other modules' internal components |
+| `transport/` | `types/` | `modules/`, `ui/`, `app/`, React, Zustand, TanStack Query |
+| `ui/` | `types/` (for prop types) | `modules/`, `transport/`, `app/`, Zustand, TanStack Query |
+| `types/` | Nothing | Everything |
 
 ---
 
-## Shared Code Rules
+## Module Isolation
 
-Shared code lives under `src/Kombats.Common/`:
-- `Kombats.Messaging` — MassTransit config, outbox/inbox, topology, retry, consumer registration
-- `Kombats.Abstractions` — Result<T>, Error, handler interfaces
+Each module under `modules/` owns a domain vertical:
 
-No other shared project unless proven need across multiple services. Code in `Kombats.Common` must be infrastructure or cross-cutting — never service-specific business logic. If referenced by only one service, move it to that service.
+| Module | Owns | Does NOT Own |
+|--------|------|-------------|
+| `auth` | OIDC state, token lifecycle, AuthProvider, AuthCallback | HTTP client, route guards |
+| `player` | Character state, lobby screen, stat allocation, player card | Matchmaking queue, battle |
+| `onboarding` | Onboarding step state, name/stats screens | Auth flow, lobby |
+| `matchmaking` | Queue state, searching screen, polling hook | Battle state, pairing logic |
+| `battle` | Battle state machine, battle screens, zone model, narration | Chat during battle, matchmaking |
+| `chat` | Messages, conversations, presence, chat UI | Battle events, player stats |
 
-`Kombats.Shared` (legacy) must not be referenced from new code. Use `Kombats.Common` projects instead.
+### Cross-Module Rules
+
+- Modules communicate through Zustand store reads (not writes) or shared hooks
+- A module must NOT directly write to another module's store
+- Shared data flows through `transport/` or `app/`-level coordination (guards, shells)
+- If two modules need the same data, the data belongs in a shared store or is fetched independently
 
 ---
 
-## Composition Root Discipline
+## Transport Layer Isolation
 
-Bootstrap is the single composition root per service. It is the only `Microsoft.NET.Sdk.Web` project.
+The `transport/` directory is the only code that touches the network. Components and stores never call `fetch()`, construct URLs, or reference `HubConnection` directly.
 
-All DI registration happens in Bootstrap:
-- MassTransit, EF Core, Redis, auth, health checks, SignalR, handler registration
-- Middleware pipeline ordering
-- Endpoint mapping (calls into Api for route registration)
-- Hosted worker registration
+### transport/http/
 
-No other project registers services into the DI container.
+- `client.ts` — fetch wrapper with auth token injection, error normalization, base URL
+- `endpoints/*.ts` — typed functions per BFF endpoint group (game, character, queue, battle, chat, players)
+- Returns typed responses or throws typed errors
+- No React imports, no store imports
+
+### transport/signalr/
+
+- `battle-hub.ts` — BattleHubManager: connect, disconnect, event subscriptions, send actions
+- `chat-hub.ts` — ChatHubManager: connect, disconnect, event subscriptions, send messages
+- `connection-state.ts` — shared connection status types
+- Managers are plain TypeScript classes, not React components
+- Managers expose typed event callbacks; modules wire them in hooks
+
+### transport/polling/
+
+- `matchmaking-poller.ts` — setInterval-based polling for queue status
+- Returns data via callback; module hook manages lifecycle
+
+### Rules
+
+- No UI components in `transport/`
+- No Zustand or TanStack Query in `transport/`
+- Transport functions accept/return plain TypeScript types from `types/`
+- Error handling: transport throws typed errors; consuming hooks handle them
+- Auth token injection happens in `client.ts`, not in individual endpoints
+
+---
+
+## State Ownership
+
+### Two-State Model
+
+| Concern | Owner | Tool |
+|---------|-------|------|
+| Client/realtime state (auth, battle phases, chat messages, queue status) | Zustand stores in `modules/` | Zustand 5 |
+| Server-state HTTP caching (game state, player cards, chat history) | TanStack Query | TanStack Query 5 |
+
+### Rules
+
+- SignalR push events update Zustand stores directly (via hub manager callbacks wired in hooks)
+- HTTP GET responses are cached in TanStack Query
+- Mutations (POST/PUT/DELETE) go through TanStack Query mutations, then invalidate relevant queries
+- A Zustand store must NOT cache HTTP response data that TanStack Query already manages — pick one owner
+- Exception: game state is fetched via HTTP but stored in Zustand (`player` store) because guards depend on synchronous reads
+
+---
+
+## Routing as State Projection
+
+Routes are projections of application state, not independent navigation targets.
+
+- Guards read from Zustand stores and redirect programmatically
+- No `navigate()` calls scattered in feature components — state changes trigger guard re-evaluation
+- Route guard hierarchy is defined in `app/router.tsx` and enforced by shell/guard components in `app/`
+- Modules define screens; `app/` decides when to show them
+
+---
+
+## Forbidden Patterns
+
+| Pattern | Why |
+|--------|-----|
+| `fetch()` or `new HubConnection()` in components/stores | Transport isolation violation |
+| Store writes from outside the owning module | Module boundary violation |
+| Business logic in `ui/` components | UI must be stateless primitives |
+| Domain types in HTTP request/response shapes | Transport uses DTOs from `types/api.ts` |
+| React imports in `transport/` | Transport is framework-agnostic |
+| Direct SignalR event handling in components | Events flow through store hooks |
+| `localStorage` for auth tokens | Security violation (DEC-6: XSS risk with chat) |
+| Cross-module store imports for writes | Modules own their state exclusively |
+| Route guards that call APIs directly | Guards read stores; `GameStateLoader` fetches |
+| Inline styles for static values or CSS modules | Tailwind classes; `style` only for dynamic computed values |
