@@ -192,4 +192,62 @@ No open frontend-specific issues from the Batch 3 cleanup patch.
 
 ### Deferred
 
-No new deferred items from the cleanup patch.
+No new deferred items from the Batch 3 cleanup patch.
+
+---
+
+## Batch 4 — Phase 3
+
+### Resolved
+
+#### FEI-017: react-refresh flag on NameInput.tsx with validateName export
+**Severity:** Low
+**Status:** Resolved during implementation
+
+`validateName` function exported alongside the `NameInput` component triggered the `react-refresh/only-export-components` rule (same pattern as FEI-005, FEI-011). Moved validation logic into `NameSelectionScreen.tsx` as a file-local function. `NameInput.tsx` now only exports the component and its constants (`NAME_MIN`, `NAME_MAX`).
+
+### Open
+
+No open frontend-specific issues from Batch 4 / Phase 3.
+
+### Deferred
+
+No new deferred items from Batch 4 / Phase 3.
+
+---
+
+## Batch 4 — Phase 3 Cleanup Patch
+
+### Resolved
+
+#### FEI-018: Auto-onboard failure left user at dead-end
+**Severity:** High (blocking)
+**Status:** Resolved in cleanup patch
+
+If `POST /api/v1/game/onboard` failed, `attemptedRef` blocked further attempts and `GameStateLoader` had no error handling for the onboard mutation. The user fell through to onboarding routes with no character and no recovery path.
+
+**Resolution:** `useAutoOnboard` now exposes a `retry()` function that resets mutation state and clears the attempt guard. `GameStateLoader` checks `onboard.isError` and renders an error screen with a "Retry" button.
+
+#### FEI-019: useAutoOnboard had unstable effect dependency
+**Severity:** Low
+**Status:** Resolved in cleanup patch
+
+The `useEffect` depended on the entire `mutation` object, which is a new reference on every render. The `attemptedRef` guard prevented actual duplicate calls, but the effect ran unnecessarily on every render.
+
+**Resolution:** Destructured stable values (`mutate`, `isPending`) from `useMutation`. Effect depends only on `[isLoaded, isCharacterCreated, isPending, mutate]`.
+
+#### FEI-020: ApiError.details consumed without runtime type check
+**Severity:** Low
+**Status:** Resolved in cleanup patch
+
+`NameSelectionScreen` called `Object.values(details).flat()` on `Record<string, unknown>`, assuming all values were `string[]`. If the server returned a non-array value, this would produce incorrect output silently.
+
+**Resolution:** Added explicit `Array.isArray` and `typeof === 'string'` guards before collecting field error messages. The shared `ApiError.details` type remains `Record<string, unknown>` (correct for all error shapes).
+
+### Open
+
+No open frontend-specific issues from the Batch 4 cleanup patch.
+
+### Deferred
+
+No new deferred items from the Batch 4 cleanup patch.

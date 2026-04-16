@@ -8,9 +8,9 @@ import { AuthGuard } from './guards/AuthGuard';
 import { OnboardingGuard } from './guards/OnboardingGuard';
 import { BattleGuard } from './guards/BattleGuard';
 import { GameStateLoader } from './GameStateLoader';
+import { NameSelectionScreen } from '@/modules/onboarding/screens/NameSelectionScreen';
+import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScreen';
 import {
-  OnboardingNamePlaceholder,
-  OnboardingStatsPlaceholder,
   LobbyPlaceholder,
   MatchmakingPlaceholder,
   BattlePlaceholder,
@@ -44,8 +44,8 @@ export const router = createBrowserRouter([
               {
                 element: <OnboardingShell />,
                 children: [
-                  { path: '/onboarding/name', element: <OnboardingNamePlaceholder /> },
-                  { path: '/onboarding/stats', element: <OnboardingStatsPlaceholder /> },
+                  { path: '/onboarding/name', element: <NameSelectionScreen /> },
+                  { path: '/onboarding/stats', element: <InitialStatsScreen /> },
                 ],
               },
 

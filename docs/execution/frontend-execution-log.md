@@ -460,3 +460,126 @@ The error state was a dead-end with no recovery path.
 - `npx eslint .`: passes (zero errors)
 - `npm run dev`: starts on port 3000
 - Post-login flow: AuthCallback → `/lobby` → AuthGuard passes → GameStateLoader fetches → guards route to correct screen
+
+---
+
+## Batch 4 — Phase 3: Onboarding
+
+**Date:** 2026-04-16
+**Status:** Completed
+**Branch:** frontend-client
+
+### P3.1: Base UI primitives
+
+**Status:** Done
+
+Created four shared UI components in `src/ui/components/`:
+
+- `Button.tsx` — Variants: primary, secondary, danger. Loading state with spinner. Disabled state. Uses design token colors.
+- `TextInput.tsx` — Label, placeholder, error message, character count indicator. Error state border coloring.
+- `Spinner.tsx` — Animated CSS spinner with sm/md/lg sizes. Uses accent color token.
+- `Card.tsx` — Container with background, border, padding from design tokens. Forwards className.
+
+All components: stateless, token-driven, accept className for composition, named exports only.
+
+### P3.2: Name selection screen
+
+**Status:** Done
+
+- `src/modules/onboarding/components/NameInput.tsx` — Reusable name input with character count, wraps TextInput. Exports `NAME_MIN`/`NAME_MAX` constants.
+- `src/modules/onboarding/screens/NameSelectionScreen.tsx` — Name input, client-side validation (3–16 chars), permanent-name warning, submit via `POST /api/v1/character/name` (TanStack Query mutation). Error handling: 409 → "name already taken", 400 → field error display, generic fallback. On success: optimistic store update (`onboardingState: 'Named'`) + game state invalidation → OnboardingGuard routes to `/onboarding/stats`.
+
+Router updated: `/onboarding/name` now renders `NameSelectionScreen` instead of placeholder.
+
+### P3.3: Stat allocation screen and auto-onboard
+
+**Status:** Done
+
+Auto-onboard:
+- `src/modules/onboarding/hooks.ts` — `useAutoOnboard()` hook. When game state is loaded but `isCharacterCreated` is false, calls `POST /api/v1/game/onboard` (idempotent). On success, invalidates game state query → GameStateLoader re-fetches → player store gets Draft character → OnboardingGuard routes to `/onboarding/name`.
+- `src/app/GameStateLoader.tsx` — Updated to call `useAutoOnboard()`. Shows "Creating character..." while onboard mutation is pending.
+
+Stat allocation:
+- `src/modules/onboarding/components/StatPointAllocator.tsx` — Reusable stat row with increment/decrement buttons, base value + added points display. Disabled states for max/min bounds.
+- `src/modules/onboarding/screens/InitialStatsScreen.tsx` — Shows base stats from character, additive point allocation across 4 stats, remaining points counter. Submit via `POST /api/v1/character/stats` with `expectedRevision`. Error handling: 409 → refetch game state + reset points ("try again" message), 400/500 → message display. On success: optimistic store update (`onboardingState: 'Ready'`) + game state invalidation → OnboardingGuard passes → BattleGuard passes → lobby.
+
+Router updated: `/onboarding/stats` now renders `InitialStatsScreen` instead of placeholder. Onboarding placeholders removed from `route-placeholders.tsx`.
+
+### Files created (8 new, 3 modified)
+
+New files:
+- `src/ui/components/Button.tsx`
+- `src/ui/components/TextInput.tsx`
+- `src/ui/components/Spinner.tsx`
+- `src/ui/components/Card.tsx`
+- `src/modules/onboarding/components/NameInput.tsx`
+- `src/modules/onboarding/components/StatPointAllocator.tsx`
+- `src/modules/onboarding/screens/NameSelectionScreen.tsx`
+- `src/modules/onboarding/screens/InitialStatsScreen.tsx`
+- `src/modules/onboarding/hooks.ts`
+
+Modified:
+- `src/app/GameStateLoader.tsx` — Added `useAutoOnboard()` call + pending state
+- `src/app/router.tsx` — Replaced onboarding placeholders with real screens
+- `src/app/route-placeholders.tsx` — Removed onboarding placeholders
+
+Removed `.gitkeep` from: `src/modules/onboarding/screens/`, `src/modules/onboarding/components/`, `src/ui/components/`
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint .`: passes (zero errors)
+- `npm run dev`: starts on port 3000
+- Auto-onboard: when game state has no character, `useAutoOnboard` fires `POST /api/v1/game/onboard`, game state re-fetches, Draft character appears
+- Name screen: validates 3–16 chars client-side, submits to server, handles 409/400/500, optimistically updates store on success
+- Stats screen: additive allocation of unspent points, validates total, uses expectedRevision, handles 409 with refetch+reset, transitions to Ready on success
+- Guard flow: no character → auto-onboard → Draft → `/onboarding/name` → Named → `/onboarding/stats` → Ready → `/lobby`
+- Page refresh at any onboarding step: GameStateLoader re-fetches → guards route to correct step
+
+---
+
+## Batch 4 — Phase 3 Cleanup Patch
+
+**Date:** 2026-04-16
+**Status:** Completed
+**Branch:** frontend-client
+
+Reviewer-identified fixes applied before Phase 4.
+
+### Fix 1: Auto-onboard failure dead-end (blocking)
+
+If `POST /api/v1/game/onboard` failed, `attemptedRef` prevented retry and `GameStateLoader` had no error handling for the onboard mutation. The user was stuck with no character and no recovery path.
+
+- `src/modules/onboarding/hooks.ts`: `useAutoOnboard` now exposes `retry()` which resets the mutation state and clears `attemptedRef`, allowing a clean re-attempt. Returns `{ isPending, isError, error, retry }`.
+- `src/app/GameStateLoader.tsx`: added explicit `onboard.isError` handling after the pending check. Shows "Failed to create character" with error message and a "Retry" button that calls `onboard.retry()`.
+
+### Fix 2: Tighten useAutoOnboard effect dependencies
+
+The effect depended on the entire mutation object (unstable reference), causing unnecessary effect runs.
+
+- `src/modules/onboarding/hooks.ts`: destructured `mutate`, `isPending`, `isError`, `error`, `reset` from `useMutation`. Effect depends only on `[isLoaded, isCharacterCreated, isPending, mutate]` — all stable references.
+
+### Fix 3: Runtime guard for ApiError.details field reading
+
+`NameSelectionScreen` consumed `err.error.details` as `Record<string, string[]>` via `.flat()`, but the shared `ApiError.details` type is `Record<string, unknown>`. If the server returned non-array values, `.flat()` would silently produce wrong output.
+
+- `src/modules/onboarding/screens/NameSelectionScreen.tsx`: replaced `.flat()` with an explicit loop that checks `Array.isArray(value)` and `typeof item === 'string'` before collecting messages. The shared `ApiError` type is kept broad (correct for all error types); the consumer handles the runtime shape.
+
+### Files modified (3)
+
+| File | Change |
+|---|---|
+| `src/modules/onboarding/hooks.ts` | Tighter deps + retry support |
+| `src/app/GameStateLoader.tsx` | Onboard error state + retry button |
+| `src/modules/onboarding/screens/NameSelectionScreen.tsx` | Runtime guard for details field |
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint .`: passes (zero errors)
+- `npm run dev`: starts on port 3000
+- Auto-onboard failure: error shown with retry button; retry resets state and re-attempts cleanly

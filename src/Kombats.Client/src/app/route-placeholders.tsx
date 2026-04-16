@@ -1,11 +1,3 @@
-export function OnboardingNamePlaceholder() {
-  return <p className="text-text-secondary">Name selection (Phase 3)</p>;
-}
-
-export function OnboardingStatsPlaceholder() {
-  return <p className="text-text-secondary">Stat allocation (Phase 3)</p>;
-}
-
 export function LobbyPlaceholder() {
   return <p className="text-text-secondary">Lobby (Phase 4)</p>;
 }

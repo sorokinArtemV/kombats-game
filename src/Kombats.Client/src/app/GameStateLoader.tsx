@@ -1,8 +1,10 @@
 import { Outlet } from 'react-router';
 import { useGameState } from '@/modules/player/hooks';
+import { useAutoOnboard } from '@/modules/onboarding/hooks';
 
 export function GameStateLoader() {
   const { isPending, isError, error, refetch } = useGameState();
+  const onboard = useAutoOnboard();
 
   if (isPending) {
     return (
@@ -21,6 +23,33 @@ export function GameStateLoader() {
         </p>
         <button
           onClick={() => refetch()}
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent-hover"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // Auto-onboard in progress
+  if (onboard.isPending) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-bg-primary">
+        <p className="text-text-secondary">Creating character...</p>
+      </div>
+    );
+  }
+
+  // Auto-onboard failed
+  if (onboard.isError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg-primary">
+        <p className="text-error">Failed to create character</p>
+        <p className="text-sm text-text-muted">
+          {(onboard.error as Error)?.message ?? 'An unexpected error occurred.'}
+        </p>
+        <button
+          onClick={onboard.retry}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent-hover"
         >
           Retry
