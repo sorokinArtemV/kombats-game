@@ -120,7 +120,21 @@
       "Bash(mv .claude/skills/frontend/add-zustand-store.md .claude/skills/add-zustand-store.md)",
       "Bash(mv .claude/skills/frontend/add-tanstack-query-endpoint.md .claude/skills/add-tanstack-query-endpoint.md)",
       "Bash(mv .claude/skills/frontend/add-signalr-manager.md .claude/skills/add-signalr-manager.md)",
-      "Bash(mv .claude/skills/frontend/add-feature-screen.md .claude/skills/add-feature-screen.md)"
+      "Bash(mv .claude/skills/frontend/add-feature-screen.md .claude/skills/add-feature-screen.md)",
+      "Bash(npm create *)",
+      "Bash(npm install *)",
+      "Bash(rm -f src/App.css src/assets/react.svg src/assets/vite.svg src/assets/hero.png)",
+      "Bash(rmdir src/assets)",
+      "Bash(rm -f public/vite.svg public/icons.svg)",
+      "Bash(npx tsc *)",
+      "Bash(timeout 10 npx vite --host)",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"try { require\\('./node_modules/react/package.json'\\).version } catch\\(e\\) { console.log\\('node_modules not present'\\) }\")",
+      "Bash(ls node_modules/.package-lock.json)",
+      "Bash(grep -r \"Kombats.Client\" *.sln)",
+      "Bash(ls *.sln)",
+      "Bash(node -e \"const p=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const j=JSON.parse\\(p\\); console.log\\('React:', j.dependencies.react\\); console.log\\('Zustand:', j.dependencies.zustand\\); console.log\\('TanStack:', j.dependencies['@tanstack/react-query']\\); console.log\\('SignalR:', j.dependencies['@microsoft/signalr']\\); console.log\\('Router:', j.dependencies['react-router']\\); console.log\\('Tailwind:', j.dependencies.tailwindcss\\); console.log\\('Motion:', j.dependencies.motion\\); console.log\\('oidc-client-ts:', j.dependencies['oidc-client-ts']\\); console.log\\('react-oidc-context:', j.dependencies['react-oidc-context']\\);\")",
+      "Bash(npx vite *)"
     ]
   }
 }

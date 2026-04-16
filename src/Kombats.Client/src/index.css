@@ -1,0 +1,63 @@
+@import 'tailwindcss';
+@import './ui/theme/tokens.css';
+
+@theme {
+  /* Surface colors */
+  --color-bg-primary: var(--color-bg-primary);
+  --color-bg-secondary: var(--color-bg-secondary);
+  --color-bg-surface: var(--color-bg-surface);
+  --color-bg-overlay: var(--color-bg-overlay);
+
+  /* Text colors */
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+
+  /* Accent / brand */
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+
+  /* HP bar colors */
+  --color-hp-high: var(--color-hp-high);
+  --color-hp-medium: var(--color-hp-medium);
+  --color-hp-low: var(--color-hp-low);
+
+  /* Zone colors */
+  --color-zone-head: var(--color-zone-head);
+  --color-zone-chest: var(--color-zone-chest);
+  --color-zone-belly: var(--color-zone-belly);
+  --color-zone-waist: var(--color-zone-waist);
+  --color-zone-legs: var(--color-zone-legs);
+
+  /* Status */
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+  --color-info: var(--color-info);
+
+  /* Spacing */
+  --spacing-xs: var(--space-xs);
+  --spacing-sm: var(--space-sm);
+  --spacing-md: var(--space-md);
+  --spacing-lg: var(--space-lg);
+  --spacing-xl: var(--space-xl);
+
+  /* Typography */
+  --font-primary: var(--font-primary);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+
+  /* Border radius */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

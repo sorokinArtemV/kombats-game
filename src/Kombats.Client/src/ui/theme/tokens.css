@@ -1,0 +1,56 @@
+:root {
+  /* Surface colors */
+  --color-bg-primary: #0a0a12;
+  --color-bg-secondary: #1a1a2e;
+  --color-bg-surface: #16213e;
+  --color-bg-overlay: rgba(0, 0, 0, 0.7);
+
+  /* Text colors */
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #a0a0b0;
+  --color-text-muted: #6b6b80;
+
+  /* Accent / brand */
+  --color-accent: #e94560;
+  --color-accent-hover: #ff6b6b;
+
+  /* Game-specific: HP bar colors */
+  --color-hp-high: #4ade80;
+  --color-hp-medium: #fbbf24;
+  --color-hp-low: #ef4444;
+
+  /* Game-specific: Zone colors (battle) */
+  --color-zone-head: #a78bfa;
+  --color-zone-chest: #60a5fa;
+  --color-zone-belly: #34d399;
+  --color-zone-waist: #fbbf24;
+  --color-zone-legs: #f87171;
+
+  /* Status */
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #ef4444;
+  --color-info: #60a5fa;
+
+  /* Spacing scale */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+
+  /* Typography */
+  --font-primary: 'Inter', sans-serif;
+  --font-display: 'Orbitron', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Border radius */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 1rem;
+
+  /* Animation durations */
+  --duration-fast: 150ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
+}
