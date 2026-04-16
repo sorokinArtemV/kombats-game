@@ -1,5 +1,28 @@
 # Kombats Frontend Client Product and Architecture Requirements
 
+## Changelog (2026-04-16 re-validation)
+
+**What changed:**
+- Chat is no longer out of scope. Added full chat requirements section (Section 9: REQ-CH-1 through REQ-CH-12)
+- Added player card / other-player profile requirements (Section 10: REQ-PC-1 through REQ-PC-3)
+- Updated core player flow (Section 4) to include chat connection on lobby entry
+- Corrected battle zone values from 6-zone to 5-zone ring model in REQ-B3 and REQ-B4
+- Corrected zone parsing as case-insensitive in REQ-B3
+- Added block zone adjacency constraint in REQ-B3 and REQ-B4
+- Updated DES-3 (win/loss): partially resolved via player card endpoint
+- Updated lobby requirements (REQ-L1) to include chat panel and online players
+- Updated state modeling (Section 12) with chat and presence states
+- Updated inputs table with Chat service references
+- Renumbered later sections to accommodate new content
+
+**Old assumptions invalidated:**
+- "The client does NOT need to provide chat or social features" -- chat is now fully implemented and in scope
+- "Out of scope: chat, social features" -- removed from out-of-scope list
+- Battle zones were listed as 6 body-part zones -- corrected to 5-zone ring topology
+- Zone parsing was stated as case-sensitive -- corrected to case-insensitive
+
+---
+
 ## 1. Purpose
 
 This document defines the product requirements and architecture-level constraints for the first production-capable version of the Kombats frontend client.
@@ -12,9 +35,9 @@ It serves as the source of truth for:
 
 This document converts the backend integration contract (documented in `01-backend-revision-for-frontend.md`) into actionable frontend requirements. It does not propose implementation details, library choices, or folder structure.
 
-**Scope:** The complete core game flow from authentication through battle and post-battle. This is not a throwaway prototype. It is the first version intended for production use, structured for long-term maintainability.
+**Scope:** The complete core game flow from authentication through battle and post-battle, plus chat (global and direct messaging) and player profile viewing. This is not a throwaway prototype. It is the first version intended for production use, structured for long-term maintainability.
 
-**Out of scope:** Localization/i18n, leaderboards, social features, battle history list, settings/account management, chat, spectator mode.
+**Out of scope:** Localization/i18n, ranked leaderboards, battle history list, settings/account management, spectator mode.
 
 ### Requirement classification
 
@@ -25,7 +48,7 @@ This document uses four classification levels. When reading requirements, assume
 | **Hard requirement** | Non-negotiable for first version. Driven by backend contract, game integrity, or core product flow. | MUST, MUST NOT |
 | **Product preference** | Desired behavior that reflects product intent. May be adjusted during architecture/implementation if trade-offs require it. | SHOULD, preferred, expected |
 | **Backend-constrained** | Behavior dictated by the current backend contract. Not a product choice; changing it requires a backend change. | Noted inline as "backend-constrained" |
-| **Validation point** | Open question that must be resolved before or during feasibility. | See Sections 13 and 14 |
+| **Validation point** | Open question that must be resolved before or during feasibility. | See Sections 15 and 16 |
 
 ---
 
@@ -37,6 +60,8 @@ This document uses four classification levels. When reading requirements, assume
 | BFF source code | `src/Kombats.Bff` | Ground truth for all client-facing endpoints and SignalR hubs |
 | Players service domain | `src/Kombats.Players/Kombats.Players.Domain` | Character entity, onboarding states, leveling policy |
 | Battle realtime contracts | `src/Kombats.Battle/Kombats.Battle.Realtime.Contracts` | SignalR event payload definitions |
+| Battle domain | `src/Kombats.Battle/Kombats.Battle.Domain` | BattleZone enum, combat model |
+| Chat service | `src/Kombats.Chat` | Chat domain, application, infrastructure, API |
 | Figma mockup prototype | `design/` | Visual direction reference (not architectural authority) |
 | Architecture docs | `.claude/docs/architecture/` | Backend architecture decisions |
 
@@ -46,9 +71,9 @@ The backend revision document is the primary input. The codebase is referenced f
 
 ## 3. Product goal
 
-Deliver a frontend client that supports the complete core game loop:
+Deliver a frontend client that supports the complete core game loop with social features:
 
-**Register/Login -> Onboard -> Lobby -> Queue -> Battle -> Result -> Lobby**
+**Register/Login -> Onboard -> Lobby (with chat) -> Queue -> Battle -> Result -> Lobby**
 
 The client must:
 - feel like a real product, not a developer tool
@@ -58,8 +83,7 @@ The client must:
 
 The client does NOT need to:
 - implement custom registration or login forms (auth pages are hosted by Keycloak; the client redirects to them)
-- display battle history lists or leaderboards
-- provide chat or social features
+- display battle history lists or ranked leaderboards
 - implement spectator mode
 
 ---
@@ -71,12 +95,12 @@ The following is the canonical player journey. Each step is a hard requirement u
 ```
 1. Player opens the app
 2. App checks auth state
-   ├── Not authenticated -> show unauthenticated landing with Register and Login entry points
-   │   ├── Register -> redirect to Keycloak registration page
-   │   │   ├── Preferred: after registration, user returns authenticated -> proceed to step 3
-   │   │   └── Fallback: if realm config requires separate login after registration -> redirect to login
-   │   └── Login -> redirect to Keycloak login page -> return authenticated -> proceed to step 3
-   └── Authenticated -> proceed
+   |-- Not authenticated -> show unauthenticated landing with Register and Login entry points
+   |   |-- Register -> redirect to Keycloak registration page
+   |   |   |-- Preferred: after registration, user returns authenticated -> proceed to step 3
+   |   |   +-- Fallback: if realm config requires separate login after registration -> redirect to login
+   |   +-- Login -> redirect to Keycloak login page -> return authenticated -> proceed to step 3
+   +-- Authenticated -> proceed
 3. App calls GET /api/v1/game/state to load current state
 4. App evaluates recovery conditions (in priority order):
    a. Active battle exists (QueueStatus has BattleId + Matched status)
@@ -96,6 +120,10 @@ The following is the canonical player journey. Each step is a hard requirement u
    - Display unspent stat points indicator (if any)
    - Provide "Enter Queue" action
    - Provide stat allocation access (if unspent points > 0)
+   - Connect to /chathub and join global chat
+   - Display online players list
+   - Display global chat feed
+   - Provide access to direct messaging
 7. Matchmaking:
    - Poll GET /api/v1/queue/status at 1-2 second intervals
    - Show searching state with cancel option
@@ -116,6 +144,7 @@ The following is the canonical player journey. Each step is a hard requirement u
     - Refresh character state (XP, level, unspent points may have changed)
     - If level-up occurred, show notification
     - Player can re-enter queue
+    - Reconnect to chat if disconnected during battle
 ```
 
 ---
@@ -189,6 +218,7 @@ Registration and login are part of the client's user journey, even though the au
 A player whose `OnboardingState` is not `"Ready"` MUST NOT be able to:
 - View the lobby
 - Enter matchmaking
+- Use chat
 - Access any game feature
 
 The client MUST force the onboarding flow and prevent any navigation away from it.
@@ -233,11 +263,14 @@ The client MUST NOT ask the player to provide a user ID. Identity is always deri
 The lobby MUST display:
 - Character name
 - Action to enter matchmaking queue
+- Global chat feed (via `/chathub` connection)
+- Online players list
 
 The lobby SHOULD display:
 - Character level and current XP
 - Current stats (Strength, Agility, Intuition, Vitality)
 - Unspent stat points count and/or visual indicator when unspent points are available
+- Player's own win/loss record (available via `GET /api/v1/players/{ownId}/card` as a workaround; see DES-3)
 
 ### REQ-L2: Stat allocation from lobby
 
@@ -311,16 +344,28 @@ During `TurnOpen` phase:
 - Allow the player to select one attack zone and two block zones (primary + secondary)
 - Submit via `SubmitTurnAction(battleId, turnIndex, actionPayload)`
 
+**Zone model (backend-constrained):** There are **5 zones in a ring topology**: `Head`, `Chest`, `Belly`, `Waist`, `Legs`. The ring wraps (`Legs` is adjacent to `Head`).
+
+**Block zone adjacency constraint (backend-constrained):** The two block zones must be an adjacent pair in the ring. Valid pairs:
+- Head <-> Chest
+- Chest <-> Belly
+- Belly <-> Waist
+- Waist <-> Legs
+- Legs <-> Head
+
+The frontend MUST present block zone selection as **adjacent pair selection** (5 valid patterns), not arbitrary two-zone selection. Non-adjacent block pairs are silently treated as `NoAction` by the server.
+
 Backend-constrained implementation constraints:
 - `actionPayload` MUST be a JSON **string**, not a structured object. The client must `JSON.stringify()` the action object before passing it to the hub method.
-- Zone values are exact, case-sensitive enum strings: `"Head"`, `"Torso"`, `"LeftArm"`, `"RightArm"`, `"LeftLeg"`, `"RightLeg"`
+- Zone values are enum strings: `"Head"`, `"Chest"`, `"Belly"`, `"Waist"`, `"Legs"`. Zone parsing is case-insensitive on the server, but the frontend should use canonical casing for consistency.
 - Invalid or late submissions are silently treated as `NoAction` by the server; the client receives no error (backend-constrained; the server does not return validation errors for turn actions)
 
 ### REQ-B4: Client-side action validation
 
 Because the server silently degrades invalid actions to no-ops, the client MUST validate actions locally before submission:
 - All three zones (attack, blockPrimary, blockSecondary) must be selected
-- Zone values must match the exact enum strings
+- Zone values must be valid: `Head`, `Chest`, `Belly`, `Waist`, `Legs`
+- **Block zones must be an adjacent pair in the ring topology**
 - Submission must occur before the deadline
 
 The client SHOULD apply a small local buffer (e.g., subtract 1-2 seconds from the displayed deadline) to reduce edge-case late submissions. The server has a 1-second grace buffer (backend-constrained), but the client should not rely on it.
@@ -413,7 +458,146 @@ The client MUST display the outcome of each direction clearly. This data is suff
 
 ---
 
-## 9. Post-battle requirements
+## 9. Chat requirements
+
+### REQ-CH-1: Chat connection
+
+On entering the lobby (after onboarding is complete), the client MUST:
+1. Open a SignalR connection to `/chathub` with JWT as `?access_token=<token>` query parameter
+2. Call `JoinGlobalChat()` to enter the global chat room
+3. Use the response to populate initial state: last 50 messages, first 100 online players, total online count
+
+### REQ-CH-2: Chat eligibility gate
+
+Only players with `OnboardingState == "Ready"` can use chat (backend-constrained). The client MUST NOT attempt to connect to `/chathub` or call chat methods until onboarding is complete. Sending a message while not eligible returns a `ChatError` with code `not_eligible`.
+
+### REQ-CH-3: Global chat
+
+The client MUST:
+- Display the global chat message feed
+- Allow sending messages via `SendGlobalMessage(content)`
+- Process `GlobalMessageReceived` events to append new messages in real time
+- Validate message content locally: 1-500 characters, non-empty (backend-constrained limits)
+
+The client SHOULD:
+- Show sender display name and timestamp for each message
+- Auto-scroll to new messages (with scroll-lock behavior when user has scrolled up)
+
+### REQ-CH-4: Direct messaging
+
+The client MUST:
+- Allow initiating a DM with another player via `SendDirectMessage(recipientPlayerId, content)`
+- Process `DirectMessageReceived` events to append incoming DMs
+- Provide access to DM conversations (list via `GET /api/v1/chat/conversations`, messages via HTTP history endpoints)
+
+The client SHOULD:
+- Show a notification or visual indicator when a new DM arrives
+- Allow navigating from the online players list to a DM conversation
+
+Note: Conversations are created atomically on first DM. The frontend does not need a "create conversation" step.
+
+### REQ-CH-5: Online players list
+
+The client MUST:
+- Display a list of currently online players (from `JoinGlobalChat()` response and `GET /api/v1/chat/presence/online`)
+- Process `PlayerOnline` and `PlayerOffline` events to update the list in real time
+
+The client SHOULD:
+- Allow clicking on an online player to view their player card (REQ-PC-1)
+- Allow clicking on an online player to start a DM conversation
+
+### REQ-CH-6: Rate limit handling
+
+When the server returns a `ChatError` with code `rate_limited`:
+- The client MUST show a "slow down" message to the user
+- The client SHOULD display a countdown based on the `RetryAfterMs` field
+- The client SHOULD disable the send button until the rate limit window expires
+
+Rate limits (backend-constrained):
+- Global chat: 5 messages per 10 seconds
+- Direct messages: 10 messages per 30 seconds
+
+### REQ-CH-7: Chat error handling
+
+The client MUST handle `ChatError` events:
+
+| Code | Display |
+|------|---------|
+| `rate_limited` | "Slow down" with retry timer |
+| `message_too_long` | "Message too long (max 500 characters)" |
+| `message_empty` | "Message cannot be empty" |
+| `recipient_not_found` | "Player not found" |
+| `not_eligible` | "Complete onboarding to use chat" |
+| `service_unavailable` | "Chat temporarily unavailable" |
+
+### REQ-CH-8: Chat reconnection
+
+If the `/chathub` connection drops:
+1. The client MUST attempt automatic reconnection with exponential backoff
+2. On reconnect, the client MUST call `JoinGlobalChat()` again to restore state
+3. The response includes the last 50 messages for gap recovery
+4. Presence is re-registered on the new connection
+
+The client MUST show a visual indicator when the chat connection is lost and when it is restored.
+
+### REQ-CH-9: Chat connection lost event
+
+When the client receives a `ChatConnectionLost` event (BFF lost connection to Chat service):
+- The client MUST show a connection error indicator
+- The client MUST attempt to reconnect
+
+### REQ-CH-10: Message history browsing
+
+The client SHOULD support scrolling back through older messages:
+- Global chat: `GET /api/v1/chat/conversations/{conversationId}/messages?before={timestamp}&limit=50`
+- DMs: `GET /api/v1/chat/direct/{otherPlayerId}/messages?before={timestamp}&limit=50`
+
+Pagination is cursor-based using the `before` parameter (ISO-8601 timestamp). Messages are returned newest-first.
+
+### REQ-CH-11: Message deduplication
+
+Chat messages have unique UUID v7 IDs. The client SHOULD use `MessageId` to deduplicate messages received via both live events and history fetches.
+
+### REQ-CH-12: Chat during battle
+
+**Product decision needed.** The chat connection lifecycle during battle is a product decision:
+- **Option A:** Maintain `/chathub` connection during battle. Allows DM notifications during battle but adds complexity.
+- **Option B:** Disconnect `/chathub` on battle entry, reconnect on lobby return. Simpler but no chat during battle.
+
+The client MUST reconnect to `/chathub` when returning to the lobby after battle, regardless of which option is chosen.
+
+---
+
+## 10. Player card requirements
+
+### REQ-PC-1: View another player's profile
+
+The client MUST provide a way to view another player's public profile via `GET /api/v1/players/{playerId}/card`.
+
+The player card displays:
+- Display name
+- Level
+- Stats (Strength, Agility, Intuition, Vitality)
+- Win/loss record
+
+Access points for viewing a player card:
+- From the online players list (click on a player)
+- From a DM conversation (view the other participant's card)
+- From battle (view opponent's card during or after battle -- product preference)
+
+### REQ-PC-2: Player card response handling
+
+- 200: Display the card
+- 404: Show "Player not found"
+- 401: Redirect to login (standard auth failure handling)
+
+### REQ-PC-3: Player card does not block navigation
+
+Viewing a player card MUST NOT block other actions. The card SHOULD be displayed as an overlay, panel, or inline element that can be dismissed. It MUST NOT navigate the user away from their current screen.
+
+---
+
+## 11. Post-battle requirements
 
 ### REQ-P1: Result screen
 
@@ -446,7 +630,7 @@ After dismissing the result screen, the player returns to the lobby (REQ-L1) and
 
 ---
 
-## 10. Hard gates vs non-blocking conditions
+## 12. Hard gates vs non-blocking conditions
 
 ### Hard gates (block progression)
 
@@ -465,10 +649,11 @@ After dismissing the result screen, the player returns to the lobby (REQ-L1) and
 | Unspent stat points (after initial onboarding) | Show indicator/badge; do not prevent queueing or any other action |
 | Degraded backend services | Show degraded UI; do not prevent navigation to available features |
 | XP/level not yet updated after battle | Show current known state; retry refresh |
+| Chat connection lost | Show indicator; do not prevent gameplay actions |
 
 ---
 
-## 11. Non-functional frontend requirements
+## 13. Non-functional frontend requirements
 
 ### REQ-NF1: Responsiveness
 
@@ -479,6 +664,7 @@ The client MUST be usable on desktop browsers. Minimum supported viewport is exp
 - Turn input must feel immediate; no perceptible delay between user action and local UI response
 - Battle event processing must not cause visible lag or frame drops
 - Matchmaking polling must not degrade UI performance
+- Chat message rendering must handle high message volume without lag
 - The client should not hold stale state in memory across sessions
 
 ### REQ-NF3: Error visibility
@@ -491,6 +677,7 @@ The client MUST be usable on desktop browsers. Minimum supported viewport is exp
 
 The client MUST clearly indicate:
 - When the SignalR connection to the battle hub is lost
+- When the SignalR connection to the chat hub is lost
 - When reconnection is in progress
 - When the connection is restored
 
@@ -513,23 +700,27 @@ If the BFF reports degraded services via `DegradedServices`:
 - Available features should remain functional
 - Unavailable features should be clearly marked, not hidden or silently broken
 
+If the chat service is unavailable:
+- Gameplay features (queue, battle) MUST remain functional
+- Chat panel SHOULD show "Chat temporarily unavailable"
+
 ### REQ-NF8: Authentication transport
 
 - HTTP requests: `Authorization: Bearer <token>` header
-- SignalR connections: `?access_token=<token>` query parameter
+- SignalR connections (both `/battlehub` and `/chathub`): `?access_token=<token>` query parameter
 - Token refresh must be handled proactively before expiry
 - No cookie-based auth; the backend uses stateless JWT
 
 ---
 
-## 12. Reskin-oriented architecture requirements
+## 14. Reskin-oriented architecture requirements
 
 ### REQ-R1: Separation of concerns
 
 The frontend architecture MUST maintain clear separation between:
-1. **Game flow and state logic** — app routing, screen transitions, hard gates, recovery logic, state machines
-2. **Backend integration** — HTTP clients, SignalR connection management, polling, reconnection, token management
-3. **Presentation** — visual components, styling, layout, animation, theming
+1. **Game flow and state logic** -- app routing, screen transitions, hard gates, recovery logic, state machines
+2. **Backend integration** -- HTTP clients, SignalR connection management, polling, reconnection, token management
+3. **Presentation** -- visual components, styling, layout, animation, theming
 
 These three concerns MUST be independently modifiable. A change to visual styling MUST NOT require changes to game flow logic or backend integration code.
 
@@ -542,7 +733,7 @@ A future full visual reskin is expected. The first version MUST be structured so
 
 ### REQ-R3: No visual coupling in game logic
 
-Game flow logic (onboarding gates, matchmaking state machine, battle state machine, post-battle flow) MUST NOT:
+Game flow logic (onboarding gates, matchmaking state machine, battle state machine, chat state, post-battle flow) MUST NOT:
 - Import or depend on specific visual component implementations
 - Assume a particular layout structure
 - Contain inline styles, CSS references, or animation logic
@@ -563,7 +754,7 @@ The production client MAY reuse visual ideas, styling approaches, or individual 
 
 ---
 
-## 13. Desired-but-not-yet-validated behaviors
+## 15. Desired-but-not-yet-validated behaviors
 
 These behaviors are product preferences that MUST be validated against backend capabilities during the feasibility phase.
 
@@ -571,12 +762,9 @@ These behaviors are product preferences that MUST be validated against backend c
 
 **Desired behavior:** If the player closes the browser while still searching in the matchmaking queue, the system should remove them from the queue so they don't return to an active search or, worse, get matched while absent.
 
-**Current backend reality (unvalidated):** The matchmaking queue entry persists in Redis with a 30-minute TTL. There is no server-side mechanism triggered by client disconnection to remove the queue entry. The client has no persistent connection to the matchmaking system (poll-based only), so the server cannot detect client departure.
+**Current backend reality:** The matchmaking queue entry persists in Redis with a 30-minute TTL. There is no server-side mechanism triggered by client disconnection to remove the queue entry. The client has no persistent connection to the matchmaking system (poll-based only), so the server cannot detect client departure.
 
-**Validation needed:** Determine whether this behavior can be achieved via:
-- Browser `beforeunload` event calling `POST /api/v1/queue/leave` (unreliable)
-- A backend enhancement to support client heartbeat/timeout for queue entries
-- Accepting the 30-minute TTL as the de facto auto-leave mechanism
+**Best available approach:** `navigator.sendBeacon()` on `pagehide` event, calling `POST /api/v1/queue/leave`. This is best-effort (~80% reliability). The 30-minute TTL is the fallback. Recovery mechanisms handle the worst case (matched while absent -> DoubleForfeit -> cleanup).
 
 ### DES-2: Immediate XP display after battle
 
@@ -584,86 +772,88 @@ These behaviors are product preferences that MUST be validated against backend c
 
 **Current backend reality:** XP is awarded asynchronously via `BattleCompleted` integration event consumed by Players service. There is a non-deterministic delay between `BattleEnded` (received by client) and the XP actually being applied to the character.
 
-**Validation needed:** Determine the typical delay and whether the client can reliably display XP changes on the result screen, or whether it must defer to the lobby refresh.
+**Best available approach:** Show battle outcome on result screen. Show XP/level changes after lobby refresh, with a retry if first fetch shows no change.
 
-### DES-3: Win/loss record display
+### DES-3: Win/loss record display in own profile
 
-**Desired behavior:** The lobby shows the player's win/loss record.
+**Desired behavior:** The lobby shows the player's own win/loss record.
 
-**Current backend reality:** `Wins` and `Losses` exist on the domain entity but are NOT exposed in the BFF's `GameStateResponse` or `CharacterResponse`.
+**Current backend reality:** `Wins` and `Losses` are available in the `PlayerCardResponse` (via `GET /api/v1/players/{playerId}/card`) but are NOT included in the `CharacterResponse` used by `GET /api/v1/game/state`.
 
-**Validation needed:** Requires a BFF change to expose these fields. This is a backend gap (G3 in the backend revision).
+**Workaround:** The frontend can call the player card endpoint with the current user's own identity ID to fetch wins/losses. This requires knowing the user's identity ID (available from JWT `sub` claim).
+
+**Ideal fix:** Backend adds wins/losses to `CharacterResponse` / `GameStateResponse` so a separate call is unnecessary.
 
 ---
 
-## 14. Open validation points for the next phase
+## 16. Open validation points for the next phase
 
 These items MUST be resolved during the feasibility validation phase before frontend architecture begins.
 
 ### V-1: Keycloak realm configuration for registration
 
-**Decision:** Registration uses Keycloak's hosted registration page via redirect from the client (see REQ-S8). No custom registration endpoint or form is needed.  
-**Remaining validation:** Confirm that the Keycloak realm has self-registration enabled and determine whether authenticated return after registration is immediate or requires a separate login step. This affects the client's post-registration redirect behavior.  
+**Decision:** Registration uses Keycloak's hosted registration page via redirect from the client (see REQ-S8). No custom registration endpoint or form is needed.
+**Remaining validation:** Confirm that the Keycloak realm has self-registration enabled and determine whether authenticated return after registration is immediate or requires a separate login step.
 **Blocking:** No. The client can implement both paths (immediate return and login fallback) without knowing the realm config upfront.
 
 ### V-2: Turn deadline grace period handling
 
-**Question:** Should the client-side timer display the exact `DeadlineUtc` or apply a buffer?  
-**Backend fact:** The server allows a 1-second grace buffer for late submissions (`ActionIntakeService.cs`).  
-**Impact:** If the client cuts off input at the exact deadline, the player loses 1 second of available submission time. If it displays a shorter deadline, the UX feels more rushed.  
+**Question:** Should the client-side timer display the exact `DeadlineUtc` or apply a buffer?
+**Backend fact:** The server allows a 1-second grace buffer for late submissions (`ActionIntakeService.cs`).
 **Blocking:** No. Can default to applying a local buffer and adjust later.
 
 ### V-3: Stat allocation semantics on the frontend
 
-**Question:** The `POST /api/v1/character/stats` payload contains ADDITIVE point values (points to add), not target totals. Confirmed from `Character.AllocatePoints()`.  
-**Impact:** The frontend stat allocation UI must be a "spend X points" interface, not a "set total to Y" interface. No respec exists.  
-**Blocking:** No. This is confirmed behavior, not ambiguous. Listed here to ensure the UI design accounts for it.
+**Confirmed behavior:** The `POST /api/v1/character/stats` payload contains ADDITIVE point values (points to add), not target totals. The frontend stat allocation UI must be a "spend X points" interface.
+**Blocking:** No. This is confirmed, not ambiguous.
 
 ### V-4: Name permanence communication
 
-**Question:** Names are set once and cannot be changed (`SetNameOnce`). Is this the intended long-term product behavior?  
-**Impact:** The frontend must warn the player that the name choice is permanent.  
-**Blocking:** No. Can proceed with "permanent name" assumption and add rename later if needed.
+**Confirmed behavior:** Names are set once and cannot be changed (`SetNameOnce`).
+**Blocking:** No. Can proceed with "permanent name" assumption.
 
 ### V-5: `OnboardingState: "Unknown"` handling
 
-**Question:** The BFF maps unrecognized onboarding states to `"Unknown"`. Can this occur in practice?  
-**Impact:** If it can, the client needs an error/recovery path for this state. If it cannot, it can be treated as an unreachable case.  
-**Blocking:** No. Can default to treating `"Unknown"` as an error condition requiring re-login.
+**Confirmed behavior:** Maps unrecognized states to `"Unknown"`. Should not occur in practice.
+**Blocking:** No. Treat as error condition.
 
 ### V-6: Concurrent session handling
 
-**Question:** What happens if the player has two browser tabs open?  
-**Concerns:**
-- Stat allocation with optimistic concurrency (409 conflict)
-- Two SignalR connections to the same battle
-- Two polling loops for matchmaking  
-**Impact:** Determines whether the client should attempt single-session enforcement or handle conflicts gracefully.  
-**Blocking:** No. Can defer to "handle 409 gracefully" and not enforce single session initially.
+**Acceptable risk:** Two tabs: stat allocation gets 409 on revision mismatch. Two SignalR connections to same battle: both receive events. Two chat connections: both receive messages, presence counts correctly (refcount-based). No single-session enforcement needed for MVP.
+**Blocking:** No.
 
 ### V-7: Post-battle XP timing
 
-**Question:** What is the typical delay between `BattleEnded` and XP being available on the character?  
-**Impact:** Determines whether the result screen can show XP/level changes or must defer to lobby.  
-**Blocking:** No. Can default to refreshing on lobby entry.
+**Confirmed:** Non-deterministic, typically sub-second. Frontend should use retry-after-delay on lobby refresh.
+**Blocking:** No.
 
 ### V-8: SignalR reconnection after battle ended during disconnect
 
-**Question:** When the client reconnects after a battle ended, `JoinBattle` returns a snapshot with `Phase: Ended` but does NOT replay missed events (confirmed in backend revision A6).  
-**Impact:** The client must check the snapshot phase immediately after `JoinBattle` and route to the result screen. It cannot rely on receiving a `BattleEnded` event.  
-**Blocking:** No. This is confirmed behavior. The client must handle it.
+**Confirmed behavior:** `JoinBattle` returns snapshot with `Phase: Ended`. No event replay. Frontend must check phase immediately.
+**Blocking:** No.
+
+### V-9: Chat during battle
+
+**Decision needed:** Should the `/chathub` connection be maintained during battle? This affects whether DM notifications appear during battle and whether the chat panel is visible on the battle screen.
+**Blocking:** No. Either approach works. Default to disconnecting during battle if undecided.
+
+### V-10: Chat message retention window
+
+**Question:** How long are messages kept before the retention worker deletes them?
+**Impact:** Determines practical limit on "scroll back" in history.
+**Blocking:** No. Configurable server-side; frontend should handle finite history gracefully.
 
 ---
 
-## 15. Recommended next step
+## 17. Recommended next step
 
 **Immediately next:** Feasibility validation.
 
 Using this document and the backend revision as inputs, validate:
 1. That every requirement listed here can be met with the current BFF contract
-2. That the open validation points (V-1 through V-8) are resolved or have acceptable defaults
+2. That the open validation points (V-1 through V-10) are resolved or have acceptable defaults
 3. That the desired-but-not-validated behaviors (DES-1 through DES-3) have a clear path (implement, defer, or accept limitation)
-4. That the core flow (register/login through post-battle) works end-to-end without backend changes
+4. That the core flow (register/login through post-battle with chat) works end-to-end without backend changes
 5. That the Keycloak realm supports self-registration and determine post-registration redirect behavior
 
 **After feasibility:** Frontend client specification, then frontend architecture, then implementation planning. Each phase uses this document as its upstream input.
