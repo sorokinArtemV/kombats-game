@@ -2,6 +2,238 @@
 
 ---
 
+## Batch 9 — Phase 8: Post-battle / result flow — Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Small, tightly scoped cleanup pass addressing five Phase 8 review findings before Phase 9 hardening. No Phase 9 work, no architecture drift.
+
+### Fix 1: BattleGuard lobby-bounce after "Finish Battle"
+
+**Problem:** Clicking "Finish Battle" → `navigate('/lobby')`. BattleShell unmounted → `useBattleConnection` cleanup reset the battle store (`phase → 'Idle'`, `battleId → null`). `queueStatus` in the player store was still `Matched + battleId` (stale — game-state refetch hadn't completed). The guard's first branch then matched `queueStatus.status === 'Matched' && queueStatus.battleId` and, without the battle-store "Ended" exemption applying (store had already been reset), redirected the user back to `/battle/:id`. Until the server reconciliation arrived, the user ping-ponged.
+
+**Resolution:** The `handleFinish` handler on `BattleResultScreen` now optimistically clears `queueStatus` on the player store *before* navigating:
+
+```ts
+setQueueStatus(null);
+setPostBattleRefreshNeeded(true);
+navigate('/lobby');
+```
+
+This matches the server's eventual state (battle over ⇒ no active queue). `usePostBattleRefresh` reconciles the authoritative state on lobby arrival. Minimal change: only the `BattleResultScreen.handleFinish` path is affected; the BattleGuard logic itself is untouched so result-screen reachability (REQ-P1) is preserved.
+
+### Fix 2: DEC-5 retry based on fresh query-cache data
+
+**Problem:** `usePostBattleRefresh` used `useBattleStore.getState()` (typo in prior review — actually `usePlayerStore.getState()`) to read post-refetch XP/level. Zustand sync happens in a later React commit via `useGameState`'s effect, so the `post` read was still the pre-refetch value. The "unchanged?" check returned true every time and the 3-second retry path fired on *every* return to lobby.
+
+**Resolution:** Extracted a pure comparator `comparePlayerProgress` into `src/modules/player/player-progress.ts`. `usePostBattleRefresh` now:
+1. Snapshots the character pre-refetch (via `snapshotCharacter` on the store).
+2. Calls `queryClient.refetchQueries({ queryKey: gameKeys.state(), exact: true })`.
+3. Reads the fresh result **directly from the query cache** via `queryClient.getQueryData<GameStateResponse>(gameKeys.state())`. That's the authoritative snapshot written at refetch-completion time — it doesn't wait for the Zustand sync commit.
+4. Retries only when `delta.changed === false` and both snapshots are non-null.
+5. Reports level-up from `delta.newLevel` via `setPendingLevelUpLevel`.
+
+The comparator considers XP, level, and unspent-points deltas. Any one of these being different suppresses the retry — matching the intent of the DEC-5 "retry only if nothing changed" rule.
+
+### Fix 3: Result screen readiness tightened to `Ended` only
+
+**Problem:** `BattleResultScreen` previously rendered content for `phase ∈ { Ended, Resolving, TurnOpen, ArenaOpen, Submitted }`. Mid-battle access (manually typing `/result`, or an unusual race) could produce a fake "Draw" outcome because `endReason` and `winnerPlayerId` were still null.
+
+**Resolution:** The readiness check is now `phase === 'Ended'`. All non-ended phases show the existing loading spinner until `BattleEnded` populates the store (or the new mismatch guard below redirects).
+
+### Fix 4: URL ↔ store battleId mismatch redirects to lobby
+
+**Problem:** If the URL `battleId` and the battle store's `battleId` diverged (e.g., stale URL from a prior battle, or cross-wired navigation), the result banner would be derived from the store while the feed would be fetched by URL. That was a silent inconsistency.
+
+**Resolution:** Explicit guard in `BattleResultScreen`: if `storeBattleId !== null && storeBattleId !== battleId`, render `<Navigate to="/lobby" replace />`. The mismatch is loud (redirect to a safe route) rather than silently rendering mixed data. When `storeBattleId === null` the guard is skipped so the result screen can still display during the pre-snapshot window — consistent with Fix 3's spinner state.
+
+### Fix 5: Pure-logic tests for feed merge and post-battle progress
+
+Two new pure-logic modules and test files (Vitest, no new infrastructure):
+
+**`src/modules/battle/feed-merge.ts`** — extracted `mergeFeeds(store, authoritative)` from `result-feed.ts`. Pulling transport/config into a test file via `hooks.ts` failed test load (`VITE_KEYCLOAK_AUTHORITY` missing); the standalone module has no transport imports.
+
+**`src/modules/battle/feed-merge.test.ts`** — 7 tests:
+- Empty sources
+- Single-source passthrough
+- Dedup by key across sources
+- Authoritative-overwrites-store semantics (including severity override)
+- `(turnIndex, sequence)` ordering regardless of input order
+- Disjoint entries merged from both sides
+- Stable ordering with unique `(turnIndex, sequence)` pairs
+
+**`src/modules/player/player-progress.ts`** — extracted `comparePlayerProgress` and `snapshotCharacter`.
+
+**`src/modules/player/player-progress.test.ts`** — 10 tests:
+- `snapshotCharacter` null/undefined handling and field extraction
+- Null pre/post → no-change
+- All-equal snapshots → no-change (retry will fire)
+- XP-only delta → change, no level-up (retry suppressed)
+- Unspent-points-only delta → change, no level-up (retry suppressed)
+- Level-up with newLevel populated
+- Multi-level jump
+- Defensive level-decrease case (not reported as level-up)
+
+Total vitest count: 48 → 65 (17 new); 4 test files → 6.
+
+### Files created (4)
+
+- `src/modules/battle/feed-merge.ts` — pure `mergeFeeds`
+- `src/modules/battle/feed-merge.test.ts` — merge/dedup/sort tests
+- `src/modules/player/player-progress.ts` — `snapshotCharacter` + `comparePlayerProgress`
+- `src/modules/player/player-progress.test.ts` — DEC-5 comparator + level-up tests
+
+### Files modified (3)
+
+- `src/modules/battle/screens/BattleResultScreen.tsx` — readiness tightened to `Ended`, URL/store battleId mismatch guard, optimistic `setQueueStatus(null)` on Finish Battle
+- `src/modules/battle/result-feed.ts` — imports `mergeFeeds` from the extracted module (no behavior change)
+- `src/modules/player/post-battle-refresh.ts` — uses `queryClient.getQueryData` + the extracted comparator; retry only fires when genuinely unchanged
+
+### Out of scope (preserved)
+
+- No changes to BattleGuard logic itself (Fix 1 lives on the "Finish Battle" action, not in the guard)
+- No changes to battle store, battle hook, zones, chat, matchmaking, onboarding, or session-shell
+- No new npm deps; no `<Toaster />` introduced (FEI-DEV-072 still Phase 9 territory)
+- No Phase 9 hardening work
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- `npx vitest run`: 65 tests pass across 6 files (was 48/4)
+- `npx vite build`: succeeds (pre-existing size warning unchanged)
+
+### Cleanup-patch review-ready checklist
+
+- [x] Lobby-return bounce eliminated (optimistic queue-status clear in `handleFinish`)
+- [x] DEC-5 retry now compares fresh query-cache data, so retry fires only when XP, level, and unspent-points are all unchanged
+- [x] Result screen readiness is strictly `phase === 'Ended'`; all other phases show the spinner
+- [x] URL/store `battleId` mismatch loudly redirects to `/lobby`
+- [x] `mergeFeeds` and `comparePlayerProgress` each have focused unit-test coverage
+- [x] No Phase 9, no architecture drift, no unrelated refactors
+
+---
+
+## Batch 9 — Phase 8: Post-battle / result flow
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Completes the playable loop: battle end → result screen → lobby return → authoritative state refresh → post-level-up stat allocation → re-queue. Reuses the Phase 6/7 battle store, zone model, hook, and the onboarding stat-allocation primitives; adds only minimal additive structure.
+
+### Lifecycle hoist: battle connection moves from BattleScreen to BattleShell
+
+The Phase 7 battle connection was owned by `BattleScreen.tsx`, whose effect cleanup resets the battle store (`useBattleStore.reset()`) and disconnects the battle hub. That would wipe `phase=Ended`, `endReason`, `winnerPlayerId`, and the feed the moment the player navigated to `/battle/:battleId/result` — making the result screen impossible to render from the in-memory store.
+
+**Resolution:** Hoisted `useBattleConnection(battleId)` to `BattleShell`. The shell is shared by both `/battle/:battleId` and `/battle/:battleId/result`, so the store now survives the hand-off. Cleanup still runs when the player exits the `/battle/*` subtree (to `/lobby`). Behaviour inside Phase 7 is unchanged; only the host component for the connection changed.
+
+### BattleGuard REQ-P1 hard-gate update
+
+Previously, if `queueStatus` cleared before the player dismissed the result screen (server-side queue update arrival order is not guaranteed), the guard would redirect away from `/battle/:id/result` to `/lobby`. New logic:
+- When `queueStatus.status === 'Matched' && queueStatus.battleId`, if the battle store reports `phase === 'Ended'` for the same `battleId`, the guard no longer force-navigates onto the live battle path — the result screen can be dismissed naturally.
+- When `queueStatus` is absent but the battle store still holds `phase === 'Ended'` for the pathname's battleId, `/battle/:id/result` is still allowed; otherwise the legacy "redirect to /lobby" behavior applies.
+
+### P8.1: Battle result screen
+
+New `src/modules/battle/screens/BattleResultScreen.tsx`:
+- Reads outcome via the already-extracted `deriveOutcome` (Phase 7 cleanup patch) — no parallel result-state model.
+- Shows outcome title/subtitle with outcome-tone accent (victory/success, defeat/error, draw/info, error/warning, other/muted).
+- Shows player vs. opponent name line derived from `useAuthStore.userIdentityId` + battle store identity.
+- Merged narration feed via new `useResultBattleFeed(battleId)` hook — combines `useBattleFeed()` (live, in-store) with `GET /api/v1/battles/{battleId}/feed` (authoritative, already exists in `transport/http/endpoints/battle.ts`). Dedup by `entry.key` with HTTP entries overwriting store entries for the same key; sorted by `(turnIndex, sequence)`.
+- Existing `NarrationFeed` component extended with an optional `entries` prop and a `fill` layout flag so the result screen can feed it a merged list and let it fill available space. Default (no props) behaviour unchanged — Phase 7 consumer (`BattleScreen`) still reads from the store.
+- "Finish Battle" button sets `postBattleRefreshNeeded = true` on the player store and navigates to `/lobby`. No inline Phase-9 polish (no animations beyond existing transition-colors).
+
+### P8.2: Post-battle state refresh & cleanup
+
+New `src/modules/player/post-battle-refresh.ts` — `usePostBattleRefresh()` hook, mounted by `LobbyScreen`:
+1. Guarded by a `useRef` + a player-store flag that is consumed up-front so the sequence runs exactly once per lobby trip.
+2. Snapshots current `character.totalXp` and `character.level`.
+3. `queryClient.refetchQueries({ queryKey: gameKeys.state(), exact: true })` — the existing `useGameState` subscriber in `GameStateLoader` then syncs the refetch into the player store.
+4. DEC-5 retry: if XP **and** level are unchanged, waits 3s and refetches once more.
+5. If `post.level > pre.level`, sets `pendingLevelUpLevel` on the player store so the lobby's `LevelUpBanner` surfaces it.
+6. Cancellation-safe: if the lobby unmounts mid-flight, cancelled flag prevents further state writes.
+
+Player store extended with:
+- `postBattleRefreshNeeded: boolean` + `setPostBattleRefreshNeeded(needed)`
+- `pendingLevelUpLevel: number | null` + `setPendingLevelUpLevel(level)`
+- `clearState()` now also clears the two new fields.
+
+New `src/modules/player/components/LevelUpBanner.tsx` — dismissable inline banner (success-token styling). No new toast infrastructure (`sonner` is installed but no `<Toaster />` exists yet, and wiring one is a broader polish concern beyond the Phase 8 scope).
+
+Battle cleanup on lobby return: the hoisted `useBattleConnection` effect cleanup (shell unmount when leaving `/battle/*`) already handles battle-store reset, hub disconnect, and `clearSuppressedOpponent`. Session-scoped chat ownership (SessionShell) is untouched.
+
+Re-queue: `QueueButton` behavior is unchanged. Once post-battle refresh completes and the user closes the banner / allocates stats, re-entering matchmaking works via the existing flow.
+
+### P8.3: Lobby stat allocation (post-level-up)
+
+`StatPointAllocator.tsx` was a stateless presentation primitive with no business logic that lived in `modules/onboarding/components/`. To avoid a second independent implementation on the lobby side, it was moved to `src/ui/components/StatPointAllocator.tsx`. `InitialStatsScreen` now imports it from `@/ui/components/StatPointAllocator` — behaviour unchanged. Moving the primitive was the minimum touch needed to enable reuse; no other onboarding code was modified.
+
+New `src/modules/player/components/StatAllocationPanel.tsx`:
+- Renders nothing unless `character.unspentPoints > 0` (non-blocking per the requirements hard-gate table).
+- Same mutation contract as the onboarding screen: `POST /api/v1/character/stats` with `expectedRevision`, 409 → refetch game state + reset draft allocation, success → local character update + `invalidateQueries(gameKeys.state())`.
+- Differences vs. the onboarding screen: card-style container (fits lobby layout), "Reset" secondary action, clears `pendingLevelUpLevel` when all points are spent.
+- Lobby screen wires it right under `CharacterSummary` with the `LevelUpBanner` above.
+
+### Files created (6)
+
+- `src/modules/battle/screens/BattleResultScreen.tsx`
+- `src/modules/battle/result-feed.ts` — `useResultBattleFeed(battleId)` merged-feed hook
+- `src/modules/player/post-battle-refresh.ts` — `usePostBattleRefresh()` DEC-5 sequence
+- `src/modules/player/components/StatAllocationPanel.tsx` — lobby post-level-up allocation
+- `src/modules/player/components/LevelUpBanner.tsx` — dismissable level-up surface
+- `src/ui/components/StatPointAllocator.tsx` — moved from onboarding
+
+### Files modified (8)
+
+- `src/app/router.tsx` — `BattleResultScreen` replaces `BattleResultPlaceholder`
+- `src/app/shells/BattleShell.tsx` — hosts `useBattleConnection(battleId)` via a small `BattleConnectionHost` child
+- `src/app/guards/BattleGuard.tsx` — REQ-P1 hard-gate handling (keep `/result` reachable while `phase === 'Ended'`)
+- `src/modules/battle/screens/BattleScreen.tsx` — removed the inline `useBattleConnection` call (now owned by the shell)
+- `src/modules/battle/components/NarrationFeed.tsx` — added optional `entries` prop and `fill` layout flag
+- `src/modules/onboarding/screens/InitialStatsScreen.tsx` — import path update for the moved `StatPointAllocator`
+- `src/modules/player/store.ts` — added `postBattleRefreshNeeded`, `pendingLevelUpLevel`, plus setters and clear-state expansion
+- `src/modules/player/screens/LobbyScreen.tsx` — mounts `usePostBattleRefresh()`, renders `LevelUpBanner` + `StatAllocationPanel`
+
+### Files deleted (2)
+
+- `src/modules/onboarding/components/StatPointAllocator.tsx` — moved to `src/ui/components/`
+- `src/app/route-placeholders.tsx` — `BattleResultPlaceholder` no longer used
+
+### Out of scope (preserved)
+
+- No Phase 9 polish: no `<Toaster />` wiring, no Framer Motion entrance animations on the result screen, no deeper error-branch UI, no broader lobby redesign
+- No new npm dependencies (`sonner` is available for Phase 9 should a toast system be needed)
+- No changes to matchmaking, chat, auth, onboarding logic (only the `StatPointAllocator` import path changed)
+- No broad battle-history feature, no notification centre
+- No bypass of the existing player store / game-state query pattern
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- `npx vitest run`: 48 tests pass across 4 files (no regressions from the Phase 7 cleanup patch)
+- `npx vite build`: succeeds (572 kB bundle; pre-existing size warning unchanged)
+- Manual browser validation was not performed (no backend available in this environment); all wiring is type-checked and follows the existing transport/store/query patterns verified by earlier batches
+
+### Batch 9 review-ready checklist
+
+- [x] `/battle/:battleId/result` renders a production result screen with outcome + merged narration feed
+- [x] Outcome derivation reuses existing `deriveOutcome` (no parallel model)
+- [x] Full narration feed deduplicated by `key` across store and HTTP sources
+- [x] "Finish Battle" returns to `/lobby` and triggers the post-battle refresh sequence
+- [x] Lobby `usePostBattleRefresh` refetches game state and retries once after 3s if XP/level unchanged (DEC-5)
+- [x] Level-up detected → persistent lobby banner surfaces the new level
+- [x] Lobby stat allocation uses the same `/api/v1/character/stats` endpoint and revision pattern as onboarding, rendering only when `unspentPoints > 0`
+- [x] `StatPointAllocator` shared between onboarding and lobby (moved to `ui/components/`)
+- [x] Battle hub disconnects + battle store resets when the player leaves the `/battle/*` subtree
+- [x] Session-scoped chat ownership (`SessionShell`) untouched; re-queue works via the existing flow
+- [x] No Phase 9 hardening, no unrelated refactors, no architecture drift
+
+---
+
 ## Batch 8 — Phase 7: Battle UI Cleanup Patch
 
 **Date:** 2026-04-17

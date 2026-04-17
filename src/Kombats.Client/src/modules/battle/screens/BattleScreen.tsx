@@ -1,5 +1,4 @@
-import { useParams } from 'react-router';
-import { useBattleConnection, useBattlePhase } from '../hooks';
+import { useBattlePhase } from '../hooks';
 import { useBattleStore } from '../store';
 import { BattleHud } from '../components/BattleHud';
 import { ZoneSelector } from '../components/ZoneSelector';
@@ -8,18 +7,12 @@ import { NarrationFeed } from '../components/NarrationFeed';
 import { BattleEndOverlay } from '../components/BattleEndOverlay';
 import { Spinner } from '@/ui/components/Spinner';
 
+/**
+ * Battle lifecycle (connect/disconnect, store reset) is owned by
+ * `BattleShell` so the battle store survives navigation between
+ * `/battle/:battleId` and `/battle/:battleId/result` (Phase 8 hand-off).
+ */
 export function BattleScreen() {
-  const { battleId } = useParams<{ battleId: string }>();
-
-  if (!battleId) {
-    return <p className="p-6 text-error">Missing battle ID.</p>;
-  }
-
-  return <BattleScreenInner battleId={battleId} />;
-}
-
-function BattleScreenInner({ battleId }: { battleId: string }) {
-  useBattleConnection(battleId);
   const phase = useBattlePhase();
   const lastError = useBattleStore((s) => s.lastError);
 

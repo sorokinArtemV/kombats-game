@@ -14,7 +14,7 @@ import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScr
 import { LobbyScreen } from '@/modules/player/screens/LobbyScreen';
 import { SearchingScreen } from '@/modules/matchmaking/screens/SearchingScreen';
 import { BattleScreen } from '@/modules/battle/screens/BattleScreen';
-import { BattleResultPlaceholder } from './route-placeholders';
+import { BattleResultScreen } from '@/modules/battle/screens/BattleResultScreen';
 
 export const router = createBrowserRouter([
   // Unauthenticated landing
@@ -63,7 +63,7 @@ export const router = createBrowserRouter([
                           { path: '/battle/:battleId', element: <BattleScreen /> },
                           {
                             path: '/battle/:battleId/result',
-                            element: <BattleResultPlaceholder />,
+                            element: <BattleResultScreen />,
                           },
                         ],
                       },

@@ -143,7 +143,13 @@
       "Bash(echo \"TEST_EXIT=$?\")",
       "Bash(echo \"BUILD_EXIT=$?\")",
       "Bash(echo \"---tscEXIT $?\")",
-      "Bash(echo \"---vitestEXIT $?\")"
+      "Bash(echo \"---vitestEXIT $?\")",
+      "Bash(git -C D:/1/tmp/kombats-game diff --stat HEAD~1 HEAD)",
+      "Bash(git -C D:/1/tmp/kombats-game status --short)",
+      "Bash(echo \"TSC=$?\")",
+      "Bash(echo \"LINT=$?\")",
+      "Bash(echo \"TEST=$?\")",
+      "Bash(echo \"BUILD=$?\")"
     ]
   }
 }

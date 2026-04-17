@@ -4,7 +4,7 @@ import { gameKeys } from '@/app/query-client';
 import * as characterApi from '@/transport/http/endpoints/character';
 import { usePlayerStore } from '@/modules/player/store';
 import { Button } from '@/ui/components/Button';
-import { StatPointAllocator } from '../components/StatPointAllocator';
+import { StatPointAllocator } from '@/ui/components/StatPointAllocator';
 import type { ApiError } from '@/types/api';
 
 type StatKey = 'strength' | 'agility' | 'intuition' | 'vitality';

@@ -7,8 +7,19 @@ import type {
   FeedEntryTone,
 } from '@/types/battle';
 
-export function NarrationFeed() {
-  const entries = useBattleFeed();
+interface NarrationFeedProps {
+  /**
+   * Optional override. If omitted, entries are read from the battle store.
+   * The result screen passes a merged (store + HTTP) deduplicated list.
+   */
+  entries?: readonly BattleFeedEntry[];
+  /** Allow the container to grow to fill available space (e.g. on result screen). */
+  fill?: boolean;
+}
+
+export function NarrationFeed({ entries: entriesProp, fill = false }: NarrationFeedProps = {}) {
+  const storeEntries = useBattleFeed();
+  const entries = entriesProp ?? storeEntries;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // Key auto-scroll off the tail identity (key + sequence) rather than only
   // length: robust against future updates that replace the tail entry without
@@ -35,7 +46,10 @@ export function NarrationFeed() {
       ) : (
         <div
           ref={scrollRef}
-          className="flex max-h-64 flex-col gap-1 overflow-y-auto pr-1"
+          className={clsx(
+            'flex flex-col gap-1 overflow-y-auto pr-1',
+            fill ? 'flex-1 min-h-0' : 'max-h-64',
+          )}
         >
           {entries.map((entry) => (
             <FeedRow key={entry.key} entry={entry} />

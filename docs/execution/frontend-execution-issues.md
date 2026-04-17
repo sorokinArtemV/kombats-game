@@ -2,6 +2,108 @@
 
 ---
 
+## Batch 9 — Phase 8: Post-battle / result flow — Cleanup Patch
+
+### Resolved
+
+#### FEI-074: "Finish Battle" bounced user back to `/battle/:id` via BattleGuard
+**Severity:** Medium
+**Status:** Resolved in Phase 8 cleanup patch
+
+After clicking "Finish Battle", the `BattleShell` cleanup reset the battle store, but `queueStatus` in the player store was still `Matched + battleId` until the game-state refetch completed. The guard's `queueStatus.status === 'Matched'` branch therefore redirected `/lobby` back to `/battle/:id` until the server reconciliation arrived.
+
+**Resolution:** `BattleResultScreen.handleFinish` now optimistically clears the queue status (`setQueueStatus(null)`) before navigating. The guard no longer sees a stale `Matched` status that contradicts the just-ended battle. `usePostBattleRefresh` still reconciles the authoritative state from the server on lobby arrival. BattleGuard itself was not changed.
+
+#### FEI-075: DEC-5 retry fired on every post-battle return
+**Severity:** Medium
+**Status:** Resolved in Phase 8 cleanup patch
+
+`usePostBattleRefresh` read the "post" snapshot from the player store immediately after `refetchQueries`. Because Zustand is updated in a later React commit via `useGameState`'s effect, the read was still the pre-refetch value and the "unchanged?" check always returned true. The 3-second retry path therefore fired every time the player returned from a battle.
+
+**Resolution:** Extracted `comparePlayerProgress` + `snapshotCharacter` into `player-progress.ts`. `usePostBattleRefresh` now reads the authoritative post-refetch snapshot directly from the query cache via `queryClient.getQueryData<GameStateResponse>(gameKeys.state())`, which has the just-written data and does not depend on the Zustand sync commit. Retry fires only when xp/level/unspent-points are all unchanged. Behavior unit-tested in `player-progress.test.ts`.
+
+#### FEI-076: BattleResultScreen rendered result content for non-Ended phases
+**Severity:** Low
+**Status:** Resolved in Phase 8 cleanup patch
+
+Readiness check previously accepted `Ended | Resolving | TurnOpen | ArenaOpen | Submitted`. Mid-battle access could render a fake "Draw" because `endReason`/`winnerPlayerId` were still null.
+
+**Resolution:** Readiness is now `phase === 'Ended'` exclusively. All other phases show the existing loading spinner until `BattleEnded` populates the store.
+
+#### FEI-077: URL vs store battleId mismatch silently rendered inconsistent data
+**Severity:** Low
+**Status:** Resolved in Phase 8 cleanup patch
+
+The result banner used battle-store data while the feed was fetched by URL `battleId`. If the two diverged (stale URL, cross-wired navigation), the page would render outcome text from battle A with feed entries for battle B.
+
+**Resolution:** Explicit mismatch guard in `BattleResultScreen`: when the battle store holds a non-null `battleId` that differs from the URL, render `<Navigate to="/lobby" replace />`. When the store's `battleId` is null (pre-snapshot window) the guard is skipped so the spinner state still works.
+
+#### FEI-078: Missing pure-logic tests for feed merge and post-battle progress comparator
+**Severity:** Low
+**Status:** Resolved in Phase 8 cleanup patch
+
+Reviewer flagged that the result-feed merge/dedup/sort logic and the post-battle refresh comparator / level-up detection were pure and worth testing. Merge logic was embedded in `result-feed.ts` alongside transport imports, which blocked clean unit testing (missing Vite env vars at test load).
+
+**Resolution:** Extracted `mergeFeeds` to `feed-merge.ts` and `comparePlayerProgress` + `snapshotCharacter` to `player-progress.ts`. Added `feed-merge.test.ts` (7 tests) and `player-progress.test.ts` (10 tests). Vitest total 48 → 65. No new testing framework.
+
+### Open
+
+No open frontend-specific issues from the Phase 8 cleanup patch. The Phase 8 base is clean for Phase 9 hardening.
+
+### Deviations
+
+No new deviations introduced by this patch. FEI-DEV-072 (level-up banner instead of toast) and FEI-DEV-073 (StatPointAllocator moved) remain accepted Phase 8 deviations.
+
+### Deferred
+
+No new deferrals. FEI-055 and FEI-056 remain deferred to hardening as before.
+
+---
+
+## Batch 9 — Phase 8: Post-battle / result flow
+
+### Resolved
+
+#### FEI-070: Battle store reset on navigation to `/result` wiped outcome + feed
+**Severity:** Medium
+**Status:** Resolved in Phase 8
+
+`BattleScreen.tsx` owned the `useBattleConnection(battleId)` call; its effect cleanup resets the battle store. Navigating from `/battle/:battleId` to `/battle/:battleId/result` unmounted `BattleScreen`, which cleared `phase=Ended`, `endReason`, `winnerPlayerId`, and the live feed — leaving the result screen with no data to render.
+
+**Resolution:** Hoisted `useBattleConnection(battleId)` to `BattleShell`. The shell wraps both the live and result routes, so the store survives the hand-off. Cleanup still runs correctly when leaving `/battle/*`. No Phase 7 behaviour change inside the live battle screen.
+
+#### FEI-071: BattleGuard could redirect away from `/result` if queueStatus cleared
+**Severity:** Low
+**Status:** Resolved in Phase 8
+
+If the server update arriving order caused `queueStatus` to clear before the player dismissed the result screen, the previous `BattleGuard` would redirect from `/battle/:id/result` back to `/lobby`, violating REQ-P1 ("Result screen stays until player explicitly dismisses").
+
+**Resolution:** Guard now reads the battle store `phase` and `battleId`. When `phase === 'Ended'` for the current battle, the guard does not force navigation back onto the live battle path and still allows the `/result` path when `queueStatus` is absent.
+
+### Open
+
+No open frontend-specific issues from Phase 8.
+
+### Deviations
+
+#### FEI-DEV-072: Level-up surfaced via inline banner, not a toast
+**Severity:** Informational
+**Status:** Accepted for Phase 8
+
+The requirements and plan describe a "level-up notification". `sonner` is installed but a `<Toaster />` has never been wired at the app root, and doing so is broader notification-infrastructure work explicitly out of scope for this batch. Phase 8 instead surfaces the level-up via a dismissable inline banner (`LevelUpBanner`) rendered above the character summary. The banner reads from a new player-store field (`pendingLevelUpLevel`) and clears either on user dismissal or automatically when stat allocation reduces `unspentPoints` to zero. If Phase 9 chooses to adopt toasts as general infrastructure, this banner can coexist or be replaced at that point.
+
+#### FEI-DEV-073: StatPointAllocator moved from onboarding to ui/components/
+**Severity:** Informational
+**Status:** Accepted for Phase 8
+
+Phase 8 requires stat allocation from the lobby with "not a second independent implementation". `StatPointAllocator` was a stateless presentation primitive with no business logic that happened to live under `modules/onboarding/components/`. The minimum touch that enables reuse from the lobby without a cross-module import was to move it to `src/ui/components/` (where all other stateless primitives live) and update the single onboarding import. No logic changes; onboarding initial-stats flow unchanged.
+
+### Deferred
+
+No new deferrals. FEI-055 and FEI-056 remain deferred to hardening as before.
+
+---
+
 ## Batch 8 — Phase 7: Battle UI Cleanup Patch
 
 ### Resolved
