@@ -2,7 +2,8 @@ import { createBrowserRouter } from 'react-router';
 import { AuthCallback } from '@/modules/auth/AuthCallback';
 import { UnauthenticatedShell } from './shells/UnauthenticatedShell';
 import { OnboardingShell } from './shells/OnboardingShell';
-import { AuthenticatedShell } from './shells/AuthenticatedShell';
+import { SessionShell } from './shells/SessionShell';
+import { LobbyShell } from './shells/LobbyShell';
 import { BattleShell } from './shells/BattleShell';
 import { AuthGuard } from './guards/AuthGuard';
 import { OnboardingGuard } from './guards/OnboardingGuard';
@@ -10,12 +11,10 @@ import { BattleGuard } from './guards/BattleGuard';
 import { GameStateLoader } from './GameStateLoader';
 import { NameSelectionScreen } from '@/modules/onboarding/screens/NameSelectionScreen';
 import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScreen';
-import {
-  LobbyPlaceholder,
-  MatchmakingPlaceholder,
-  BattlePlaceholder,
-  BattleResultPlaceholder,
-} from './route-placeholders';
+import { LobbyScreen } from '@/modules/player/screens/LobbyScreen';
+import { SearchingScreen } from '@/modules/matchmaking/screens/SearchingScreen';
+import { BattleScreen } from '@/modules/battle/screens/BattleScreen';
+import { BattleResultPlaceholder } from './route-placeholders';
 
 export const router = createBrowserRouter([
   // Unauthenticated landing
@@ -49,25 +48,34 @@ export const router = createBrowserRouter([
                 ],
               },
 
-              // Post-onboarding routes — guarded by BattleGuard
+              // Post-onboarding: session shell owns chat connection lifecycle
+              // above the BattleGuard split so it survives lobby ↔ battle nav
               {
-                element: <BattleGuard />,
+                element: <SessionShell />,
                 children: [
-                  // Battle routes (only reachable when matched)
                   {
-                    element: <BattleShell />,
+                    element: <BattleGuard />,
                     children: [
-                      { path: '/battle/:battleId', element: <BattlePlaceholder /> },
-                      { path: '/battle/:battleId/result', element: <BattleResultPlaceholder /> },
-                    ],
-                  },
+                      // Battle routes (only reachable when matched)
+                      {
+                        element: <BattleShell />,
+                        children: [
+                          { path: '/battle/:battleId', element: <BattleScreen /> },
+                          {
+                            path: '/battle/:battleId/result',
+                            element: <BattleResultPlaceholder />,
+                          },
+                        ],
+                      },
 
-                  // Lobby + matchmaking (normal authenticated flow)
-                  {
-                    element: <AuthenticatedShell />,
-                    children: [
-                      { path: '/lobby', element: <LobbyPlaceholder /> },
-                      { path: '/matchmaking', element: <MatchmakingPlaceholder /> },
+                      // Lobby + matchmaking (normal authenticated flow)
+                      {
+                        element: <LobbyShell />,
+                        children: [
+                          { path: '/lobby', element: <LobbyScreen /> },
+                          { path: '/matchmaking', element: <SearchingScreen /> },
+                        ],
+                      },
                     ],
                   },
                 ],

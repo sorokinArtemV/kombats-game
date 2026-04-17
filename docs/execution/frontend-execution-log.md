@@ -583,3 +583,857 @@ The effect depended on the entire mutation object (unstable reference), causing 
 - `npx eslint .`: passes (zero errors)
 - `npm run dev`: starts on port 3000
 - Auto-onboard failure: error shown with retry button; retry resets state and re-attempts cleanly
+
+---
+
+## Batch 5A — Phase 4 (Part 1): Lobby Shell + Chat + Presence
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+### P4.1: Lobby shell and character summary
+
+**Status:** Done
+
+- `src/modules/player/components/CharacterSummary.tsx` — Displays character name, level, XP progress bar, all 4 stats (Str/Agi/Int/Vit), wins/losses from player card, and unspent points badge.
+- `src/modules/player/screens/LobbyScreen.tsx` — Composes CharacterSummary in lobby layout. Queue button placeholder for Phase 5.
+- `src/ui/components/Badge.tsx` — Variants: default, accent, success, warning, error. Used for unspent points indicator.
+- `src/ui/components/ProgressBar.tsx` — Configurable progress bar with label and text display. Used for XP bar.
+- Own-profile win/loss workaround (DEC-3): `CharacterSummary` fetches the player card using `userIdentityId` from auth store via `GET /api/v1/players/{id}/card` (TanStack Query, 30s staleTime).
+- Router updated: `/lobby` now renders `LobbyScreen` instead of `LobbyPlaceholder`. Placeholder removed from `route-placeholders.tsx`.
+
+### P4.2: Chat Zustand store
+
+**Status:** Done
+
+- `src/modules/chat/store.ts` — Zustand store with full state shape:
+  - `connectionState`, `globalConversationId`, `globalMessages[]`, `directConversations` Map, `onlinePlayers` Map, `onlineCount`, `rateLimitState`, `suppressedOpponentId`, `lastError`
+  - Actions: `setConnectionState()`, `setGlobalState()`, `addGlobalMessage()`, `addOnlinePlayer()`, `removeOnlinePlayer()`, `handleChatError()`, `handleConnectionLost()`, `clearRateLimit()`, `clearStore()`
+  - Message deduplication by `messageId`
+  - Global messages capped at 500 (oldest trimmed on overflow)
+  - Rate limit state tracks `isLimited`, `retryAfterMs`, `limitedAt`
+  - DM state shape ready for P4.6 (Map structure, suppressedOpponentId field) but not actively wired
+
+### P4.3: Chat connection hook
+
+**Status:** Done
+
+- `src/modules/chat/hooks.ts` — Hooks:
+  - `useChatConnection()`: Session-scoped lifecycle hook. On mount: connects ChatHubManager, calls `JoinGlobalChat()`, populates store with messages + online players. On unmount: disconnects cleanly + clears store.
+  - Event callbacks registered: `GlobalMessageReceived` → `addGlobalMessage`, `PlayerOnline` → `addOnlinePlayer`, `PlayerOffline` → `removeOnlinePlayer`, `ChatError` → `handleChatError`, `ChatConnectionLost` → `handleConnectionLost`, `onConnectionStateChanged` → `setConnectionState` + rejoin on reconnect.
+  - Reconnection: when connection state transitions to `connected` and `globalConversationId` is already set (reconnect), `joinGlobalChat()` is called again to resync state.
+  - Selectors: `useGlobalMessages()`, `useOnlinePlayers()`, `useOnlineCount()`, `useChatConnectionState()`, `useChatRateLimitState()`
+- `src/app/shells/AuthenticatedShell.tsx` — Updated with chat sidebar UI. Note: chat connection was initially placed here, which was incorrect — `AuthenticatedShell` is a sibling of `BattleShell`, not an ancestor. Fixed in Batch 5A cleanup patch (see below).
+
+### P4.4: Global chat panel
+
+**Status:** Done
+
+- `src/modules/chat/components/ChatPanel.tsx` — Scrollable global message feed with auto-scroll on new messages. Each message shows sender name (accent colored), content, and timestamp (HH:mm via date-fns). Connection indicator in header.
+- `src/modules/chat/components/MessageInput.tsx` — Text area with 500-char limit, character counter, send button. Disabled when disconnected or rate-limited. Enter to send (shift+enter for newline). Sends via `ChatHubManager.sendGlobalMessage()`.
+- `src/ui/components/ConnectionIndicator.tsx` — Colored dot + label for connection state (connected/connecting/reconnecting/disconnected).
+- Integrated into `AuthenticatedShell.tsx` sidebar.
+
+Design note: Scroll-lock with "new messages" indicator was initially implemented but removed due to React 19 strict lint rules (`react-hooks/set-state-in-effect`, `react-hooks/refs`). Current behavior always auto-scrolls to latest. Scroll-lock refinement deferred to P4.8 polish.
+
+### P4.5: Online players list and presence
+
+**Status:** Done
+
+- `src/modules/chat/components/OnlinePlayersList.tsx` — Reads from chat store `onlinePlayers` Map and `onlineCount`. Renders player list with avatar initials and display names. Online count in header.
+- `src/ui/components/Avatar.tsx` — Initial-based avatar placeholder with sm/md/lg sizes.
+- Player actions (View Profile, Send Message) intentionally deferred to P4.6/P4.7 per batch scope.
+- Integrated into `AuthenticatedShell.tsx` sidebar below chat panel.
+
+### Files created (12 new, 3 modified, 1 deleted)
+
+New files:
+- `src/ui/components/Badge.tsx`
+- `src/ui/components/ProgressBar.tsx`
+- `src/ui/components/Avatar.tsx`
+- `src/ui/components/ConnectionIndicator.tsx`
+- `src/modules/chat/store.ts`
+- `src/modules/chat/hooks.ts`
+- `src/modules/chat/components/ChatPanel.tsx`
+- `src/modules/chat/components/MessageInput.tsx`
+- `src/modules/chat/components/OnlinePlayersList.tsx`
+- `src/modules/player/components/CharacterSummary.tsx`
+- `src/modules/player/screens/LobbyScreen.tsx`
+
+Modified:
+- `src/app/shells/AuthenticatedShell.tsx` — Sidebar with ChatPanel and OnlinePlayersList (chat connection was mistakenly placed here; fixed in cleanup patch)
+- `src/app/router.tsx` — Lobby route wired to LobbyScreen
+- `src/app/route-placeholders.tsx` — Removed LobbyPlaceholder
+
+Deleted:
+- `src/modules/chat/components/.gitkeep`
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint .`: passes (zero errors, zero warnings on changed files)
+- Lobby renders character summary with name, level, XP bar, stats, wins/losses, unspent points badge
+- Chat store implements full state shape with deduplication and rate limit handling
+- Chat connection hook initially wired at AuthenticatedShell level (incorrect — fixed in cleanup patch)
+- Global chat panel renders messages with send functionality
+- Online players list populates from JoinGlobalChat response and updates via PlayerOnline/PlayerOffline events
+- Note: session-scoped persistence claim was incorrect in initial implementation; AuthenticatedShell was a sibling of BattleShell, not an ancestor. Fixed in cleanup patch.
+
+---
+
+## Batch 5A — Phase 4 (Part 1) Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Reviewer-identified fixes applied before starting Batch 5B / Phase 4 part 2.
+
+### Fix 1: Session-scoped chat lifecycle (blocking)
+
+`useChatConnection()` was mounted in `AuthenticatedShell`, which is a sibling of `BattleShell` under `BattleGuard` — not an ancestor of both. Navigating from lobby to battle would unmount `AuthenticatedShell` and disconnect `/chathub`.
+
+**Resolution:** Introduced `src/app/shells/SessionShell.tsx` — a minimal layout route (`<Outlet />`) that calls `useChatConnection()`. Inserted into the route tree above `BattleGuard`:
+
+```
+OnboardingGuard → SessionShell (chat owner) → BattleGuard → { BattleShell | AuthenticatedShell }
+```
+
+`AuthenticatedShell` retains the chat sidebar UI (ChatPanel, OnlinePlayersList) but no longer owns the connection lifecycle. `SessionShell` is never unmounted during lobby ↔ battle navigation.
+
+Corrected misleading claims in the Batch 5A log entry that stated the chat connection was "above the BattleGuard split" when it was not.
+
+### Fix 2: Lobby XP progress curve (blocking)
+
+`CharacterSummary` used `level * 100` (linear) and a misleading comment claiming it matched the backend. The backend `LevelingPolicyV1` uses a triangular progression: `BaseFactor × level × (level + 1)` with `BaseFactor = 50`.
+
+**Resolution:**
+- Created `src/modules/player/leveling.ts` with `xpToReachLevel(level)` and `levelProgress(level, totalXp)` helpers using the correct triangular formula.
+- `CharacterSummary` now shows XP progress within the current level band (current XP minus current threshold, out of the band width) instead of raw `totalXp` against an incorrect linear target.
+- Removed the incorrect `xpForNextLevel` function and its misleading comment.
+
+### Fix 3: Missing DM store actions (minor)
+
+Chat store state included `directConversations` and `suppressedOpponentId` but lacked the actions to operate on them.
+
+**Resolution:** Added `addDirectMessage(msg)`, `setSuppressedOpponent(playerId)`, and `clearSuppressedOpponent()` to the store. `addDirectMessage` implements deduplication by `messageId` and returns `{ suppressed: boolean }` based on `suppressedOpponentId` match. No DM UI or DM flow added — store-only.
+
+### Fix 4: onlineCount source-of-truth drift (minor)
+
+`setGlobalState()` used the server's `totalOnline` for `onlineCount`, but subsequent `addOnlinePlayer`/`removeOnlinePlayer` events reset it to `Map.size`. The two could drift.
+
+**Resolution:** `onlineCount` is now always derived from `onlinePlayers.size` in all actions including `setGlobalState()`. The `totalOnline` parameter was removed from `setGlobalState()`. Single consistent model: map size is the displayed count.
+
+### Fix 5: ChatPanel dead ref (minor)
+
+`scrollContainerRef` remained from the removed scroll-lock behavior but was never read.
+
+**Resolution:** Removed `scrollContainerRef` and the associated `ref={scrollContainerRef}` attribute. Also removed unused `clsx` import (only usage was wrapping a static string).
+
+### Fix 6: Self-render in OnlinePlayersList (minor)
+
+Reviewer flagged that the authenticated user may appear in their own online players list depending on backend `JoinGlobalChat` / `PlayerOnline` behavior. The chat contract (`OnlinePlayersResponse`) does not specify whether the joining player is included.
+
+**Resolution:** Documented as FEI-024 in execution issues for runtime verification. No speculative filter added — the correct behavior depends on what the backend actually sends, which cannot be determined from contracts alone.
+
+### Files created (2 new, 6 modified)
+
+New files:
+- `src/app/shells/SessionShell.tsx`
+- `src/modules/player/leveling.ts`
+
+Modified:
+- `src/app/router.tsx` — Inserted SessionShell above BattleGuard
+- `src/app/shells/AuthenticatedShell.tsx` — Removed useChatConnection() (connection now in SessionShell)
+- `src/modules/chat/store.ts` — Added addDirectMessage, setSuppressedOpponent, clearSuppressedOpponent; fixed onlineCount derivation
+- `src/modules/chat/hooks.ts` — Updated setGlobalState call (removed totalOnline arg)
+- `src/modules/chat/components/ChatPanel.tsx` — Removed dead scrollContainerRef and unused clsx import
+- `src/modules/player/components/CharacterSummary.tsx` — Replaced linear XP formula with leveling.ts helper
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Route hierarchy: `SessionShell` is a strict ancestor of both `BattleShell` and `LobbyShell` (formerly `AuthenticatedShell`) — lobby ↔ battle navigation does not unmount the chat connection owner
+- XP progress bar now uses triangular progression matching backend `LevelingPolicyV1`
+- Chat store has complete action surface for upcoming P4.6 DM work
+- `onlineCount` derived consistently from `Map.size` in all code paths
+
+---
+
+## Batch 5A — Phase 4 (Part 1) Final Cleanup
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Non-blocking cleanup items identified by reviewer, applied before Batch 5B.
+
+### Fix 1: Remove dead `mountedRef` from `useChatConnection`
+
+`mountedRef` was a leftover guard that did not protect against anything meaningful. Removed the ref, its guard check, and its reset in the cleanup function.
+
+### Fix 2: Record `BASE_FACTOR` drift risk
+
+Frontend `leveling.ts` hardcodes `BASE_FACTOR = 50` matching backend default. Backend factor is configurable. Documented as FEI-032 in execution issues for hardening-phase follow-up. No code change — documentation only.
+
+### Fix 3: Rename `AuthenticatedShell` → `LobbyShell`
+
+After the session split, `AuthenticatedShell` only represented lobby/matchmaking chrome, not the authenticated session boundary. Renamed file, export, and all references (2 files total).
+
+### Fix 4: DM reconnect rehydration deferred
+
+Documented as FEI-033 in execution issues as a Batch 5B consideration. No code change.
+
+### Fix 5: Self-filtering in online players NOT implemented
+
+FEI-024 remains deferred to runtime verification. No speculative fix added.
+
+### Files modified (3 modified, 1 renamed)
+
+Renamed:
+- `src/app/shells/AuthenticatedShell.tsx` → `src/app/shells/LobbyShell.tsx` (export renamed to `LobbyShell`)
+
+Modified:
+- `src/app/router.tsx` — Updated import and usage from `AuthenticatedShell` to `LobbyShell`
+- `src/modules/chat/hooks.ts` — Removed dead `mountedRef` and `useRef` import
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Route hierarchy unchanged: `SessionShell → BattleGuard → { BattleShell | LobbyShell }`
+- Chat connection lifecycle unchanged — only dead code removed
+
+---
+
+## Batch 5B — Phase 4 (Part 2): DM + Player Card + Chat Resilience
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+### P4.6: Direct messaging
+
+**Status:** Done
+
+- `src/modules/chat/components/ConversationList.tsx` — Fetches DM conversation list via `GET /api/v1/chat/conversations` (TanStack Query, 10s staleTime). Filters to Direct type, excludes suppressed opponent, sorts by most recent message. Each entry shows avatar, display name, and timestamp.
+- `src/modules/chat/components/DirectMessagePanel.tsx` — Full DM panel with message history (fetched via `GET /api/v1/chat/direct/{otherPlayerId}/messages`), real-time incoming messages merged with HTTP history, deduplication by `messageId`, auto-scroll, "Load older messages" button when `hasMore` is true. Header with back button, avatar, and profile link.
+- `src/modules/chat/components/MessageInput.tsx` — Extended with `mode` prop (`'global'` | `'direct'`) and `recipientPlayerId` prop. In DM mode, calls `chatHubManager.sendDirectMessage()` instead of `sendGlobalMessage()`. Added `onMessageSent` callback.
+- `src/modules/chat/components/ChatSidebar.tsx` — Tabbed sidebar replacing the previous stacked ChatPanel + OnlinePlayersList layout. Three tabs: Global (ChatPanel), Messages (ConversationList/DirectMessagePanel), Players (OnlinePlayersList). Manages active DM state and player card overlay.
+- `src/modules/chat/hooks.ts` — Wired `onDirectMessageReceived` event handler to `chatStore.addDirectMessage()`. Added `useDirectConversations()` and `useChatLastError()` selector hooks.
+
+### P4.7: Player card
+
+**Status:** Done
+
+- `src/modules/player/components/PlayerCard.tsx` — Overlay sheet displaying player profile: avatar, display name, level, 4 stats (Str/Agi/Int/Vit), wins/losses. Loading and error (not-found) states handled. Fetched via TanStack Query with 60s staleTime.
+- `src/modules/player/hooks.ts` — Added `usePlayerCard(playerId, enabled)` hook wrapping TanStack Query for `GET /api/v1/players/{playerId}/card`.
+- `src/ui/components/Sheet.tsx` — Slide-in panel wrapping `@radix-ui/react-dialog`. Used for player card and potentially future DM/conversation overlays. Supports title, close button, and flexible content area.
+- Integration: PlayerCard accessible from OnlinePlayersList "Profile" action and from DM panel header.
+
+### P4.8: Chat error and reconnection handling
+
+**Status:** Done
+
+- `src/modules/chat/components/ChatErrorDisplay.tsx` — Displays non-rate-limit `ChatError` codes as a banner. Maps all error codes to readable messages: `rate_limited` (handled by MessageInput), `message_too_long`, `message_empty`, `recipient_not_found`, `not_eligible`, `service_unavailable`.
+- `src/modules/chat/hooks.ts` — On reconnect (`connected` state after prior connection), clears non-rate-limit `lastError` so stale error banners disappear. Global chat resync via `joinGlobalChat()` was already wired in Batch 5A.
+- DM reconnect rehydration (FEI-033): DM messages received during brief disconnects are preserved in the store from real-time events. On reconnect, the DM panel refetches history via TanStack Query when opened, which merges with any real-time messages already in the store. This provides coherent DM state without a custom rehydration mechanism.
+- `src/modules/chat/components/OnlinePlayersList.tsx` — Updated with `onSendMessage` and `onViewProfile` callback props. Hover reveals "Profile" and "DM" action buttons per player.
+
+### Files created (6 new)
+
+- `src/ui/components/Sheet.tsx`
+- `src/modules/player/components/PlayerCard.tsx`
+- `src/modules/chat/components/ChatSidebar.tsx`
+- `src/modules/chat/components/ConversationList.tsx`
+- `src/modules/chat/components/DirectMessagePanel.tsx`
+- `src/modules/chat/components/ChatErrorDisplay.tsx`
+
+### Files modified (5 modified)
+
+- `src/modules/chat/hooks.ts` — Wired DirectMessageReceived, added selector hooks, reconnect error clearing
+- `src/modules/chat/components/MessageInput.tsx` — Added DM mode/recipientPlayerId/onMessageSent props
+- `src/modules/chat/components/OnlinePlayersList.tsx` — Added action callbacks (onSendMessage, onViewProfile)
+- `src/modules/player/hooks.ts` — Added usePlayerCard() hook
+- `src/app/shells/LobbyShell.tsx` — Replaced stacked ChatPanel+OnlinePlayersList with tabbed ChatSidebar
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- DM conversations listable via ConversationList with server data
+- DM history loads via HTTP, merges with real-time messages, deduplicates by messageId
+- DMs sendable via MessageInput in DM mode through chatHubManager.sendDirectMessage()
+- Incoming DMs received in real-time via DirectMessageReceived event wired in hooks
+- Player card displays via Sheet overlay with profile data from player card endpoint
+- Chat errors surfaced via ChatErrorDisplay banner with readable messages per error code
+- Reconnect clears stale errors; global chat resyncs via joinGlobalChat(); DM state coherent through store + TanStack Query merge
+- Tabbed sidebar provides Global/Messages/Players navigation
+- Session-scoped chat connection unchanged at SessionShell level
+
+---
+
+## Batch 5B — Phase 4 (Part 2) Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Reviewer-identified fixes applied before Phase 5.
+
+### Fix 1: Implement cursor-based DM pagination
+
+"Load older messages" button was visible but only triggered a refetch of the same page. Now uses proper `before`-cursor loading via `getDirectMessages(otherPlayerId, oldest.sentAt)`. Older messages accumulate in local state and merge with the initial page + real-time messages. `hasMore` tracks both the initial fetch and subsequent cursor loads.
+
+### Fix 2: Clear stale chat error banner
+
+`lastError` could persist for the whole session after a single transient error. Added two clear paths:
+- Dismiss button (`×`) on `ChatErrorDisplay`
+- Auto-clear on successful send in `MessageInput` (clears non-rate-limit errors)
+
+### Fix 3: Improve PlayerCard error wording
+
+All failures were shown as "Player not found". Now distinguishes 404 (→ "Player not found") from other errors (→ "Couldn't load profile") by checking `ApiError.status`.
+
+### Fix 4: DM reconnect backfill for open panels
+
+Open DM panels stayed stale after reconnect because only global chat was rehydrated. Added `useEffect` in `DirectMessagePanel` that invalidates the DM TanStack Query when `connectionState` transitions to `connected`, triggering a refetch that backfills missed messages.
+
+### Fix 5: Sender-echo assumption documented
+
+Documented as FEI-036 in execution issues. DM send flow depends on backend echoing the sent message back via `DirectMessageReceived` for the sender to see their own message. No speculative optimistic-send system added.
+
+### Fix 6: Sheet animation deferred
+
+`tailwindcss-animate` is not installed, so Radix `data-[state]` animation utilities are unavailable. Sheet remains static. Deferred to hardening phase if animation is desired.
+
+### Additional: MessageInput placeholder cleanup
+
+Removed redundant duplicate ternary branch in MessageInput placeholder (both `direct` and `global` mode had identical "Type a message..." text).
+
+### Files modified (5)
+
+- `src/modules/chat/components/DirectMessagePanel.tsx` — Cursor-based pagination + reconnect invalidation
+- `src/modules/chat/components/ChatErrorDisplay.tsx` — Added dismiss button
+- `src/modules/chat/components/MessageInput.tsx` — Clear lastError on successful send; cleaned placeholder
+- `src/modules/player/components/PlayerCard.tsx` — Distinguish 404 from general error
+- `src/ui/components/Sheet.tsx` — No functional change (reverted animation attempt)
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- No visible dead UI remains — "Load older messages" now loads via cursor
+- Error banner dismissible and auto-clears on successful send
+- PlayerCard shows contextual error messages
+- Open DM panels refetch on reconnect
+
+---
+
+## Batch 6 — Phase 5: Matchmaking
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+### P5.1: Matchmaking store and polling hook
+
+**Status:** Done
+
+- `src/modules/matchmaking/store.ts` — Zustand store with:
+  - State: `status` (`idle` | `searching` | `matched` | `battleTransition`), `matchId`, `battleId`, `matchState`, `searchStartedAt`, `consecutiveFailures`
+  - Actions: `setSearching()`, `updateFromPoll()`, `setBattleTransition()`, `setIdle()`, `incrementFailures()`, `resetFailures()`
+  - `updateFromPoll` handles: `Matched` + `battleId` → `battleTransition`, `Matched` without `battleId` → `matched` (waiting), `Idle`/`NotQueued` → `idle`, `Searching` → no change
+- `src/modules/matchmaking/hooks.ts` — Two hooks:
+  - `useMatchmaking()`: Exposes state + `joinQueue()` / `leaveQueue()` actions. `joinQueue` calls `POST /api/v1/queue/join`, handles 409 (already matched) by invalidating game state. `leaveQueue` calls `POST /api/v1/queue/leave`, handles race case where `leftQueue: false` + `battleId` means matched during leave → transitions to battle instead.
+  - `useMatchmakingPolling()`: Starts/stops the existing `matchmakingPoller` singleton based on matchmaking status. Polls every 2s when `searching` or `matched`. Updates both `matchmakingStore` and `playerStore.queueStatus` on each poll so `BattleGuard` can react to state changes.
+
+### P5.2: Matchmaking UI
+
+**Status:** Done
+
+- `src/modules/matchmaking/components/QueueButton.tsx` — "Find Battle" button for lobby. Disabled when not idle or while joining. Loading state during join.
+- `src/modules/matchmaking/components/SearchingIndicator.tsx` — Animated pulsing/ping visual indicator using Tailwind animations.
+- `src/modules/matchmaking/screens/SearchingScreen.tsx` — Full searching screen with:
+  - Searching indicator animation
+  - Status text: "Searching for opponent..." → "Opponent found — preparing battle..." → "Entering battle..."
+  - Elapsed time counter (mm:ss) during search
+  - Cancel button (disabled during cancellation)
+  - Connectivity warning when 3+ consecutive poll failures
+  - Calls `useMatchmakingPolling()` to manage poller lifecycle
+- `src/modules/player/screens/LobbyScreen.tsx` — Updated to include `QueueButton` below character summary
+- `src/app/router.tsx` — `/matchmaking` route now renders `SearchingScreen` instead of `MatchmakingPlaceholder`
+- `src/app/route-placeholders.tsx` — Removed `MatchmakingPlaceholder`
+
+State-driven routing preserved: `joinQueue` updates `playerStore.queueStatus` to `Searching`, which causes `BattleGuard` to redirect to `/matchmaking`. When matched with `battleId`, poll updates `playerStore.queueStatus` to `Matched`, which causes `BattleGuard` to redirect to `/battle/:battleId`.
+
+### P5.3: sendBeacon leave-on-close
+
+**Status:** Skipped (as planned)
+
+Per the task breakdown, P5.3 is explicitly marked NON-BLOCKING / SKIPPABLE. The `sendBeacon` approach requires sending an authenticated request, but `sendBeacon` does not support custom `Authorization` headers. The backend's 30-minute queue TTL serves as the fallback. Documented as deferred.
+
+### Files created (5 new)
+
+- `src/modules/matchmaking/store.ts`
+- `src/modules/matchmaking/hooks.ts`
+- `src/modules/matchmaking/components/QueueButton.tsx`
+- `src/modules/matchmaking/components/SearchingIndicator.tsx`
+- `src/modules/matchmaking/screens/SearchingScreen.tsx`
+
+### Files modified (3)
+
+- `src/modules/player/screens/LobbyScreen.tsx` — Added QueueButton
+- `src/app/router.tsx` — Wired SearchingScreen, removed MatchmakingPlaceholder import
+- `src/app/route-placeholders.tsx` — Removed MatchmakingPlaceholder
+
+### Files deleted (2)
+
+- `src/modules/matchmaking/components/.gitkeep`
+- `src/modules/matchmaking/screens/.gitkeep`
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Lobby shows "Find Battle" button below character summary
+- Join queue calls `POST /api/v1/queue/join` and sets store to searching
+- BattleGuard redirects to `/matchmaking` when `playerStore.queueStatus.status === 'Searching'`
+- SearchingScreen shows elapsed time, status text, and cancel button
+- Poller starts at 2s intervals when searching begins, stops on cancel/match/cleanup
+- Cancel calls `POST /api/v1/queue/leave`; handles race case where leave returns match info
+- When matched with `battleId`, poll updates player store → BattleGuard redirects to `/battle/:battleId`
+- Page refresh: GameStateLoader refetches game state → populates `queueStatus` → BattleGuard routes to correct screen
+- Session-scoped chat connection unaffected (SessionShell above BattleGuard)
+
+---
+
+## Batch 6 — Phase 5 Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Two coherence bugs identified while inspecting the existing Phase 5 wiring for continuity. Both are minimal additive fixes within Batch 6 scope.
+
+### Fix 1: BattleGuard bounced `Matched` without `battleId` to lobby (blocking)
+
+`BattleGuard` only recognized two active-queue states: `Matched + battleId` (→ `/battle/:battleId`) and `Searching` (→ `/matchmaking`). The transitional `Matched` state without a `battleId` (matchState `Queued` or `BattleCreateRequested`) fell through to the fallback, which redirected any visit to `/matchmaking` back to `/lobby`. This conflicted with `SearchingScreen`'s "Opponent found — preparing battle..." state.
+
+**Resolution:** `src/app/guards/BattleGuard.tsx` — extended the active-queue branch to cover `Matched && !battleId` alongside `Searching`. Both keep the user on `/matchmaking` until `battleId` arrives.
+
+### Fix 2: Matchmaking store not hydrated on page refresh during search (blocking)
+
+`GameStateLoader` re-fetches `/api/v1/game/state` on reload and populates `playerStore.queueStatus`, so `BattleGuard` correctly routes a reloading user with `status === 'Searching'` back to `/matchmaking`. But `useMatchmakingStore` resets to `idle` on each page load. `useMatchmakingPolling()` only starts the poller when matchmaking status is `searching` or `matched`, so after refresh the screen rendered with no polling, no elapsed timer, and no cancel button — a functional dead-end.
+
+**Resolution:** `src/modules/matchmaking/hooks.ts` — added a hydration `useEffect` in `useMatchmakingPolling` that, when the matchmaking store is `idle` but player-store `queueStatus` shows `Searching` or `Matched-without-battleId`, sets the matchmaking store to the corresponding state. Polling effect then runs normally and `SearchingScreen` renders correctly.
+
+Note: the hydrated `searchStartedAt` uses `Date.now()` at hydration time. The original search start time is not recoverable from game state on refresh, so elapsed time displays from zero after reload. This is acceptable degradation — accurate elapsed time across refresh would require a backend-provided start timestamp (not currently in the queue status response).
+
+### Files modified (2)
+
+| File | Change |
+|---|---|
+| `src/app/guards/BattleGuard.tsx` | Allow `Matched && !battleId` to stay on `/matchmaking` |
+| `src/modules/matchmaking/hooks.ts` | Hydrate matchmaking store from player store on refresh |
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Refresh during searching: GameStateLoader → player store `Searching` → BattleGuard keeps `/matchmaking` → SearchingScreen mounts → hydration sets matchmaking store to `searching` → polling starts → elapsed/cancel usable
+- `Matched` without `battleId` (transient): BattleGuard no longer bounces user to lobby; SearchingScreen shows "Opponent found — preparing battle..." until the next poll delivers `battleId` → BattleGuard redirects to `/battle/:battleId`
+
+---
+
+## Batch 6 — Phase 5 Review Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Reviewer-identified fixes applied before Phase 6.
+
+### Fix 1: Remove cross-module write into usePlayerStore (required)
+
+Matchmaking hooks called `usePlayerStore.setState({ queueStatus: ... })` directly in 4 places, violating the architecture rule that modules must not write into another module's store.
+
+**Resolution:** Added `setQueueStatus(queueStatus)` action to `usePlayerStore` as its public API for queue status updates. All matchmaking writes now go through `usePlayerStore.getState().setQueueStatus(...)` instead of `usePlayerStore.setState(...)`. Zero `usePlayerStore.setState` calls remain in the matchmaking module.
+
+### Fix 2: Matchmaking store returns to idle after battle handoff (required)
+
+Once the store reached `battleTransition`, there was no path back to `idle`. After a battle ends and game state refreshes with `queueStatus: Idle/null`, the matchmaking store would remain stuck in `battleTransition`, silently blocking future re-queue.
+
+**Resolution (initial):** Added a sync effect in `useMatchmakingPolling()` that watches `playerStore.queueStatus`. However, `useMatchmakingPolling()` is only mounted by `SearchingScreen`, so the reset did not run in the post-battle return-to-lobby scenario. Corrected in the follow-up targeted patch (see below).
+
+### Fix 3: Guard MatchmakingPoller against in-flight results after stop (required)
+
+Async poll results could resolve after `stop()` and still invoke the `onResult`/`onError` callbacks, mutating state after the poller was stopped.
+
+**Resolution:** Added a `generation` counter to `MatchmakingPoller`. Each `start()` increments it; each `stop()` also increments it. Poll callbacks check their captured generation against the current generation before invoking, silently discarding stale results.
+
+### Fix 4: Remove dead `_consecutiveFailures` from poller (cleanup)
+
+The poller's internal `_consecutiveFailures` counter and `consecutiveFailures` getter were dead state — the matchmaking store owns the real failure tracking via `incrementFailures()`/`resetFailures()`.
+
+**Resolution:** Removed `_consecutiveFailures` field, its getter, and all internal references from `MatchmakingPoller`.
+
+### Fix 5: Explicit hydration action (cleanup)
+
+Page-refresh hydration reused `setSearching()` and raw `setState()` calls, making it unclear that the intent was server-state hydration vs. a user action.
+
+**Resolution:** Added `hydrateFromServer(serverStatus, matchId, battleId, matchState)` action to the matchmaking store. The hydration effect in `useMatchmakingPolling()` now calls this dedicated action instead of repurposing `setSearching()` or `setState()`.
+
+### Files modified (4)
+
+- `src/modules/player/store.ts` — Added `setQueueStatus()` action
+- `src/modules/matchmaking/store.ts` — Added `hydrateFromServer()` action
+- `src/modules/matchmaking/hooks.ts` — Replaced all `usePlayerStore.setState()` with `setQueueStatus()`; added idle-reset sync effect; used `hydrateFromServer()` for refresh hydration
+- `src/transport/polling/matchmaking-poller.ts` — Added generation guard; removed dead `_consecutiveFailures`
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Zero `usePlayerStore.setState` calls from matchmaking module
+- All queue status writes go through `usePlayerStore.getState().setQueueStatus()`
+- Matchmaking store resets to idle when player store queueStatus becomes Idle/NotQueued/null (note: initially placed in useMatchmakingPolling, corrected to useMatchmaking in follow-up patch)
+- Poller generation guard prevents stale in-flight results from mutating state after stop
+- Poller has single source of truth for failure count (matchmaking store only)
+
+---
+
+## Batch 6 — Phase 5 Targeted Fix
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+### Fix: Relocate reset-to-idle effect from useMatchmakingPolling to useMatchmaking
+
+The reset-to-idle sync effect (Fix 2 from the review cleanup patch) was placed inside `useMatchmakingPolling()`, which is only mounted by `SearchingScreen`. After battle → lobby transition, `SearchingScreen` is unmounted and the effect does not run, so the matchmaking store remains stuck in `battleTransition`.
+
+**Resolution:** Moved the reset-to-idle effect into `useMatchmaking()`, which is consumed by `QueueButton` on the lobby screen. The effect now runs whenever the user is on `/lobby` (where `QueueButton` is mounted), covering the post-battle return scenario. `useMatchmakingPolling()` retains only the hydration and polling lifecycle effects.
+
+### Files modified (1)
+
+- `src/modules/matchmaking/hooks.ts` — Moved reset-to-idle effect from `useMatchmakingPolling()` to `useMatchmaking()`; added `queueStatus` subscription to `useMatchmaking()`
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Reset-to-idle effect now runs from lobby-mounted path via `QueueButton` → `useMatchmaking()`
+- Post-battle flow: game state refresh → `queueStatus` becomes Idle/null → effect fires → matchmaking store resets to idle → QueueButton enabled for re-queue
+
+---
+
+## Batch 7A — Phase 6 (Part 1): Battle State + Transport
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+### P6.1: Battle Zustand store and state machine
+
+**Status:** Done
+
+- `src/modules/battle/store.ts` — Zustand store with:
+  - Phase model: `Idle` → `Connecting` → `WaitingForJoin` → `ArenaOpen` → `TurnOpen` → `Submitted` → `Resolving` → (back to `TurnOpen` or) → `Ended`. Side states: `ConnectionLost`, `Error`.
+  - State fields: battle/player identity, turn index/deadline, attack/block selections, submission state, HP values, end reason/winner, last resolution, feed entries, error state, ruleset.
+  - Event handlers: `handleSnapshot`, `handleBattleReady`, `handleTurnOpened`, `handlePlayerDamaged`, `handleTurnResolved`, `handleStateUpdated`, `handleBattleEnded`, `handleFeedUpdated`, `handleConnectionLost`, `handleReconnected`, `handleError`.
+  - Selection actions: `selectAttackZone`, `selectBlockPair`, `setSubmitting`, `clearSelections`.
+  - Lifecycle: `startBattle(battleId)`, `handleConnected()`, `reset()`.
+  - `handleSnapshot` and `handleStateUpdated` use `serverPhaseToLocal()` to map server phases while preserving local `Submitted` state during `TurnOpen`.
+  - `handleFeedUpdated` deduplicates by entry `key`.
+
+### P6.2: Zone model utilities
+
+**Status:** Done
+
+- `src/modules/battle/zones.ts` — Zone ring model:
+  - `ALL_ZONES`: 5 zones in ring order (Head, Chest, Belly, Waist, Legs).
+  - `VALID_BLOCK_PAIRS`: 5 valid adjacent pairs (Head-Chest, Chest-Belly, Belly-Waist, Waist-Legs, Legs-Head).
+  - `isValidBlockPair(a, b)`: validates adjacency on the ring (diff 1 or wrap-around 4).
+  - `buildActionPayload(attackZone, blockPair)`: constructs `JSON.stringify`'d action object with `attackZone`, `blockZonePrimary`, `blockZoneSecondary`. Returns string, matching the backend `SubmitTurnAction(battleId, turnIndex, payload)` contract. (Field names corrected in cleanup patch — original implementation used wrong names `blockPrimary`/`blockSecondary`.)
+
+### P6.3: Battle hub integration hook
+
+**Status:** Done
+
+- `src/modules/battle/hooks.ts` — Three hooks:
+  - `useBattleConnection(battleId)`: Lifecycle hook. On mount: `startBattle` → connect hub → `joinBattle` → `handleSnapshot`. Wires all battle events into store handlers. On reconnect: rejoins battle and resyncs via snapshot. On unmount: disconnects + resets store.
+  - `useBattle()`: Read-only selector returning all battle state fields.
+  - `useBattleActions()`: Returns selections, `canSubmit`, `selectAttackZone`, `selectBlockPair`, `submitAction`. Submit validates selections, builds payload via `buildActionPayload`, calls `battleHubManager.submitTurnAction`, transitions to `Submitted`. On failure, reverts to `TurnOpen`.
+
+### Files created (3 new)
+
+- `src/modules/battle/store.ts`
+- `src/modules/battle/zones.ts`
+- `src/modules/battle/hooks.ts`
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Battle store implements all approved phases with explicit transitions
+- Zone model validates ring-adjacent block pairs and produces JSON string payloads
+- `useBattleConnection` wires hub lifecycle (connect, join, events, reconnect, disconnect) into store
+- Submit path: selections → `buildActionPayload` → `battleHubManager.submitTurnAction` → `Submitted` state
+- No UI components added — store/transport only
+- No existing modules modified — purely additive to the battle module
+
+---
+
+## Batch 7 — Phase 6 (Part 2): DM Suppression + Reconnect + Debug View
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Completes Phase 6 by adding opponent DM suppression, confirming reconnect/resync coverage, and wiring the debug battle screen.
+
+### P6.4: Opponent DM suppression
+
+**Status:** Done
+
+- `src/modules/battle/hooks.ts` — Updated `useBattleConnection()`:
+  - On `handleSnapshot` (initial join + reconnect): determines opponent ID from snapshot using auth store `userIdentityId`, calls `useChatStore.getState().setSuppressedOpponent(opponentId)`.
+  - On `handleBattleReady`: same suppression logic using BattleReady player IDs.
+  - On `handleBattleEnded`: clears suppression via `clearSuppressedOpponent()`.
+  - On cleanup (unmount): clears suppression.
+  - Uses existing chat store `setSuppressedOpponent`/`clearSuppressedOpponent` actions — no chat store modifications needed.
+
+### P6.5: Battle reconnection and resync
+
+**Status:** Done (confirmed from Batch 7A, no changes needed)
+
+The reconnect/resync path was already structurally implemented in Batch 7A:
+- `onConnectionStateChanged` handler: `reconnecting` → `handleConnectionLost()` → `ConnectionLost` phase. `connected` after `ConnectionLost` → `handleReconnected()` → `WaitingForJoin` → `joinBattle()` → `handleSnapshot()` rehydrates full state.
+- If battle ended while disconnected, the snapshot will return `phase: 'Ended'`, which `serverPhaseToLocal` maps to `Ended`.
+- The P6.4 DM suppression wiring ensures opponent suppression is also restored on reconnect via the shared `applySnapshot` helper.
+
+### P6.6: Debug battle view
+
+**Status:** Done
+
+- `src/modules/battle/screens/BattleScreen.tsx` — Debug/validation screen showing:
+  - Phase, battle ID, turn index, deadline, error state
+  - HP for both players (perspective-aware: shows "You" vs "Opponent")
+  - Attack zone selector (5 zones) and block pair selector (5 valid pairs)
+  - Submit action button wired through `useBattleActions().submitAction`
+  - Last resolution details (actions, outcomes, damage for both directions)
+  - End state (reason, winner — perspective-aware)
+  - Battle feed entries with severity coloring
+  - Selections disabled when in `Submitted` phase
+- `src/app/router.tsx` — `/battle/:battleId` route now renders `BattleScreen` instead of `BattlePlaceholder`
+- `src/app/route-placeholders.tsx` — Removed `BattlePlaceholder`
+
+### Files created (1 new)
+
+- `src/modules/battle/screens/BattleScreen.tsx`
+
+### Files modified (3)
+
+- `src/modules/battle/hooks.ts` — Added DM suppression wiring (P6.4), extracted `applySnapshot` helper
+- `src/app/router.tsx` — Wired BattleScreen, removed BattlePlaceholder import
+- `src/app/route-placeholders.tsx` — Removed BattlePlaceholder
+
+### Files deleted (2)
+
+- `src/modules/battle/components/.gitkeep`
+- `src/modules/battle/screens/.gitkeep`
+
+### Root-level impact
+
+No root-level files modified. All changes under `src/Kombats.Client/`.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- Battle store/state machine: all approved phases implemented (from Batch 7A, unchanged)
+- Zone model: ring-adjacent validation + JSON string payload (from Batch 7A, unchanged)
+- `useBattleConnection`: wires hub lifecycle + DM suppression + reconnect/resync into store
+- Reconnect path: `ConnectionLost → WaitingForJoin → rejoin → snapshot` with DM suppression restore
+- DM suppression: set on snapshot/ready, cleared on battle end and unmount
+- Debug screen: exercises full battle flow — zone selection, block pair, submit, resolution, feed, end state
+- Session-scoped chat connection unaffected (SessionShell above BattleGuard)
+
+---
+
+## Batch 7 — Phase 6 Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Reviewer-identified fixes applied before Phase 7.
+
+### Fix 1: Payload field names (critical)
+
+`buildActionPayload` serialized `blockPrimary` and `blockSecondary` — the backend expects `blockZonePrimary` and `blockZoneSecondary`. This caused all submitted actions to arrive without valid block zones.
+
+**Resolution:** Updated `TurnAction` interface and `buildActionPayload()` in `zones.ts` to use the correct field names: `attackZone`, `blockZonePrimary`, `blockZoneSecondary`. Corrected the Batch 7A execution log entry that documented the wrong names.
+
+### Fix 2: Submit failure recovery (major)
+
+`setSubmitting(false)` after a failed submit left `phase` as `'Submitted'` because the expression `get().phase` returned `'Submitted'`. The user's input was locked until a later server event arrived.
+
+**Resolution:** Changed `setSubmitting(false)` to explicitly set `phase: 'TurnOpen'` instead of `phase: get().phase`. Selections are preserved so the user can retry immediately.
+
+### Fix 3: Phase 6 tests (major)
+
+No tests existed for the battle foundation. Added 21 tests covering:
+
+**Zone/payload tests (8 tests):**
+- All 5 valid adjacent block pairs accepted (both orderings)
+- 4 non-adjacent pairs rejected
+- Same-zone pairs rejected (5 zones)
+- `buildActionPayload` returns a string
+- Parsed payload contains exactly `attackZone`, `blockZonePrimary`, `blockZoneSecondary`
+- Round-trip values correct for multiple zone combinations
+
+**Store/state-machine tests (13 tests):**
+- Starts in `Idle`
+- `TurnOpen` → `Submitted` via `setSubmitting(true)`
+- Submit failure recovery: `Submitted` → `TurnOpen` via `setSubmitting(false)`
+- Selections preserved after submit failure
+- `Resolving` → `TurnOpen` (next turn via `handleTurnOpened`)
+- Selections cleared on new turn
+- `Resolving` → `Ended` via `handleBattleEnded`
+- `ConnectionLost` → `WaitingForJoin` via `handleReconnected`
+- `ConnectionLost` blocked from `Idle` and `Ended`
+
+### Fix 4: Documentation drift
+
+Corrected the Batch 7A execution log line that documented the wrong payload field names (`blockPrimary`/`blockSecondary` → `blockZonePrimary`/`blockZoneSecondary`).
+
+### Files modified (2)
+
+- `src/modules/battle/zones.ts` — Fixed payload field names
+- `src/modules/battle/store.ts` — Fixed submit failure recovery
+
+### Files created (2)
+
+- `src/modules/battle/zones.test.ts` — 8 zone/payload tests
+- `src/modules/battle/store.test.ts` — 13 state machine tests
+
+### Deferred non-blocking items
+
+- Snapshot overwrite of `winnerPlayerId`/`lastResolution`: `handleSnapshot` does not set these fields, so a reconnect snapshot won't overwrite them. Acceptable for now — can tighten in hardening.
+- `Submitted` preservation on reconnect snapshot: `serverPhaseToLocal` preserves `Submitted` when server phase is `TurnOpen`, but a reconnect snapshot resets `isSubmitting` to `false`. If the server accepted the action, it will transition to `Resolving`. If not, the user correctly sees `TurnOpen`. No change needed.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- `npx vitest run`: 21 tests pass (2 test files)
+- Payload serializes `attackZone`, `blockZonePrimary`, `blockZoneSecondary` — verified by tests
+- Submit failure recovers to `TurnOpen` with selections preserved — verified by tests
+- All critical state transitions tested
+
+---
+
+## Batch 7 — Phase 6 Final Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+### Fix 1: Guard submit-failure recovery against race
+
+`setSubmitting(false)` unconditionally set `phase: 'TurnOpen'`, which could stomp a `Resolving` or `Ended` phase if a server event arrived before the invoke error.
+
+**Resolution:** `setSubmitting(false)` now only reverts to `TurnOpen` when current phase is still `Submitted`. If the store has advanced beyond `Submitted`, the phase is preserved. Added a test verifying late submit failure does not stomp `Resolving`.
+
+### Fix 2: Debug screen — countdown, connection state, result link
+
+Debug screen was missing: live deadline countdown, raw connection state, and a "Continue to Result" link.
+
+**Resolution:** Added `DeadlineCountdown` component (interval-driven, React 19 lint compliant), `ConnectionStateRow` reading from `battleHubManager.connectionState`, and a `Link` to `/battle/:battleId/result` when phase is `Ended`.
+
+### Fix 3: Clear battle hub event handlers on unmount
+
+The singleton `battleHubManager` retained stale closures after `useBattleConnection` unmounted.
+
+**Resolution:** Added `battleHubManager.setEventHandlers({})` before `disconnect()` in the cleanup function.
+
+### Fix 4: Focused selectors for Phase 7
+
+`useBattle()` subscribes to 18 independent fields, causing unnecessary re-renders. Risky to copy into production UI.
+
+**Resolution:** Added focused selectors alongside `useBattle()`: `useBattlePhase()`, `useBattleTurn()`, `useBattleHp()`, `useBattleResult()`, `useBattleFeed()`. Phase 7 should prefer these. `useBattle()` retained for the debug screen with a doc comment noting the pattern.
+
+### Files modified (4)
+
+- `src/modules/battle/store.ts` — Guarded `setSubmitting(false)` recovery
+- `src/modules/battle/hooks.ts` — Clear handlers on unmount; added focused selectors
+- `src/modules/battle/screens/BattleScreen.tsx` — Countdown, connection state, result link
+- `src/modules/battle/store.test.ts` — Added race-condition test (22 total)
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- `npx vitest run`: 22 tests pass (2 test files)
+- Submit failure only reverts to TurnOpen from Submitted — verified by new test
+- Debug screen shows live countdown, connection state, result link
+- Stale handlers cleared on unmount
+
+---
+
+## Batch 7 — Phase 6 Pre-Phase-7 Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+### Fix 1: Reactive battle connection state through the store
+
+Debug screen read `battleHubManager.connectionState` imperatively during render — not reactive, and crossed the screen→transport boundary directly.
+
+**Resolution:** Added `connectionState` field and `setConnectionState` action to `useBattleStore`. `onConnectionStateChanged` handler in `useBattleConnection` now writes to the store. Added `useBattleConnectionState()` focused selector. Debug screen now reads from `battle.connectionState` (reactive via Zustand) instead of the transport singleton.
+
+### Fix 2: Guard against late async mutations after unmount
+
+The async `connect → joinBattle → applySnapshot` chain and reconnect `joinBattle → applySnapshot` chain could resolve after effect cleanup, repopulating battle state and re-applying opponent DM suppression on a reset store.
+
+**Resolution:** Added a `disposed` flag set on cleanup. All async `.then`/`.catch` callbacks and all event handlers check `if (disposed) return` before mutating state. Both initial join and reconnect join paths are protected.
+
+### Files modified (3)
+
+- `src/modules/battle/store.ts` — Added `connectionState` field + `setConnectionState` action
+- `src/modules/battle/hooks.ts` — Wired `setConnectionState` from callback; added `disposed` guard on all async paths and event handlers; added `useBattleConnectionState()` selector
+- `src/modules/battle/screens/BattleScreen.tsx` — `ConnectionStateRow` now reads from reactive store state via `battle.connectionState`; removed `battleHubManager` import
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- `npx vitest run`: 22 tests pass (2 test files)
+- Connection state is reactive through Zustand — debug screen re-renders on state changes
+- No transport singleton reads from screen components
+- Late async results after unmount are silently discarded

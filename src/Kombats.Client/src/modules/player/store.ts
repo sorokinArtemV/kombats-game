@@ -13,6 +13,7 @@ interface PlayerState {
   isLoaded: boolean;
 
   setGameState: (response: GameStateResponse) => void;
+  setQueueStatus: (queueStatus: QueueStatusResponse | null) => void;
   updateCharacter: (character: CharacterResponse) => void;
   clearState: () => void;
 }
@@ -32,6 +33,8 @@ export const usePlayerStore = create<PlayerState>()((set) => ({
       degradedServices: response.degradedServices,
       isLoaded: true,
     }),
+
+  setQueueStatus: (queueStatus) => set({ queueStatus }),
 
   updateCharacter: (character) => set({ character }),
 

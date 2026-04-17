@@ -17,8 +17,11 @@ export function BattleGuard() {
       return <Outlet />;
     }
 
-    // Searching — force to matchmaking screen
-    if (queueStatus.status === 'Searching') {
+    // Searching or Matched-without-battleId (preparing) — force to matchmaking
+    if (
+      queueStatus.status === 'Searching' ||
+      (queueStatus.status === 'Matched' && !queueStatus.battleId)
+    ) {
       if (location.pathname !== '/matchmaking') {
         return <Navigate to="/matchmaking" replace />;
       }

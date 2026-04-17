@@ -7,14 +7,10 @@ export type PollerErrorCallback = (error: unknown) => void;
 class MatchmakingPoller {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private _isRunning = false;
-  private _consecutiveFailures = 0;
+  private generation = 0;
 
   get isRunning(): boolean {
     return this._isRunning;
-  }
-
-  get consecutiveFailures(): number {
-    return this._consecutiveFailures;
   }
 
   start(
@@ -25,15 +21,16 @@ class MatchmakingPoller {
     if (this._isRunning) return;
 
     this._isRunning = true;
-    this._consecutiveFailures = 0;
+    this.generation++;
+    const currentGeneration = this.generation;
 
     const poll = async () => {
       try {
         const response = await queueApi.getStatus();
-        this._consecutiveFailures = 0;
+        if (this.generation !== currentGeneration) return;
         onResult(response);
       } catch (error: unknown) {
-        this._consecutiveFailures++;
+        if (this.generation !== currentGeneration) return;
         onError?.(error);
       }
     };
@@ -49,7 +46,7 @@ class MatchmakingPoller {
       this.intervalId = null;
     }
     this._isRunning = false;
-    this._consecutiveFailures = 0;
+    this.generation++;
   }
 }
 
