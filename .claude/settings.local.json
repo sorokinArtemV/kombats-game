@@ -135,7 +135,15 @@
       "Bash(ls *.sln)",
       "Bash(node -e \"const p=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const j=JSON.parse\\(p\\); console.log\\('React:', j.dependencies.react\\); console.log\\('Zustand:', j.dependencies.zustand\\); console.log\\('TanStack:', j.dependencies['@tanstack/react-query']\\); console.log\\('SignalR:', j.dependencies['@microsoft/signalr']\\); console.log\\('Router:', j.dependencies['react-router']\\); console.log\\('Tailwind:', j.dependencies.tailwindcss\\); console.log\\('Motion:', j.dependencies.motion\\); console.log\\('oidc-client-ts:', j.dependencies['oidc-client-ts']\\); console.log\\('react-oidc-context:', j.dependencies['react-oidc-context']\\);\")",
       "Bash(npx vite *)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"---EXIT $?\")",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(echo \"LINT_EXIT=$?\")",
+      "Bash(echo \"TEST_EXIT=$?\")",
+      "Bash(echo \"BUILD_EXIT=$?\")",
+      "Bash(echo \"---tscEXIT $?\")",
+      "Bash(echo \"---vitestEXIT $?\")"
     ]
   }
 }

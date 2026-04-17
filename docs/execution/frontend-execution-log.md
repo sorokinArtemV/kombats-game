@@ -2,6 +2,208 @@
 
 ---
 
+## Batch 8 — Phase 7: Battle UI Cleanup Patch
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Small, tightly scoped cleanup pass addressing five Phase 7 review findings before Phase 8 begins. No Phase 8 implementation, no foundation changes.
+
+### Fix 1: SystemError battle-end messaging aligned to phase-7 handoff
+
+`BattleEndOverlay` SystemError subtitle previously read "The battle ended due to a system error." — close to the plan but not exact and slightly inconsistent with the Phase-8 "Returning to lobby" promise in the plan wording. Phase 7 only hands off to `/battle/:battleId/result`; it does not return to lobby.
+
+**Resolution:** Subtitle now reads "Battle ended due to a system error." (plan's core phrase) without promising a lobby return that Phase 7 does not perform. The actual lobby-recovery behavior remains a Phase 8 responsibility on the result screen. The "Continue to Result" handoff is unchanged.
+
+`deriveOutcome` extracted from `BattleEndOverlay.tsx` into a new `battle-end-outcome.ts` module so it can be unit tested (see Fix 5). `BattleEndOverlay` now imports `deriveOutcome` and `BattleEndOutcome` from the extracted module.
+
+### Fix 2: Reduced redundant "submitted" signals
+
+Previously three UI surfaces all said "Submitted" / "Action submitted" at the same time:
+- HUD phase label → "Action submitted"
+- TurnTimer → "Submitted"
+- ZoneSelector → "Action submitted" badge
+
+**Resolution:** Canonical signal is the ZoneSelector badge (adjacent to the action). HUD phase label for `Submitted` now reads "Waiting for opponent" (still descriptive, no longer duplicative). TurnTimer no longer renders a "Submitted" string — it shows the neutral em-dash for any non-`TurnOpen`/non-`Resolving` phase. Three signals → one explicit "Action submitted" badge plus context-appropriate phase/timer states.
+
+### Fix 3: Neutral pre-snapshot HP bars
+
+`BattleHud` previously rendered `safeHp = hp ?? 0` against `safeMax = maxHp ?? 0`, so while the snapshot had not yet arrived the UI flashed a red/empty low-HP bar and "? / ?" numbers.
+
+**Resolution:** `HpPanel` now computes `ready = hp !== null && maxHp !== null && maxHp > 0`. Until ready, it renders a full-width neutral bar (`bg-bg-surface`) with "— / —" for the numbers. Once the snapshot arrives, the usual HP color thresholds apply. No extra state or lifecycle — pure render-time branching.
+
+### Fix 4: Narration feed auto-scroll keyed off tail identity
+
+`NarrationFeed` auto-scroll effect depended only on `entries.length`, which would miss any future update that replaces the tail entry without changing array length.
+
+**Resolution:** Derive a `tailSignal = "${tail.key}:${tail.sequence}"` from the last entry and key the auto-scroll effect on that string. Empty string when no entries. Length-change + tail-replacement both trigger scroll; no-op updates that keep the same tail do not.
+
+### Fix 5: Added deriveOutcome + TurnTimer view-model tests
+
+Reviewer flagged that two pieces of pure logic were worth testing. Both were refactored to be trivially testable without introducing JSDOM/RTL:
+
+- `src/modules/battle/battle-end-outcome.ts` — extracted `deriveOutcome` function (unchanged behavior apart from the SystemError wording aligned in Fix 1).
+- `src/modules/battle/turn-timer-view.ts` — new `computeTurnTimerView(phase, deadlineUtc, now)` pure function that returns a discriminated view (`resolving` | `idle` | `countdown` with urgency). `TurnTimer.tsx` refactored to hold a `now` tick in state and delegate the view decision to this pure function. Interval logic unchanged.
+
+New tests (Vitest, no new framework):
+- `battle-end-outcome.test.ts` — 9 assertions covering victory/defeat/draw for `Normal`, DoubleForfeit/Timeout draws, SystemError wording (explicitly asserts the subtitle does **not** contain "lobby"), generic `Cancelled/AdminForced/Unknown` branches, and null-myId fallthroughs.
+- `turn-timer-view.test.ts` — 15 assertions covering resolving override, idle for all non-TurnOpen phases, null-deadline idle, normal urgency > 10s, warning at 10s, critical at 5s, past-deadline clamp to 0s, and the 1.5s buffer (DEC-4) verified via a deadline exactly `DEADLINE_BUFFER_MS` in the future reading as 0s.
+
+Test count: 22 → 48 (2 new test files).
+
+### Files created (4)
+
+- `src/modules/battle/battle-end-outcome.ts` — extracted `deriveOutcome` pure function
+- `src/modules/battle/turn-timer-view.ts` — `computeTurnTimerView` pure view-model
+- `src/modules/battle/battle-end-outcome.test.ts` — 9 tests
+- `src/modules/battle/turn-timer-view.test.ts` — 8 tests (including `.each` expansion → 15 assertions)
+
+### Files modified (4)
+
+- `src/modules/battle/components/BattleEndOverlay.tsx` — SystemError wording aligned; imports `deriveOutcome` from extracted module
+- `src/modules/battle/components/BattleHud.tsx` — `Submitted` phase label → "Waiting for opponent"; `HpPanel` neutral pre-snapshot render
+- `src/modules/battle/components/TurnTimer.tsx` — removed "Submitted" text; now delegates view-decision to `computeTurnTimerView`
+- `src/modules/battle/components/NarrationFeed.tsx` — auto-scroll keyed off `key:sequence` of tail entry
+
+### Out of scope (preserved)
+
+- No changes to `store.ts`, `zones.ts`, `hooks.ts`, transport, router, or guards
+- No Phase 8 result-screen implementation, no lobby-return logic, no XP refresh
+- No Framer Motion polish; no new npm deps
+- No changes to `ui/` primitives
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- `npx vitest run`: 48 tests pass across 4 files (was 22 across 2; +24 from new tests, +2 from minor existing file counts: `battle-end-outcome.test.ts` and `turn-timer-view.test.ts`)
+- `npx vite build`: succeeds (566 kB bundle; pre-existing size warning unchanged)
+
+### Cleanup-patch review-ready checklist
+
+- [x] SystemError subtitle aligned with phase-appropriate handoff (no misleading lobby-return promise)
+- [x] One canonical "submitted" signal (ZoneSelector badge); HUD + TurnTimer de-duplicated
+- [x] HP bars render neutral before snapshot; no red/empty flash
+- [x] NarrationFeed auto-scroll keyed off tail key+sequence, not length
+- [x] `deriveOutcome` and TurnTimer view-model both unit-tested
+- [x] No Phase 8, no foundation drift, no unrelated refactors
+
+---
+
+## Batch 8 — Phase 7: Battle UI
+
+**Date:** 2026-04-17
+**Status:** Completed
+**Branch:** frontend-client
+
+Replaced the Phase 6 debug battle screen with a production-oriented battle UI built on top of the existing battle store, zone model, and battle hook. No changes to the Phase 6 foundation; all new code is presentation layered over the existing focused selectors.
+
+### P7.1: Battle screen layout and HUD
+
+New `BattleHud.tsx`:
+- Player / opponent HP bars (color thresholds: `bg-hp-high` > 50%, `bg-hp-medium` > 25%, `bg-hp-low` otherwise) driven by `useBattleHp()`.
+- Current turn index from `useBattleTurn()`; phase indicator from `useBattlePhase()` with tone-specific text color.
+- Connection state via `ConnectionIndicator` wired to `useBattleConnectionState()`.
+- HP panels mirrored (left/right) with names from `useBattleStore` playerAId/Name vs. authenticated user identity.
+
+`BattleScreen.tsx` rewritten around a three-region layout: HUD top, combat area (error/connection banner + ZoneSelector + TurnResultPanel) left, NarrationFeed right (stacks below on mobile). Shows a centered spinner while phase is `Idle | Connecting | WaitingForJoin`. No inline debug rows remain.
+
+### P7.2: Turn timer
+
+New `TurnTimer.tsx` lives inside the HUD:
+- Uses `useBattlePhase()` + `useBattleTurn()` (focused selectors — no monolithic `useBattle()`).
+- Countdown derived from `deadlineUtc - 1500ms` per DEC-4.
+- Ticks at 100ms via `setInterval` inside an effect; setState only from the subscription callback (react-hooks/set-state-in-effect compliant).
+- Phase-aware states: `TurnOpen` → live seconds countdown, `Submitted` → "Submitted", `Resolving` → "Resolving…", otherwise em-dash.
+- Color urgency: default text, warning at ≤ 10s, error at ≤ 5s.
+- No independent timer logic — reads the same `deadlineUtc` that the store receives from `TurnOpened` / `BattleStateUpdated`.
+
+### P7.3: Zone selector
+
+New `ZoneSelector.tsx`:
+- Attack row: 5 buttons, one per `BattleZone` from `ALL_ZONES`, each with its `--color-zone-*` swatch.
+- Block row: 5 buttons, one per entry in `VALID_BLOCK_PAIRS` — adjacent-pair topology enforced at the source data, not freeform zone pickers.
+- Submit button wired to `useBattleActions().submitAction` — the real Phase 6 submit path; payload continues to be built by `buildActionPayload` inside the hook.
+- Disabled when phase ≠ `TurnOpen` or when the battle hub connection is not `connected`. A "Waiting for connection" note is shown when disabled by connection.
+- "Action submitted" badge in the header when phase is `Submitted`; submit button shows `Button loading` state during `isSubmitting`.
+- Selection summary row at the bottom reflects current attack zone / block pair.
+
+### P7.4: Turn result display
+
+New `TurnResultPanel.tsx` reads `lastResolution` directly from the battle store:
+- Renders only when `lastResolution.log` is present.
+- Two side-by-side direction cards: "{myName} attacks" (aToB if I'm player A, else bToA) and "{opponentName} attacks" (the other direction).
+- Each card shows: mapped outcome label, damage (`-N HP` when > 0), attack zone chosen, defender block pair.
+- Outcome tone colors: `Hit` → error, `Critical*` → warning, `Blocked` → info, `Dodged` → success, `NoAction` → muted.
+- No parallel resolution model introduced — reuses `AttackResolutionRealtime` shape from `types/battle.ts`.
+
+### P7.5: Narration feed
+
+New `NarrationFeed.tsx`:
+- Reads `feedEntries` via `useBattleFeed()` focused selector.
+- Scrollable column; auto-scrolls to the newest entry whenever `entries.length` changes (newest at bottom preserved from store's append-with-dedup logic).
+- Severity styling via left border: `Critical` → error border + tinted background, `Important` → accent border, `Normal` → default surface border.
+- Tone styling via text color: Aggressive → accent, Defensive → info, Dramatic → warning italic, System → muted mono, Flavor → italic secondary, Neutral → secondary.
+- Important severity adds `font-medium` emphasis.
+- Turn prefix (`Tn`) on each row from `entry.turnIndex`.
+- Empty state: "No events yet." rather than hiding the panel.
+
+### P7.6: Battle end overlay
+
+New `BattleEndOverlay.tsx`:
+- Mounts when `phase === 'Ended'`. Uses Radix `Dialog.Root` directly rather than introducing an unused `ui/Dialog.tsx` wrapper (single consumer, keeps scope minimal).
+- Reads `endReason`, `winnerPlayerId`, `battleId` from store and `userIdentityId` from auth store.
+- Outcome derivation:
+  - `SystemError` → "Battle Ended" + system error subtitle (warning accent)
+  - `DoubleForfeit` → "Draw — mutual inactivity" (info accent)
+  - `Timeout` → "Draw — battle timed out" (info accent)
+  - `Cancelled | AdminForced | Unknown` → "Battle Ended — ended unexpectedly" + raw reason in mono (other)
+  - `Normal` → Victory (success) / Defeat (error) / Draw (info) based on `winnerPlayerId === myId`.
+- "Continue to Result" `Link` to `/battle/:battleId/result` — the existing handoff to Phase 8, unchanged. No Phase 8 finalization logic added here.
+
+### Files created (6)
+
+- `src/modules/battle/components/BattleHud.tsx` — HP bars, turn counter, phase label, connection indicator, embeds `TurnTimer`
+- `src/modules/battle/components/TurnTimer.tsx` — buffered-deadline countdown (DEC-4)
+- `src/modules/battle/components/ZoneSelector.tsx` — attack + block-pair selection, submit
+- `src/modules/battle/components/TurnResultPanel.tsx` — last-turn resolution card
+- `src/modules/battle/components/NarrationFeed.tsx` — scrollable feed with severity/tone styling
+- `src/modules/battle/components/BattleEndOverlay.tsx` — Radix-Dialog-based end overlay with Continue-to-Result handoff
+
+### Files modified (1)
+
+- `src/modules/battle/screens/BattleScreen.tsx` — replaced debug rows with production layout composing the six new components; no longer references `ALL_ZONES`, `VALID_BLOCK_PAIRS`, or raw debug helpers
+
+### Out of scope (preserved)
+
+- No changes to `store.ts`, `zones.ts`, `hooks.ts`, transport layer, router, or guards. Battle foundation (Phase 6) untouched.
+- `BattleResultPlaceholder` at `/battle/:battleId/result` remains a placeholder — Phase 8 territory.
+- No post-battle XP refresh, lobby re-entry logic, or level-up notifications introduced.
+- No new npm dependencies. Framer Motion animations deferred — the existing battle screen had none and P7 hard-constraints call for no overbuilt polish.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: passes (zero errors, zero warnings)
+- `npx vitest run`: 22 tests pass (2 test files) — store/zone tests unchanged, no regression
+- `npx vite build`: succeeds (566 kB bundle, bundle-size warning is a pre-existing build characteristic unrelated to this batch)
+- Manual UI verification not performed (no backend running); all UI wires to the real battle hook/store/zone helpers — submit still routes through `battleHubManager.submitTurnAction` via `useBattleActions().submitAction`.
+
+### Batch 8 review-ready checklist
+
+- [x] Debug battle screen replaced with production-oriented layout
+- [x] HUD shows HP / turn / phase / connection
+- [x] Turn timer uses buffered-deadline model (DEC-4) and reflects non-turn-open states
+- [x] Zone selector uses approved 5-zone / adjacent-block-pair model, prevents invalid submissions by source data
+- [x] Submit still flows through the real Phase 6 battle hook path
+- [x] Turn result panel derived from `lastResolution` — no parallel resolution model
+- [x] Narration feed preserves store ordering and deduplication
+- [x] Ended phase surfaces a clear Victory/Defeat/Draw overlay with Continue-to-Result handoff
+- [x] No Phase 8 flow, no unrelated refactors, no architecture drift
+
+---
+
 ## Batch 1 — Phase 0: Project Scaffold
 
 **Date:** 2026-04-16

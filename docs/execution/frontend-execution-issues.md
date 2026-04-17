@@ -2,6 +2,86 @@
 
 ---
 
+## Batch 8 — Phase 7: Battle UI Cleanup Patch
+
+### Resolved
+
+#### FEI-065: SystemError battle-end wording drifted from plan and could mislead
+**Severity:** Low
+**Status:** Resolved in Phase 7 cleanup patch
+
+`BattleEndOverlay` SystemError subtitle read "The battle ended due to a system error." and paired with a "Continue to Result" button. The plan's wording ("Battle ended due to a system error. Returning to lobby.") contradicts the Phase 7 handoff (which goes to `/battle/:battleId/result`, not the lobby).
+
+**Resolution:** Subtitle now reads exactly "Battle ended due to a system error." — the plan's core phrase minus the "Returning to lobby" promise that Phase 7 does not fulfill. The actual lobby-recovery flow for SystemError is a Phase 8 result-screen responsibility and will be implemented there. Behavior is unit-tested to guarantee the subtitle does not contain the word "lobby".
+
+#### FEI-066: Three UI surfaces showed "Submitted" at once
+**Severity:** Low
+**Status:** Resolved in Phase 7 cleanup patch
+
+HUD phase label, TurnTimer text, and ZoneSelector badge all announced submission simultaneously, creating redundant visual noise.
+
+**Resolution:** Canonical "Action submitted" signal is the ZoneSelector badge (adjacent to the action). HUD phase label changed to "Waiting for opponent" for the `Submitted` phase; TurnTimer no longer emits a "Submitted" string (falls through to the neutral em-dash for non-`TurnOpen`/non-`Resolving` phases).
+
+#### FEI-067: Pre-snapshot HP bars rendered as red/empty
+**Severity:** Low
+**Status:** Resolved in Phase 7 cleanup patch
+
+While the battle snapshot had not yet arrived, `HpPanel` computed `hp ?? 0` over `maxHp ?? 0`, producing a red zero-HP bar with "? / ?" numbers — misleading because the player is not actually at low HP.
+
+**Resolution:** `HpPanel` now computes a `ready` flag (both hp and maxHp non-null, maxHp > 0). Until ready, it renders a full-width neutral-surface bar (`bg-bg-surface`) with "— / —". Once ready, the existing HP color thresholds take over. No extra state introduced.
+
+#### FEI-068: NarrationFeed auto-scroll keyed only on `entries.length`
+**Severity:** Low
+**Status:** Resolved in Phase 7 cleanup patch
+
+Auto-scroll effect depended on array length; robust today but fragile against future feed updates that replace the tail entry without changing length.
+
+**Resolution:** Derived `tailSignal = "${tail.key}:${tail.sequence}"` from the last entry and keyed the effect on that string. Length-change and tail-replacement both trigger scroll; no-op updates (same tail) correctly do not.
+
+#### FEI-069: Missing tests for deriveOutcome and TurnTimer logic
+**Severity:** Low
+**Status:** Resolved in Phase 7 cleanup patch
+
+Reviewer flagged two pure-logic pieces worth testing. They were embedded in components, which blocked clean unit testing without JSDOM.
+
+**Resolution:** Extracted `deriveOutcome` to `battle-end-outcome.ts` and extracted the TurnTimer view decision to `computeTurnTimerView(phase, deadlineUtc, now)` in `turn-timer-view.ts`. Added `battle-end-outcome.test.ts` (9 tests) and `turn-timer-view.test.ts` (8 tests including `.each` expansion). Total vitest count: 22 → 48. No new testing framework introduced; uses existing Vitest setup.
+
+### Open
+
+No open frontend-specific issues remain for the Phase 7 cleanup patch. The codebase is clean to proceed into Phase 8.
+
+### Deferred
+
+No new deferrals from this patch. FEI-055 and FEI-056 remain deferred to hardening as before.
+
+---
+
+## Batch 8 — Phase 7: Battle UI
+
+### Open
+
+No open frontend-specific issues from Phase 7. tsc, eslint, vitest, and vite build all pass. No regressions in the Phase 6 battle foundation (store/zones tests: 22/22 pass).
+
+### Deviations
+
+#### FEI-DEV-063: Skipped `ui/components/Dialog.tsx` — used Radix Dialog directly in the overlay
+**Severity:** Informational
+**Status:** Accepted for Phase 7
+
+The task breakdown lists `src/ui/components/Dialog.tsx` as an output of P7.6. The only consumer in Phase 7 is `BattleEndOverlay`, and the existing `ui/Sheet.tsx` already wraps Radix Dialog for the chat panel. Introducing a second single-use Radix-Dialog wrapper would be a premature abstraction. `BattleEndOverlay` composes Radix `Dialog.Root`/`Overlay`/`Content` directly with token-driven styling. If a future phase needs a reusable modal primitive, extract one from the overlay at that time.
+
+#### FEI-DEV-064: Framer Motion animations not added in Phase 7
+**Severity:** Informational
+**Status:** Accepted for Phase 7
+
+The plan mentions "brief animation on appearance (slide in or fade)" for the turn result panel and entrance animations for the battle end overlay. Batch 8 scope explicitly says "No need for overbuilt animation/polish yet" for narration, and the hard constraints say "No unrelated refactors … no broader polish". The existing `motion` package is installed; animations can be layered in a follow-up polish batch without touching component structure. Current panels use CSS `transition-colors` via Tailwind and rely on the `ProgressBar`'s built-in `transition-all` for HP bar changes.
+
+### Deferred
+
+No new deferred items. FEI-055 and FEI-056 remain deferred to hardening.
+
+---
+
 ## Batch 1 — Phase 0
 
 ### Resolved
