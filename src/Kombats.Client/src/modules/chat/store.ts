@@ -34,9 +34,8 @@ interface ChatState {
   lastError: ChatErrorEvent | null;
 
   setConnectionState: (state: ConnectionState) => void;
-  setGlobalState: (
+  setGlobalSession: (
     conversationId: Uuid,
-    messages: ChatMessageResponse[],
     players: OnlinePlayerResponse[],
   ) => void;
   addGlobalMessage: (msg: ChatMessageResponse) => void;
@@ -68,15 +67,16 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   setConnectionState: (connectionState) => set({ connectionState }),
 
-  setGlobalState: (conversationId, messages, players) => {
+  setGlobalSession: (conversationId, players) => {
     const playerMap = new Map<Uuid, OnlinePlayerResponse>();
     for (const player of players) {
       playerMap.set(player.playerId, player);
     }
-    // onlineCount always derived from Map.size — no mixing with server totalOnline
+    // Global chat is live-only: globalMessages is never seeded from server
+    // backlog. Existing in-session messages are preserved across reconnects.
+    // onlineCount always derived from Map.size — no mixing with server totalOnline.
     set({
       globalConversationId: conversationId,
-      globalMessages: messages.slice(-MAX_GLOBAL_MESSAGES),
       onlinePlayers: playerMap,
       onlineCount: playerMap.size,
     });

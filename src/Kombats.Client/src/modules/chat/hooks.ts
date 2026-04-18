@@ -30,21 +30,13 @@ function directEventToMessage(event: DirectMessageEvent): ChatMessageResponse {
   };
 }
 
-async function joinAndPopulate(): Promise<void> {
+async function joinGlobalSession(): Promise<void> {
+  // Server-side group join is required to receive live messages. The response
+  // also carries a recent-messages backlog, which we intentionally discard:
+  // global chat is live-only — no history on entry, no restoration on refresh.
   const response = await chatHubManager.joinGlobalChat();
-  const store = useChatStore.getState();
-
-  const messages: ChatMessageResponse[] = response.recentMessages.map((m) => ({
-    messageId: m.messageId,
-    conversationId: response.conversationId,
-    sender: m.sender,
-    content: m.content,
-    sentAt: m.sentAt,
-  }));
-
-  store.setGlobalState(
+  useChatStore.getState().setGlobalSession(
     response.conversationId,
-    messages,
     response.onlinePlayers,
   );
 }
@@ -82,7 +74,7 @@ export function useChatConnection(): void {
 
         // On reconnect, rejoin global chat to resync state
         if (state === 'connected' && useChatStore.getState().globalConversationId !== null) {
-          joinAndPopulate().catch(() => {
+          joinGlobalSession().catch(() => {
             // Silently handle — reconnection will retry
           });
         }
@@ -101,7 +93,7 @@ export function useChatConnection(): void {
 
     chatHubManager
       .connect()
-      .then(() => joinAndPopulate())
+      .then(() => joinGlobalSession())
       .catch(() => {
         useChatStore.getState().setConnectionState('disconnected');
       });
