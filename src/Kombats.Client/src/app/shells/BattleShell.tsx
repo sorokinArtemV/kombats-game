@@ -5,7 +5,7 @@ export function BattleShell() {
   const { battleId } = useParams<{ battleId: string }>();
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg-primary">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {battleId && <BattleConnectionHost battleId={battleId} />}
       <Outlet />
     </div>

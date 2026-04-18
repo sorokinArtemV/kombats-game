@@ -61,4 +61,9 @@ Apply-Migrations `
     -BootstrapProject "src/Kombats.Battle/Kombats.Battle.Bootstrap" `
     -InfrastructureProject "src/Kombats.Battle/Kombats.Battle.Infrastructure"
 
+Apply-Migrations `
+    -ServiceName "Chat" `
+    -BootstrapProject "src/Kombats.Chat/Kombats.Chat.Bootstrap" `
+    -InfrastructureProject "src/Kombats.Chat/Kombats.Chat.Infrastructure"
+
 Write-Host "=== All migrations applied successfully ==="

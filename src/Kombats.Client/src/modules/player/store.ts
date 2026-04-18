@@ -26,15 +26,32 @@ interface PlayerState {
    */
   pendingLevelUpLevel: number | null;
 
+  /**
+   * BattleId the player explicitly dismissed via "Return to Lobby". Kept
+   * here rather than in the battle store because the battle store is fully
+   * reset when the battle shell unmounts. The backend's `BattleCompleted`
+   * projection is eventually consistent, so `GET /game/state` can still
+   * return `queueStatus.Matched.<sameBattleId>` for a short window after
+   * the player leaves. Without this marker, the post-lobby refetch
+   * overwrites the optimistic `setQueueStatus(null)` and `BattleGuard`
+   * bounces the player back to `/battle/:id` → result screen → lobby in
+   * a visible loop.
+   *
+   * Cleared automatically when `setGameState` observes a different
+   * battleId in the fresh queue status (backend has moved on).
+   */
+  dismissedBattleId: string | null;
+
   setGameState: (response: GameStateResponse) => void;
   setQueueStatus: (queueStatus: QueueStatusResponse | null) => void;
   updateCharacter: (character: CharacterResponse) => void;
   setPostBattleRefreshNeeded: (needed: boolean) => void;
   setPendingLevelUpLevel: (level: number | null) => void;
+  setDismissedBattleId: (battleId: string | null) => void;
   clearState: () => void;
 }
 
-export const usePlayerStore = create<PlayerState>()((set) => ({
+export const usePlayerStore = create<PlayerState>()((set, get) => ({
   character: null,
   queueStatus: null,
   isCharacterCreated: false,
@@ -42,15 +59,30 @@ export const usePlayerStore = create<PlayerState>()((set) => ({
   isLoaded: false,
   postBattleRefreshNeeded: false,
   pendingLevelUpLevel: null,
+  dismissedBattleId: null,
 
-  setGameState: (response) =>
+  setGameState: (response) => {
+    const dismissed = get().dismissedBattleId;
+    const incoming = response.queueStatus;
+    // If the server's queue snapshot is still the battle the player already
+    // dismissed, suppress it — the backend has not yet projected the
+    // `BattleCompleted` clear. Clear the marker once the backend has moved
+    // to a different battleId or no queue entry at all.
+    const suppressQueue =
+      dismissed !== null &&
+      incoming?.status === 'Matched' &&
+      incoming.battleId === dismissed;
+    const nextDismissed =
+      suppressQueue ? dismissed : null;
     set({
       character: response.character,
-      queueStatus: response.queueStatus,
+      queueStatus: suppressQueue ? null : incoming,
       isCharacterCreated: response.isCharacterCreated,
       degradedServices: response.degradedServices,
       isLoaded: true,
-    }),
+      dismissedBattleId: nextDismissed,
+    });
+  },
 
   setQueueStatus: (queueStatus) => set({ queueStatus }),
 
@@ -59,6 +91,8 @@ export const usePlayerStore = create<PlayerState>()((set) => ({
   setPostBattleRefreshNeeded: (needed) => set({ postBattleRefreshNeeded: needed }),
 
   setPendingLevelUpLevel: (level) => set({ pendingLevelUpLevel: level }),
+
+  setDismissedBattleId: (battleId) => set({ dismissedBattleId: battleId }),
 
   clearState: () =>
     set({
@@ -69,5 +103,6 @@ export const usePlayerStore = create<PlayerState>()((set) => ({
       isLoaded: false,
       postBattleRefreshNeeded: false,
       pendingLevelUpLevel: null,
+      dismissedBattleId: null,
     }),
 }));

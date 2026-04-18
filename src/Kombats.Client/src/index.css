@@ -6,7 +6,17 @@
   --color-bg-primary: var(--color-bg-primary);
   --color-bg-secondary: var(--color-bg-secondary);
   --color-bg-surface: var(--color-bg-surface);
+  --color-bg-elevated: var(--color-bg-elevated);
+  --color-bg-nav: var(--color-bg-nav);
   --color-bg-overlay: var(--color-bg-overlay);
+
+  /* Fighter portrait surfaces */
+  --color-portrait-friendly: var(--color-portrait-friendly);
+  --color-portrait-hostile: var(--color-portrait-hostile);
+
+  /* Borders */
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
 
   /* Text colors */
   --color-text-primary: var(--color-text-primary);
@@ -16,6 +26,15 @@
   /* Accent / brand */
   --color-accent: var(--color-accent);
   --color-accent-hover: var(--color-accent-hover);
+  --color-accent-strong: var(--color-accent-strong);
+
+  /* Action tones */
+  --color-attack: var(--color-attack);
+  --color-attack-strong: var(--color-attack-strong);
+  --color-block: var(--color-block);
+  --color-block-strong: var(--color-block-strong);
+  --color-go: var(--color-go);
+  --color-go-hover: var(--color-go-hover);
 
   /* HP bar colors */
   --color-hp-high: var(--color-hp-high);

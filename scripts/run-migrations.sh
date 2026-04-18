@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run-migrations.sh — CI/CD migration runner for Kombats services
 #
-# Applies EF Core migrations for all three services against the target database.
+# Applies EF Core migrations for all Kombats services against the target database.
 # Run this as a CI/CD step or init container BEFORE deploying service containers.
 # Per AD-13: migrations must NOT run on application startup.
 #
@@ -48,5 +48,9 @@ apply_migrations "Matchmaking" \
 apply_migrations "Battle" \
     "src/Kombats.Battle/Kombats.Battle.Bootstrap" \
     "src/Kombats.Battle/Kombats.Battle.Infrastructure"
+
+apply_migrations "Chat" \
+    "src/Kombats.Chat/Kombats.Chat.Bootstrap" \
+    "src/Kombats.Chat/Kombats.Chat.Infrastructure"
 
 echo "=== All migrations applied successfully ==="

@@ -37,24 +37,29 @@ export function BattleEndOverlay() {
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-bg-overlay" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-bg-surface bg-bg-secondary p-6 shadow-xl outline-none"
+          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-secondary p-6 shadow-xl outline-none"
           aria-describedby={undefined}
         >
           <div className="flex flex-col items-center gap-4 text-center">
             <Dialog.Title
-              className={clsx('font-display text-3xl', outcomeAccentClass(outcome))}
+              className={clsx(
+                'font-display text-3xl font-bold uppercase tracking-[0.2em]',
+                outcomeAccentClass(outcome),
+              )}
             >
-              {title}
+              {title.replace(/!$/, '')}
             </Dialog.Title>
             <p className="text-sm text-text-secondary">{subtitle}</p>
-            {endReason && outcome === 'other' && (
-              <p className="font-mono text-xs text-text-muted">Reason: {endReason}</p>
-            )}
+            {endReason &&
+              outcome === 'other' &&
+              endReason !== 'Unknown' && (
+                <p className="font-mono text-xs text-text-muted">Reason: {endReason}</p>
+              )}
             <Link
               to={`/battle/${battleId}/result`}
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-accent px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent-hover"
+              className="mt-2 inline-flex items-center justify-center rounded-md bg-accent px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
             >
-              Continue to Result
+              View Result
             </Link>
           </div>
         </Dialog.Content>

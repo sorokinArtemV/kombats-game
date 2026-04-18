@@ -16,6 +16,13 @@ export interface BattleEndPresentation {
  * the subtitle therefore matches the plan's core phrasing without promising
  * a "return to lobby" that Phase 7 does not perform. The lobby return is
  * the result-screen's responsibility.
+ *
+ * Unknown branch: the backend's ToRealtimeSnapshot mapper emits
+ * `endedReason=Unknown` whenever a client joins an already-ended battle
+ * that did NOT end by DoubleForfeit — the snapshot does not carry the real
+ * persisted terminal reason. Treat Unknown as "missing reason metadata,"
+ * not as a true unexpected-termination signal: prefer winner-derived
+ * outcome when we have winner info, otherwise show a neutral result.
  */
 export function deriveOutcome(
   reason: BattleEndReasonRealtime | null,
@@ -43,7 +50,7 @@ export function deriveOutcome(
       subtitle: 'The battle timed out.',
     };
   }
-  if (reason === 'Cancelled' || reason === 'AdminForced' || reason === 'Unknown') {
+  if (reason === 'Cancelled' || reason === 'AdminForced') {
     return {
       outcome: 'other',
       title: 'Battle Ended',
@@ -57,6 +64,15 @@ export function deriveOutcome(
   if (winnerId && myId && winnerId !== myId) {
     return { outcome: 'defeat', title: 'Defeat', subtitle: 'Your opponent prevailed.' };
   }
+
+  if (reason === 'Unknown') {
+    return {
+      outcome: 'other',
+      title: 'Battle Ended',
+      subtitle: 'You can return to the lobby.',
+    };
+  }
+
   return {
     outcome: 'draw',
     title: 'Draw',

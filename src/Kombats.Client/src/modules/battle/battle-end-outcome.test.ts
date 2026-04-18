@@ -44,7 +44,7 @@ describe('deriveOutcome', () => {
     expect(r.subtitle.toLowerCase()).not.toContain('lobby');
   });
 
-  it.each(['Cancelled', 'AdminForced', 'Unknown'] as const)(
+  it.each(['Cancelled', 'AdminForced'] as const)(
     'returns a generic "other" outcome for %s',
     (reason) => {
       const r = deriveOutcome(reason, null, ME);
@@ -53,6 +53,29 @@ describe('deriveOutcome', () => {
       expect(r.subtitle).toMatch(/unexpectedly/i);
     },
   );
+
+  // Unknown reason comes from the backend snapshot mapper when a client
+  // rejoins an already-ended battle — it is "missing metadata," not a real
+  // unexpected-termination signal. Prefer winner-derived outcome.
+  it('derives victory from winner when reason is Unknown', () => {
+    const r = deriveOutcome('Unknown', ME, ME);
+    expect(r.outcome).toBe('victory');
+    expect(r.title).toBe('Victory!');
+  });
+
+  it('derives defeat from winner when reason is Unknown', () => {
+    const r = deriveOutcome('Unknown', OPP, ME);
+    expect(r.outcome).toBe('defeat');
+    expect(r.title).toBe('Defeat');
+  });
+
+  it('shows a neutral "Battle Ended" with lobby copy for Unknown without winner info', () => {
+    const r = deriveOutcome('Unknown', null, ME);
+    expect(r.outcome).toBe('other');
+    expect(r.title).toBe('Battle Ended');
+    expect(r.subtitle).not.toMatch(/unexpectedly/i);
+    expect(r.subtitle).toMatch(/lobby/i);
+  });
 
   it('falls through to draw when myId is missing and no winner', () => {
     const r = deriveOutcome(null, null, null);

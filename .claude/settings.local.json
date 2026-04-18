@@ -149,7 +149,17 @@
       "Bash(echo \"TSC=$?\")",
       "Bash(echo \"LINT=$?\")",
       "Bash(echo \"TEST=$?\")",
-      "Bash(echo \"BUILD=$?\")"
+      "Bash(echo \"BUILD=$?\")",
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\"; cat {}')",
+      "Bash(pnpm tsc *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(./node_modules/.bin/tsc --noEmit)",
+      "Bash(/d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/node_modules/.bin/tsc --noEmit -p /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client)",
+      "Bash(/d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/node_modules/.bin/eslint /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/main.tsx)",
+      "Bash(/d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/node_modules/.bin/eslint /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/AuthProvider.tsx)",
+      "Bash(/d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/node_modules/.bin/eslint /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/AuthProvider.tsx /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/main.tsx /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/user-manager.ts)",
+      "Bash(pnpm test *)",
+      "Bash(node *)"
     ]
   }
 }

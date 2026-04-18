@@ -19,45 +19,62 @@ export function OnlinePlayersList({ onSendMessage, onViewProfile }: OnlinePlayer
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-bg-surface px-3 py-2">
-        <span className="text-sm font-medium text-text-primary">Online Players</span>
+      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+        <span className="text-sm font-semibold text-text-primary">
+          Online Players
+        </span>
         <span className="text-xs text-text-muted">{onlineCount}</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto">
         {playerList.length === 0 ? (
-          <p className="px-1 py-2 text-center text-xs text-text-muted">No players online</p>
+          <p className="px-3 py-4 text-center text-xs text-text-muted">
+            No players online
+          </p>
         ) : (
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col">
             {playerList.map((player) => (
-              <li
-                key={player.playerId}
-                className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-bg-surface"
-              >
-                <Avatar name={player.displayName} size="sm" />
-                <span className="flex-1 truncate text-sm text-text-primary">
-                  {player.displayName}
-                </span>
-                <div className="hidden gap-1 group-hover:flex">
-                  {onViewProfile && (
-                    <button
-                      onClick={() => onViewProfile(player.playerId)}
-                      className="rounded px-1.5 py-0.5 text-xs text-text-muted transition-colors hover:bg-bg-primary hover:text-text-primary"
-                      title="View profile"
-                    >
-                      Profile
-                    </button>
-                  )}
+              <li key={player.playerId}>
+                <button
+                  type="button"
+                  onClick={() => onViewProfile?.(player.playerId)}
+                  className="group flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-bg-surface"
+                >
+                  <div className="relative">
+                    <Avatar name={player.displayName} size="md" />
+                    <span
+                      className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg-secondary bg-success"
+                      aria-hidden
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium text-text-primary">
+                      {player.displayName}
+                    </span>
+                    <span className="truncate text-xs text-text-muted">Online</span>
+                  </div>
                   {onSendMessage && (
-                    <button
-                      onClick={() => onSendMessage(player.playerId, player.displayName)}
-                      className="rounded px-1.5 py-0.5 text-xs text-accent transition-colors hover:bg-bg-primary"
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSendMessage(player.playerId, player.displayName);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onSendMessage(player.playerId, player.displayName);
+                        }
+                      }}
+                      className="hidden rounded-md px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-bg-elevated group-hover:inline-flex"
                       title="Send message"
                     >
                       DM
-                    </button>
+                    </span>
                   )}
-                </div>
+                </button>
               </li>
             ))}
           </ul>
