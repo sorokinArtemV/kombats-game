@@ -137,7 +137,7 @@ export function useBattleConnection(battleId: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Focused selectors — Phase 7 should prefer these over the monolithic useBattle()
+// Focused selectors
 // ---------------------------------------------------------------------------
 
 export function useBattlePhase() {
@@ -170,54 +170,6 @@ export function useBattleResult() {
 
 export function useBattleFeed() {
   return useBattleStore((s) => s.feedEntries);
-}
-
-/**
- * Monolithic read-only selector — suitable for the debug screen.
- * Phase 7 production UI should prefer the focused selectors above.
- */
-export function useBattle() {
-  const phase = useBattleStore((s) => s.phase);
-  const battleId = useBattleStore((s) => s.battleId);
-  const playerAId = useBattleStore((s) => s.playerAId);
-  const playerBId = useBattleStore((s) => s.playerBId);
-  const playerAName = useBattleStore((s) => s.playerAName);
-  const playerBName = useBattleStore((s) => s.playerBName);
-  const turnIndex = useBattleStore((s) => s.turnIndex);
-  const deadlineUtc = useBattleStore((s) => s.deadlineUtc);
-  const playerAHp = useBattleStore((s) => s.playerAHp);
-  const playerBHp = useBattleStore((s) => s.playerBHp);
-  const playerAMaxHp = useBattleStore((s) => s.playerAMaxHp);
-  const playerBMaxHp = useBattleStore((s) => s.playerBMaxHp);
-  const endReason = useBattleStore((s) => s.endReason);
-  const winnerPlayerId = useBattleStore((s) => s.winnerPlayerId);
-  const lastResolution = useBattleStore((s) => s.lastResolution);
-  const feedEntries = useBattleStore((s) => s.feedEntries);
-  const lastError = useBattleStore((s) => s.lastError);
-  const ruleset = useBattleStore((s) => s.ruleset);
-  const connectionState = useBattleStore((s) => s.connectionState);
-
-  return {
-    phase,
-    battleId,
-    playerAId,
-    playerBId,
-    playerAName,
-    playerBName,
-    turnIndex,
-    deadlineUtc,
-    playerAHp,
-    playerBHp,
-    playerAMaxHp,
-    playerBMaxHp,
-    endReason,
-    winnerPlayerId,
-    lastResolution,
-    feedEntries,
-    lastError,
-    ruleset,
-    connectionState,
-  };
 }
 
 /**

@@ -78,11 +78,7 @@ export function BattleResultScreen() {
   const playerAId = useBattleStore((s) => s.playerAId);
   const playerAName = useBattleStore((s) => s.playerAName);
   const playerBName = useBattleStore((s) => s.playerBName);
-  const setPostBattleRefreshNeeded = usePlayerStore(
-    (s) => s.setPostBattleRefreshNeeded,
-  );
-  const setQueueStatus = usePlayerStore((s) => s.setQueueStatus);
-  const setDismissedBattleId = usePlayerStore((s) => s.setDismissedBattleId);
+  const returnFromBattle = usePlayerStore((s) => s.returnFromBattle);
 
   const feed = useResultBattleFeed(battleId ?? null);
 
@@ -110,14 +106,11 @@ export function BattleResultScreen() {
   const opponentName = (isPlayerA ? playerBName : playerAName) ?? 'Opponent';
 
   const handleReturn = () => {
-    // Mark this battle as dismissed so `setGameState` suppresses any
-    // stale `queueStatus.Matched.<battleId>` the backend projection has
-    // not yet cleared. Without this, `usePostBattleRefresh`'s refetch
-    // would restore the queue status and `BattleGuard` would bounce the
-    // player back to `/battle/:id`.
-    setDismissedBattleId(battleId);
-    setQueueStatus(null);
-    setPostBattleRefreshNeeded(true);
+    // Atomic post-battle handoff. Marks the battle dismissed (so stale
+    // `queueStatus.Matched.<battleId>` refetches are suppressed until the
+    // backend projection catches up), clears any active queue entry, and
+    // flags the next lobby mount to run the DEC-5 XP/level refresh.
+    returnFromBattle(battleId);
     navigate('/lobby');
   };
 

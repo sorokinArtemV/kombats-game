@@ -101,6 +101,11 @@ interface BattleState {
   reset: () => void;
 }
 
+// Upper bound on the live battle feed. Reconnect backfills already dedupe
+// by key, but a very long battle would otherwise grow unboundedly. 500 is
+// well above a typical fight length and matches the chat buffer cap.
+const MAX_FEED_ENTRIES = 500;
+
 // ---------------------------------------------------------------------------
 // Initial state
 // ---------------------------------------------------------------------------
@@ -260,9 +265,11 @@ export const useBattleStore = create<BattleState>()((set, get) => ({
     const state = get();
     const existingKeys = new Set(state.feedEntries.map((e) => e.key));
     const newEntries = data.entries.filter((e) => !existingKeys.has(e.key));
-    if (newEntries.length > 0) {
-      set({ feedEntries: [...state.feedEntries, ...newEntries] });
-    }
+    if (newEntries.length === 0) return;
+    const merged = [...state.feedEntries, ...newEntries];
+    const trimmed =
+      merged.length > MAX_FEED_ENTRIES ? merged.slice(-MAX_FEED_ENTRIES) : merged;
+    set({ feedEntries: trimmed });
   },
 
   handleConnectionLost: () => {

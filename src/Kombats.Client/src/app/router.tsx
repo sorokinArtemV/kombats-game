@@ -9,6 +9,7 @@ import { AuthGuard } from './guards/AuthGuard';
 import { OnboardingGuard } from './guards/OnboardingGuard';
 import { BattleGuard } from './guards/BattleGuard';
 import { GameStateLoader } from './GameStateLoader';
+import { AppCrashScreen } from './AppCrashScreen';
 import { NameSelectionScreen } from '@/modules/onboarding/screens/NameSelectionScreen';
 import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScreen';
 import { LobbyScreen } from '@/modules/player/screens/LobbyScreen';
@@ -42,6 +43,7 @@ export const router = createBrowserRouter([
               // Onboarding routes (only reachable when Draft/Named/no character)
               {
                 element: <OnboardingShell />,
+                errorElement: <AppCrashScreen />,
                 children: [
                   { path: '/onboarding/name', element: <NameSelectionScreen /> },
                   { path: '/onboarding/stats', element: <InitialStatsScreen /> },
@@ -59,6 +61,7 @@ export const router = createBrowserRouter([
                       // Battle routes (only reachable when matched)
                       {
                         element: <BattleShell />,
+                        errorElement: <AppCrashScreen />,
                         children: [
                           { path: '/battle/:battleId', element: <BattleScreen /> },
                           {
@@ -68,7 +71,9 @@ export const router = createBrowserRouter([
                         ],
                       },
 
-                      // Lobby + matchmaking (normal authenticated flow)
+                      // Lobby + matchmaking (normal authenticated flow) —
+                      // no per-group errorElement; lobby crashes bubble up
+                      // to the top-level ErrorBoundary in App.tsx.
                       {
                         element: <LobbyShell />,
                         children: [

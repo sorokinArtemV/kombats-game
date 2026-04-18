@@ -8,17 +8,20 @@ function getAccessToken(): string | null {
 }
 
 function accessTokenFactory(): string {
-  return getAccessToken() ?? '';
+  const token = getAccessToken();
+  if (!token) {
+    // SignalR reads this synchronously at connect time and on each
+    // reconnect. Returning '' used to silently produce an unauthenticated
+    // connect attempt that the server rejected with a cryptic handshake
+    // error; throwing makes the failure explicit to the hub managers'
+    // existing error paths (they surface the reconnect state, which
+    // drives the battle error phase / chat banner).
+    throw new Error('No access token available for SignalR connection');
+  }
+  return token;
 }
 
-const DIAG = '[KOMBATS-AUTH-DIAG v3]';
-
 function onAuthFailure(): void {
-  // eslint-disable-next-line no-console
-  console.log(`${DIAG} transport-init onAuthFailure -> clearAuth`, {
-    pathname: window.location.pathname,
-    reason: 'HTTP 401 from BFF',
-  });
   useAuthStore.getState().clearAuth();
 }
 

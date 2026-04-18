@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 import { useBattlePhase, useBattleHp, useBattleTurn } from '../hooks';
 import { useBattleStore } from '../store';
 import { useAuthStore } from '@/modules/auth/store';
+import { usePlayerStore } from '@/modules/player/store';
 import { playerKeys } from '@/app/query-client';
 import * as playersApi from '@/transport/http/endpoints/players';
 import { ZoneSelector } from '../components/ZoneSelector';
@@ -13,6 +15,7 @@ import { TurnTimer } from '../components/TurnTimer';
 import { Spinner } from '@/ui/components/Spinner';
 import { ConnectionIndicator } from '@/ui/components/ConnectionIndicator';
 import { ErrorBoundary } from '@/ui/components/ErrorBoundary';
+import { logger } from '@/app/logger';
 import { useBattleConnectionState } from '../hooks';
 import type { PlayerCardResponse } from '@/types/player';
 
@@ -72,7 +75,10 @@ export function BattleScreen() {
         <TurnInfoBar />
 
         {phase === 'Error' && lastError && (
-          <Banner tone="error">{lastError}</Banner>
+          <div className="flex flex-col gap-2">
+            <Banner tone="error">{lastError}</Banner>
+            <LeaveBattleEscape />
+          </div>
         )}
         {phase === 'ConnectionLost' && <ConnectionLostBanner />}
 
@@ -84,7 +90,7 @@ export function BattleScreen() {
             </Banner>
           }
           onError={(error) => {
-            console.error('BattleScreen render error', error);
+            logger.error('BattleScreen render error', error);
           }}
         >
           <ActionPanelSlot />
@@ -172,6 +178,48 @@ function Banner({
       aria-live="polite"
     >
       {children}
+    </div>
+  );
+}
+
+/**
+ * Terminal battle-error escape. The BattleHub reached its `failed` state
+ * (reconnect attempted and could not restore) or the store transitioned to
+ * `phase: 'Error'` some other way. Without this button the user is stuck
+ * staring at the error banner — the only way out was a hard refresh.
+ *
+ * Clicking it clears the battle store and fires the atomic post-battle
+ * handoff on the player store so (a) stale `queueStatus.Matched.<battleId>`
+ * refetches are suppressed and the BattleGuard does not bounce us back
+ * into the broken battle, and (b) the lobby's usePostBattleRefresh flag
+ * is set so XP/level reconcile on the next lobby mount.
+ */
+function LeaveBattleEscape() {
+  const navigate = useNavigate();
+  const battleId = useBattleStore((s) => s.battleId);
+  const returnFromBattle = usePlayerStore((s) => s.returnFromBattle);
+
+  const handleLeave = () => {
+    if (battleId) {
+      returnFromBattle(battleId);
+    } else {
+      // No battleId means the store never transitioned past the pre-match
+      // phases; the simpler path is enough.
+      usePlayerStore.getState().setQueueStatus(null);
+    }
+    useBattleStore.getState().reset();
+    navigate('/lobby');
+  };
+
+  return (
+    <div className="flex justify-end">
+      <button
+        type="button"
+        onClick={handleLeave}
+        className="inline-flex items-center justify-center rounded-md border border-error bg-transparent px-4 py-1.5 text-xs font-semibold text-error transition-colors hover:bg-error hover:text-white"
+      >
+        Leave battle
+      </button>
     </div>
   );
 }

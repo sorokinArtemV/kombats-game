@@ -1,107 +1,61 @@
 import { create } from 'zustand';
-import type { Uuid } from '@/types/common';
-import type { MatchState } from '@/types/api';
 
-type MatchmakingStatus = 'idle' | 'searching' | 'matched' | 'battleTransition';
+// Matchmaking owns ONLY UI-local concerns. The authoritative queue state
+// lives in `usePlayerStore.queueStatus` (populated by GameStateLoader, the
+// join/leave mutations, and the polling callback). Keeping a second mirror
+// in this store was the source of the dual-source-of-truth bug (F-A3) that
+// repeatedly produced matched/searching redirect loops — the fix is to stop
+// mirroring.
+//
+// Fields that remain here are strictly UI-derived:
+//   - searchStartedAt      → SearchingScreen's elapsed-time counter
+//   - consecutiveFailures  → SearchingScreen's "connection issues" hint
+//   - battleTransitioning  → short-lived UI flag set when the hook has seen
+//                            an authoritative battleId but navigation has
+//                            not yet happened. Lets SearchingScreen show
+//                            "Entering battle…" before BattleGuard
+//                            redirects (and across the single render gap
+//                            between leaveQueue returning a battleId and
+//                            the queue store write that follows it).
 
 interface MatchmakingState {
-  status: MatchmakingStatus;
-  matchId: Uuid | null;
-  battleId: Uuid | null;
-  matchState: MatchState | null;
   searchStartedAt: number | null;
   consecutiveFailures: number;
+  battleTransitioning: boolean;
 
-  setSearching: () => void;
-  updateFromPoll: (status: string, matchId: Uuid | null, battleId: Uuid | null, matchState: MatchState | null) => void;
-  setBattleTransition: (battleId: Uuid) => void;
+  /** Begin a new search — UI timer starts, failure counter resets. */
+  startSearch: () => void;
+
+  /** Reset UI-local state to its empty shape. Used by session-cleanup and
+   * by `useMatchmaking` when it observes the authoritative queue returning
+   * to idle. */
   setIdle: () => void;
-  hydrateFromServer: (serverStatus: string, matchId: Uuid | null, battleId: Uuid | null, matchState: MatchState | null) => void;
+
+  setBattleTransitioning: (v: boolean) => void;
   incrementFailures: () => void;
   resetFailures: () => void;
 }
 
 export const useMatchmakingStore = create<MatchmakingState>()((set) => ({
-  status: 'idle',
-  matchId: null,
-  battleId: null,
-  matchState: null,
   searchStartedAt: null,
   consecutiveFailures: 0,
+  battleTransitioning: false,
 
-  setSearching: () =>
+  startSearch: () =>
     set({
-      status: 'searching',
-      matchId: null,
-      battleId: null,
-      matchState: null,
       searchStartedAt: Date.now(),
       consecutiveFailures: 0,
-    }),
-
-  updateFromPoll: (status, matchId, battleId, matchState) => {
-    if (status === 'Matched' && battleId) {
-      set({
-        status: 'battleTransition',
-        matchId,
-        battleId,
-        matchState,
-      });
-    } else if (status === 'Matched') {
-      set({
-        status: 'matched',
-        matchId,
-        battleId: null,
-        matchState,
-      });
-    } else if (status === 'Idle' || status === 'NotQueued') {
-      set({
-        status: 'idle',
-        matchId: null,
-        battleId: null,
-        matchState: null,
-        searchStartedAt: null,
-      });
-    }
-  },
-
-  setBattleTransition: (battleId) =>
-    set({
-      status: 'battleTransition',
-      battleId,
+      battleTransitioning: false,
     }),
 
   setIdle: () =>
     set({
-      status: 'idle',
-      matchId: null,
-      battleId: null,
-      matchState: null,
       searchStartedAt: null,
       consecutiveFailures: 0,
+      battleTransitioning: false,
     }),
 
-  hydrateFromServer: (serverStatus, matchId, battleId, matchState) => {
-    if (serverStatus === 'Searching') {
-      set({
-        status: 'searching',
-        matchId: null,
-        battleId: null,
-        matchState: null,
-        searchStartedAt: Date.now(),
-        consecutiveFailures: 0,
-      });
-    } else if (serverStatus === 'Matched' && !battleId) {
-      set({
-        status: 'matched',
-        matchId,
-        battleId: null,
-        matchState,
-        searchStartedAt: Date.now(),
-        consecutiveFailures: 0,
-      });
-    }
-  },
+  setBattleTransitioning: (v) => set({ battleTransitioning: v }),
 
   incrementFailures: () =>
     set((state) => ({ consecutiveFailures: state.consecutiveFailures + 1 })),

@@ -34,52 +34,65 @@ export function OnlinePlayersList({ onSendMessage, onViewProfile }: OnlinePlayer
         ) : (
           <ul className="flex flex-col">
             {playerList.map((player) => (
-              <li key={player.playerId}>
-                <button
-                  type="button"
-                  onClick={() => onViewProfile?.(player.playerId)}
-                  className="group flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-bg-surface"
-                >
-                  <div className="relative">
-                    <Avatar name={player.displayName} size="md" />
-                    <span
-                      className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg-secondary bg-success"
-                      aria-hidden
-                    />
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium text-text-primary">
-                      {player.displayName}
-                    </span>
-                    <span className="truncate text-xs text-text-muted">Online</span>
-                  </div>
-                  {onSendMessage && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSendMessage(player.playerId, player.displayName);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onSendMessage(player.playerId, player.displayName);
-                        }
-                      }}
-                      className="hidden rounded-md px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-bg-elevated group-hover:inline-flex"
-                      title="Send message"
-                    >
-                      DM
-                    </span>
-                  )}
-                </button>
-              </li>
+              <PlayerRow
+                key={player.playerId}
+                player={player}
+                onViewProfile={onViewProfile}
+                onSendMessage={onSendMessage}
+              />
             ))}
           </ul>
         )}
       </div>
     </div>
+  );
+}
+
+// Row is two sibling buttons inside a non-interactive container. Previously
+// the DM action was a `role="button"` span nested inside the row's parent
+// `<button>` — invalid HTML (interactive inside interactive) and a React
+// DOM warning. Splitting them flat-hierarchy resolves both.
+function PlayerRow({
+  player,
+  onViewProfile,
+  onSendMessage,
+}: {
+  player: OnlinePlayerResponse;
+  onViewProfile?: (playerId: string) => void;
+  onSendMessage?: (playerId: string, displayName: string) => void;
+}) {
+  return (
+    <li className="group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-bg-surface">
+      <button
+        type="button"
+        onClick={() => onViewProfile?.(player.playerId)}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+      >
+        <div className="relative">
+          <Avatar name={player.displayName} size="md" />
+          <span
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg-secondary bg-success"
+            aria-hidden
+          />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm font-medium text-text-primary">
+            {player.displayName}
+          </span>
+          <span className="truncate text-xs text-text-muted">Online</span>
+        </div>
+      </button>
+      {onSendMessage && (
+        <button
+          type="button"
+          onClick={() => onSendMessage(player.playerId, player.displayName)}
+          title="Send message"
+          aria-label={`Send message to ${player.displayName}`}
+          className="hidden rounded-md px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-bg-elevated group-hover:inline-flex"
+        >
+          DM
+        </button>
+      )}
+    </li>
   );
 }

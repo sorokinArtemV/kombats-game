@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router';
 import { useChatConnection } from '@/modules/chat/hooks';
 import { AppHeader } from '@/app/AppHeader';
 import { BottomDock } from '@/app/BottomDock';
+import { useNetworkRecovery } from '@/app/useNetworkRecovery';
 
 /**
  * Owns the session-scoped chrome (top header + persistent bottom chat dock)
@@ -16,6 +17,7 @@ import { BottomDock } from '@/app/BottomDock';
  */
 export function SessionShell() {
   useChatConnection();
+  useNetworkRecovery();
   const { pathname } = useLocation();
   // The result screen takes over the full main area for the post-battle
   // celebration; the chat dock would otherwise crowd the summary.

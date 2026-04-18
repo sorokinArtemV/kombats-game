@@ -48,6 +48,16 @@ interface PlayerState {
   setPostBattleRefreshNeeded: (needed: boolean) => void;
   setPendingLevelUpLevel: (level: number | null) => void;
   setDismissedBattleId: (battleId: string | null) => void;
+
+  /**
+   * Single atomic post-battle handoff. Consolidates the three writes
+   * previously scattered in `BattleResultScreen` (dismissedBattleId +
+   * setQueueStatus(null) + postBattleRefreshNeeded=true) into one `set()`
+   * so the BattleGuard + usePostBattleRefresh observers always see a
+   * consistent intermediate state.
+   */
+  returnFromBattle: (battleId: string) => void;
+
   clearState: () => void;
 }
 
@@ -93,6 +103,13 @@ export const usePlayerStore = create<PlayerState>()((set, get) => ({
   setPendingLevelUpLevel: (level) => set({ pendingLevelUpLevel: level }),
 
   setDismissedBattleId: (battleId) => set({ dismissedBattleId: battleId }),
+
+  returnFromBattle: (battleId) =>
+    set({
+      dismissedBattleId: battleId,
+      queueStatus: null,
+      postBattleRefreshNeeded: true,
+    }),
 
   clearState: () =>
     set({

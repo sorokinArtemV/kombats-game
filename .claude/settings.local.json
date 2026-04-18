@@ -159,7 +159,8 @@
       "Bash(/d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/node_modules/.bin/eslint /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/AuthProvider.tsx)",
       "Bash(/d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/node_modules/.bin/eslint /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/AuthProvider.tsx /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/main.tsx /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/user-manager.ts)",
       "Bash(pnpm test *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(echo \"ESLINT=$?\")"
     ]
   }
 }
