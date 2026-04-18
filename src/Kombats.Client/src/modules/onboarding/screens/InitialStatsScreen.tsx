@@ -95,13 +95,13 @@ export function InitialStatsScreen() {
   const errorMessage = getErrorMessage();
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <div>
-        <h2 className="font-display text-xl font-bold text-text-primary">Allocate Stats</h2>
-        <p className="mt-1 text-sm text-text-muted">
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h2 className="font-display text-2xl font-bold text-text-primary">Allocate Stats</h2>
+        <p className="text-sm text-text-muted">
           Spend your initial points across four attributes.
         </p>
-      </div>
+      </header>
 
       <div className="flex flex-col gap-2">
         {STAT_KEYS.map((stat) => (
@@ -119,15 +119,21 @@ export function InitialStatsScreen() {
         ))}
       </div>
 
-      <p className="text-center text-sm font-medium text-text-secondary">
-        Points remaining: <span className="text-accent">{remaining}</span>
-      </p>
+      <div className="flex items-center justify-between rounded-md bg-bg-secondary px-4 py-3">
+        <span className="text-sm font-medium text-text-secondary">Points remaining</span>
+        <span className="font-mono text-base font-semibold text-accent">{remaining}</span>
+      </div>
 
       {errorMessage && (
         <p className="text-center text-sm text-error">{errorMessage}</p>
       )}
 
-      <Button type="submit" loading={mutation.isPending} disabled={totalAdded === 0}>
+      <Button
+        type="submit"
+        loading={mutation.isPending}
+        disabled={totalAdded === 0}
+        className="w-full"
+      >
         Confirm Stats
       </Button>
     </form>

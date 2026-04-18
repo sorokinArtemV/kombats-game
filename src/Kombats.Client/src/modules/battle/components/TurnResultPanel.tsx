@@ -43,13 +43,29 @@ export function TurnResultPanel() {
 
   if (!lastResolution || !lastResolution.log) return null;
 
-  const { aToB, bToA, turnIndex } = lastResolution.log;
+  const { atoB, btoA, turnIndex } = lastResolution.log;
   const isPlayerA = myId !== null && myId === playerAId;
   const myName = (isPlayerA ? playerAName : playerBName) ?? 'You';
   const opponentName = (isPlayerA ? playerBName : playerAName) ?? 'Opponent';
 
-  const myAttack = isPlayerA ? aToB : bToA;
-  const opponentAttack = isPlayerA ? bToA : aToB;
+  const myAttack = isPlayerA ? atoB : btoA;
+  const opponentAttack = isPlayerA ? btoA : atoB;
+
+  // Intermediate payload safety: if the server publishes a Log envelope
+  // without both attack resolutions (partial state during resolving), render
+  // a turn header instead of crashing on undefined access.
+  if (!myAttack || !opponentAttack) {
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-bg-surface bg-bg-secondary p-4">
+        <header className="flex items-center justify-between">
+          <h2 className="font-display text-sm uppercase tracking-wide text-text-primary">
+            Turn {turnIndex} Result
+          </h2>
+        </header>
+        <p className="text-xs text-text-muted">Resolving turn…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-bg-surface bg-bg-secondary p-4">

@@ -126,8 +126,11 @@ export interface AttackResolutionRealtime {
 export interface TurnResolutionLogRealtime {
   battleId: Uuid;
   turnIndex: number;
-  aToB: AttackResolutionRealtime;
-  bToA: AttackResolutionRealtime;
+  // Wire names: backend properties AtoB/BtoA camel-cased to atoB/btoA
+  // (SignalR JsonHubProtocol JsonNamingPolicy.CamelCase only lowers the
+  // first character — it does not re-case interior letters).
+  atoB: AttackResolutionRealtime;
+  btoA: AttackResolutionRealtime;
 }
 
 export interface TurnResolvedRealtime {

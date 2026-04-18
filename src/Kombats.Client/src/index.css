@@ -35,13 +35,6 @@
   --color-error: var(--color-error);
   --color-info: var(--color-info);
 
-  /* Spacing */
-  --spacing-xs: var(--space-xs);
-  --spacing-sm: var(--space-sm);
-  --spacing-md: var(--space-md);
-  --spacing-lg: var(--space-lg);
-  --spacing-xl: var(--space-xl);
-
   /* Typography */
   --font-primary: var(--font-primary);
   --font-display: var(--font-display);

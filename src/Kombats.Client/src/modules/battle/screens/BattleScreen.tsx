@@ -6,6 +6,7 @@ import { TurnResultPanel } from '../components/TurnResultPanel';
 import { NarrationFeed } from '../components/NarrationFeed';
 import { BattleEndOverlay } from '../components/BattleEndOverlay';
 import { Spinner } from '@/ui/components/Spinner';
+import { ErrorBoundary } from '@/ui/components/ErrorBoundary';
 
 /**
  * Battle lifecycle (connect/disconnect, store reset) is owned by
@@ -42,10 +43,20 @@ export function BattleScreen() {
               <Spinner size="lg" />
             </div>
           ) : (
-            <>
+            <ErrorBoundary
+              fallback={
+                <div className="rounded-lg border border-error bg-error/10 px-4 py-3 text-sm text-error">
+                  Something went wrong rendering this turn. Waiting for the next
+                  server update…
+                </div>
+              }
+              onError={(error) => {
+                console.error('BattleScreen render error', error);
+              }}
+            >
               <ZoneSelector />
               <TurnResultPanel />
-            </>
+            </ErrorBoundary>
           )}
         </section>
 

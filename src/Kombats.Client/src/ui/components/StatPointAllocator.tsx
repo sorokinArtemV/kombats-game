@@ -22,28 +22,32 @@ export function StatPointAllocator({
   const total = baseValue + addedPoints;
 
   return (
-    <div className="flex items-center justify-between rounded-md border border-bg-surface bg-bg-secondary px-4 py-3">
-      <span className="text-sm font-medium text-text-primary">{label}</span>
-      <div className="flex items-center gap-3">
+    <div className="flex items-center gap-4 rounded-md border border-bg-surface bg-bg-secondary px-4 py-3">
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">
+        {label}
+      </span>
+      <div className="flex flex-shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onDecrement}
           disabled={disabled || !canDecrement}
-          className="flex h-7 w-7 items-center justify-center rounded bg-bg-surface text-sm text-text-primary transition-colors hover:bg-accent disabled:opacity-30 disabled:hover:bg-bg-surface"
+          aria-label={`Decrease ${label}`}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-bg-surface text-base text-text-primary transition-colors hover:bg-accent disabled:opacity-30 disabled:hover:bg-bg-surface"
         >
           −
         </button>
-        <span className="w-8 text-center font-mono text-sm text-text-primary">
-          {total}
+        <span className="inline-flex min-w-[4rem] items-baseline justify-center whitespace-nowrap font-mono text-sm text-text-primary">
+          <span>{total}</span>
           {addedPoints > 0 && (
-            <span className="text-success"> +{addedPoints}</span>
+            <span className="ml-1 text-success">+{addedPoints}</span>
           )}
         </span>
         <button
           type="button"
           onClick={onIncrement}
           disabled={disabled || !canIncrement}
-          className="flex h-7 w-7 items-center justify-center rounded bg-bg-surface text-sm text-text-primary transition-colors hover:bg-accent disabled:opacity-30 disabled:hover:bg-bg-surface"
+          aria-label={`Increase ${label}`}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-bg-surface text-base text-text-primary transition-colors hover:bg-accent disabled:opacity-30 disabled:hover:bg-bg-surface"
         >
           +
         </button>

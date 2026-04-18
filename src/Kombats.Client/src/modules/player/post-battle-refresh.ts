@@ -27,8 +27,10 @@ function readSnapshotFromCache(
  * Mounted from the lobby. When `postBattleRefreshNeeded` is set, this hook:
  * 1. Snapshots the current character's xp/level/unspent-points.
  * 2. Refetches `GET /api/v1/game/state`.
- * 3. Reads the fresh result directly from the query cache (not from Zustand,
- *    which only syncs in a later React commit via `useGameState`'s effect).
+ * 3. Reads the fresh result directly from the query cache for parity with
+ *    the refetch path (Zustand is also updated inside `useGameState`'s
+ *    queryFn, so either source is now consistent; cache reads avoid an
+ *    extra subscription here).
  * 4. If nothing changed, waits {@link RETRY_DELAY_MS} and refetches once more.
  * 5. If a level-up is detected, records the new level on the player store so
  *    the lobby banner can surface it.

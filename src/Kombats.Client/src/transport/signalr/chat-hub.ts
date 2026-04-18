@@ -33,6 +33,11 @@ export class ChatHubManager {
   private events: ChatHubEvents = {};
   private _connectionState: ConnectionState = 'disconnected';
   private accessTokenFactory: () => string;
+  // Serialized queue so disconnect() never races against an in-flight start().
+  // React 19 StrictMode's mount → cleanup → mount cycle would otherwise cause
+  // stop() to abort negotiate and reject start() with "The connection was
+  // stopped during negotiation."
+  private pending: Promise<void> = Promise.resolve();
 
   constructor(accessTokenFactory: () => string) {
     this.accessTokenFactory = accessTokenFactory;
@@ -46,32 +51,52 @@ export class ChatHubManager {
     this.events = handlers;
   }
 
-  async connect(): Promise<void> {
-    if (this.connection?.state === HubConnectionState.Connected) return;
+  connect(): Promise<void> {
+    const prev = this.pending;
+    const next = (async () => {
+      await prev.catch(() => {});
+      if (this.connection?.state === HubConnectionState.Connected) return;
 
-    this.setConnectionState('connecting');
+      this.setConnectionState('connecting');
 
-    this.connection = new HubConnectionBuilder()
-      .withUrl(`${config.bff.baseUrl}/chathub`, {
-        accessTokenFactory: this.accessTokenFactory,
-      })
-      .withAutomaticReconnect(RECONNECT_DELAYS)
-      .configureLogging(LogLevel.Warning)
-      .build();
+      const conn = new HubConnectionBuilder()
+        .withUrl(`${config.bff.baseUrl}/chathub`, {
+          accessTokenFactory: this.accessTokenFactory,
+        })
+        .withAutomaticReconnect(RECONNECT_DELAYS)
+        .configureLogging(LogLevel.Warning)
+        .build();
 
-    this.registerEvents(this.connection);
-    this.registerLifecycle(this.connection);
+      this.registerEvents(conn);
+      this.registerLifecycle(conn);
+      this.connection = conn;
 
-    await this.connection.start();
-    this.setConnectionState('connected');
+      try {
+        await conn.start();
+        this.setConnectionState('connected');
+      } catch (err) {
+        if (this.connection === conn) this.connection = null;
+        this.setConnectionState('disconnected');
+        throw err;
+      }
+    })();
+    this.pending = next.catch(() => {});
+    return next;
   }
 
-  async disconnect(): Promise<void> {
-    if (this.connection) {
-      await this.connection.stop();
+  disconnect(): Promise<void> {
+    const prev = this.pending;
+    const next = (async () => {
+      await prev.catch(() => {});
+      const conn = this.connection;
       this.connection = null;
-    }
-    this.setConnectionState('disconnected');
+      if (conn) {
+        await conn.stop();
+      }
+      this.setConnectionState('disconnected');
+    })();
+    this.pending = next.catch(() => {});
+    return next;
   }
 
   async joinGlobalChat(): Promise<JoinGlobalChatResponse> {

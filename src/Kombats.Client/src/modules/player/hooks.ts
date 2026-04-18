@@ -1,26 +1,44 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
 import { gameKeys, playerKeys } from '@/app/query-client';
 import * as gameApi from '@/transport/http/endpoints/game';
 import * as playersApi from '@/transport/http/endpoints/players';
 import { usePlayerStore } from './store';
 
-export function useGameState() {
-  const setGameState = usePlayerStore((s) => s.setGameState);
+const DIAG = '[KOMBATS-AUTH-DIAG v3]';
 
-  const query = useQuery({
+export function useGameState() {
+  return useQuery({
     queryKey: gameKeys.state(),
-    queryFn: gameApi.getState,
+    queryFn: async () => {
+      // eslint-disable-next-line no-console
+      console.log(`${DIAG} useGameState queryFn BEGIN`);
+      try {
+        const data = await gameApi.getState();
+        // eslint-disable-next-line no-console
+        console.log(`${DIAG} useGameState queryFn GOT DATA`, {
+          hasCharacter: !!data.character,
+          onboardingState: data.character?.onboardingState,
+          isCharacterCreated: data.isCharacterCreated,
+          queueStatus: data.queueStatus,
+          degradedServices: data.degradedServices,
+        });
+        usePlayerStore.getState().setGameState(data);
+        // eslint-disable-next-line no-console
+        console.log(`${DIAG} useGameState queryFn setGameState DONE`, {
+          isLoaded: usePlayerStore.getState().isLoaded,
+          character: usePlayerStore.getState().character?.onboardingState ?? null,
+        });
+        return data;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.log(`${DIAG} useGameState queryFn ERROR`, {
+          err: String(err),
+        });
+        throw err;
+      }
+    },
     staleTime: 0,
   });
-
-  useEffect(() => {
-    if (query.data) {
-      setGameState(query.data);
-    }
-  }, [query.data, setGameState]);
-
-  return query;
 }
 
 export function useCharacter() {

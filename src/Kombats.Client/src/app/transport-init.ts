@@ -11,7 +11,14 @@ function accessTokenFactory(): string {
   return getAccessToken() ?? '';
 }
 
+const DIAG = '[KOMBATS-AUTH-DIAG v3]';
+
 function onAuthFailure(): void {
+  // eslint-disable-next-line no-console
+  console.log(`${DIAG} transport-init onAuthFailure -> clearAuth`, {
+    pathname: window.location.pathname,
+    reason: 'HTTP 401 from BFF',
+  });
   useAuthStore.getState().clearAuth();
 }
 

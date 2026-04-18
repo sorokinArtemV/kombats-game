@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import { useBattleFeed } from '../hooks';
+import { END_OF_BATTLE_TURN_INDEX } from '../feed-merge';
 import type {
   BattleFeedEntry,
   FeedEntrySeverity,
@@ -91,9 +92,12 @@ function toneTextClass(tone: FeedEntryTone): string {
 }
 
 function FeedRow({ entry }: { entry: BattleFeedEntry }) {
+  const isBattleSummary = entry.turnIndex === END_OF_BATTLE_TURN_INDEX;
   return (
     <div className={clsx('flex gap-2 rounded-sm px-2 py-1 text-xs', severityContainerClass(entry.severity))}>
-      <span className="shrink-0 font-mono text-text-muted">T{entry.turnIndex}</span>
+      {!isBattleSummary && (
+        <span className="shrink-0 font-mono text-text-muted">T{entry.turnIndex}</span>
+      )}
       <span className={clsx('flex-1', toneTextClass(entry.tone), entry.severity === 'Important' && 'font-medium')}>
         {entry.text}
       </span>

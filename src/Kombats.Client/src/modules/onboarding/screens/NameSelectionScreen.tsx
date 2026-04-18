@@ -74,11 +74,13 @@ export function NameSelectionScreen() {
   const displayError = clientError ?? getServerError();
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <div>
-        <h2 className="font-display text-xl font-bold text-text-primary">Choose Your Name</h2>
-        <p className="mt-1 text-sm text-text-muted">This name is permanent and visible to all players.</p>
-      </div>
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-6">
+      <header className="flex flex-col gap-1">
+        <h2 className="font-display text-2xl font-bold text-text-primary">Choose Your Name</h2>
+        <p className="text-sm text-text-muted">
+          This name is permanent and visible to all players.
+        </p>
+      </header>
 
       <NameInput
         value={name}
@@ -91,7 +93,12 @@ export function NameSelectionScreen() {
         disabled={mutation.isPending}
       />
 
-      <Button type="submit" loading={mutation.isPending} disabled={name.trim().length === 0}>
+      <Button
+        type="submit"
+        loading={mutation.isPending}
+        disabled={name.trim().length === 0}
+        className="w-full"
+      >
         Set Name
       </Button>
     </form>

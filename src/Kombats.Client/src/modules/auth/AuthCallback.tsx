@@ -1,24 +1,54 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { useAuth } from 'react-oidc-context';
+
+const DIAG = '[KOMBATS-AUTH-DIAG v3]';
 
 export function AuthCallback() {
   const auth = useAuth();
+  const navigate = useNavigate();
+
+  // Per-render marker: proves this component is rendered and on the callback route.
+  // eslint-disable-next-line no-console
+  console.log(`${DIAG} AuthCallback render`, {
+    pathname: window.location.pathname,
+    search: window.location.search,
+    isLoading: auth.isLoading,
+    activeNavigator: auth.activeNavigator,
+    isAuthenticated: auth.isAuthenticated,
+    hasUser: !!auth.user,
+    error: auth.error ? String(auth.error) : null,
+  });
 
   useEffect(() => {
-    // react-oidc-context processes the callback automatically when
-    // AuthProvider mounts on the /auth/callback route.
-    // Once processing completes, redirect to app root.
-    if (!auth.isLoading && !auth.activeNavigator) {
-      if (auth.isAuthenticated) {
-        // Success — redirect into the authenticated route pipeline.
-        // Guards and GameStateLoader determine the correct final destination.
-        window.location.replace('/lobby');
-      } else {
-        // Callback failed, or user returned without completing auth
-        window.location.replace('/');
-      }
+    // eslint-disable-next-line no-console
+    console.log(`${DIAG} AuthCallback effect`, {
+      isLoading: auth.isLoading,
+      activeNavigator: auth.activeNavigator,
+      isAuthenticated: auth.isAuthenticated,
+      hasUser: !!auth.user,
+      error: auth.error ? String(auth.error) : null,
+    });
+
+    if (auth.isLoading || auth.activeNavigator) {
+      // eslint-disable-next-line no-console
+      console.log(`${DIAG} AuthCallback skip — still loading or navigating`);
+      return;
     }
-  }, [auth.isLoading, auth.activeNavigator, auth.isAuthenticated, auth.error]);
+
+    if (auth.isAuthenticated) {
+      // eslint-disable-next-line no-console
+      console.log(`${DIAG} AuthCallback -> navigate /lobby (soft)`);
+      navigate('/lobby', { replace: true });
+    } else {
+      // eslint-disable-next-line no-console
+      console.log(`${DIAG} AuthCallback -> navigate / (soft, FAILURE PATH)`, {
+        reason: auth.error ? 'error' : 'not authenticated after callback',
+        error: auth.error ? String(auth.error) : null,
+      });
+      navigate('/', { replace: true });
+    }
+  }, [auth.isLoading, auth.activeNavigator, auth.isAuthenticated, auth.error, auth.user, navigate]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-bg-primary">

@@ -4,6 +4,8 @@ import type { User } from 'oidc-client-ts';
 import { useAuthStore } from './store';
 import { userManager } from './user-manager';
 
+const DIAG = '[KOMBATS-AUTH-DIAG v3]';
+
 function extractIdentity(user: User): {
   accessToken: string;
   identityId: string;
@@ -25,8 +27,23 @@ function AuthSync({ children }: { children: ReactNode }) {
     (user: User | null | undefined) => {
       if (user && !user.expired) {
         const { accessToken, identityId, displayName } = extractIdentity(user);
+        // eslint-disable-next-line no-console
+        console.log(`${DIAG} AuthSync -> setUser`, {
+          identityId,
+          displayName,
+          tokenLen: accessToken?.length ?? 0,
+          expiresAt: user.expires_at,
+          now: Math.floor(Date.now() / 1000),
+        });
         setUser(accessToken, identityId, displayName);
       } else {
+        // eslint-disable-next-line no-console
+        console.log(`${DIAG} AuthSync -> clearAuth (syncUser path)`, {
+          hasUser: !!user,
+          expired: user?.expired,
+          expiresAt: user?.expires_at,
+          now: Math.floor(Date.now() / 1000),
+        });
         clearAuth();
       }
     },
@@ -35,11 +52,25 @@ function AuthSync({ children }: { children: ReactNode }) {
 
   // Initial sync on mount + when auth state changes
   useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.log(`${DIAG} AuthSync effect`, {
+      isLoading: auth.isLoading,
+      isAuthenticated: auth.isAuthenticated,
+      hasUser: !!auth.user,
+      userExpired: auth.user?.expired,
+      activeNavigator: auth.activeNavigator,
+      error: auth.error ? String(auth.error) : null,
+    });
     if (auth.isLoading) return;
 
     if (auth.isAuthenticated && auth.user) {
       syncUser(auth.user);
     } else if (!auth.isAuthenticated && !auth.activeNavigator) {
+      // eslint-disable-next-line no-console
+      console.log(`${DIAG} AuthSync -> clearAuth (else-if branch)`, {
+        pathname: window.location.pathname,
+        reason: '!isAuthenticated && !activeNavigator',
+      });
       clearAuth();
     }
     syncedRef.current = true;
@@ -49,6 +80,10 @@ function AuthSync({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleUserLoaded = (user: User) => {
       const { accessToken } = extractIdentity(user);
+      // eslint-disable-next-line no-console
+      console.log(`${DIAG} userManager.userLoaded -> updateToken`, {
+        tokenLen: accessToken?.length ?? 0,
+      });
       updateToken(accessToken);
     };
 
@@ -60,7 +95,11 @@ function AuthSync({ children }: { children: ReactNode }) {
 
   // Listen for silent renew errors
   useEffect(() => {
-    const handleSilentRenewError = () => {
+    const handleSilentRenewError = (error: Error) => {
+      // eslint-disable-next-line no-console
+      console.log(`${DIAG} silentRenewError -> clearAuth`, {
+        error: String(error),
+      });
       clearAuth();
     };
 
