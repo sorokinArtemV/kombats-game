@@ -1,12 +1,12 @@
 import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
 import { chatKeys } from '@/app/query-client';
 import * as chatApi from '@/transport/http/endpoints/chat';
 import { useChatStore } from '../store';
 import { Avatar } from '@/ui/components/Avatar';
 import { Spinner } from '@/ui/components/Spinner';
 import { MessageInput } from './MessageInput';
+import { formatTimestamp } from '../format';
 import type { ChatMessageResponse } from '@/types/chat';
 
 interface DirectMessagePanelProps {
@@ -189,10 +189,3 @@ function mergeMessages(
   return merged;
 }
 
-function formatTimestamp(sentAt: string): string {
-  try {
-    return format(new Date(sentAt), 'HH:mm');
-  } catch {
-    return '';
-  }
-}

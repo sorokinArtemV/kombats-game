@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMatchmaking } from '../hooks';
 import { Spinner } from '@/ui/components/Spinner';
-import type { ApiError } from '@/types/api';
+import { isApiError } from '@/types/api';
 
 export function QueueButton() {
   const { status, joinQueue } = useMatchmaking();
@@ -48,15 +48,6 @@ function extractMessage(err: unknown): string {
     if (err.error?.message) return err.error.message;
   }
   return 'Could not join the queue. Please try again.';
-}
-
-function isApiError(err: unknown): err is ApiError {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'status' in err &&
-    typeof (err as ApiError).status === 'number'
-  );
 }
 
 function PlayIcon() {

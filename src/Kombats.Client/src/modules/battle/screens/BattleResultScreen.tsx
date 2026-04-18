@@ -4,68 +4,11 @@ import { useAuthStore } from '@/modules/auth/store';
 import { usePlayerStore } from '@/modules/player/store';
 import { useBattleStore } from '../store';
 import { useBattlePhase, useBattleResult } from '../hooks';
-import { deriveOutcome, type BattleEndOutcome } from '../battle-end-outcome';
+import { deriveOutcome } from '../battle-end-outcome';
+import { OUTCOME_TONE } from '../outcome-tone';
 import { useResultBattleFeed } from '../result-feed';
 import { NarrationFeed } from '../components/NarrationFeed';
 import { Spinner } from '@/ui/components/Spinner';
-
-interface ToneTokens {
-  accentClass: string;
-  iconBg: string;
-  iconShadow: string;
-  containerBg: string;
-  border: string;
-  primaryButton: string;
-  secondaryButton: string;
-}
-
-const TONE: Record<BattleEndOutcome, ToneTokens> = {
-  victory: {
-    accentClass: 'text-success',
-    iconBg: 'bg-success',
-    iconShadow: 'shadow-[0_0_40px_rgba(76,175,80,0.4)]',
-    containerBg: 'bg-[#1b2e1b]',
-    border: 'border-success',
-    primaryButton: 'bg-success hover:bg-go-hover',
-    secondaryButton: 'border-success text-success hover:bg-success/10',
-  },
-  defeat: {
-    accentClass: 'text-error',
-    iconBg: 'bg-error',
-    iconShadow: 'shadow-[0_0_40px_rgba(244,67,54,0.4)]',
-    containerBg: 'bg-[#2e1b1b]',
-    border: 'border-error',
-    primaryButton: 'bg-bg-surface hover:bg-border-strong',
-    secondaryButton: 'border-error text-error hover:bg-error/10',
-  },
-  draw: {
-    accentClass: 'text-info',
-    iconBg: 'bg-info',
-    iconShadow: 'shadow-[0_0_40px_rgba(33,150,243,0.4)]',
-    containerBg: 'bg-bg-secondary',
-    border: 'border-info',
-    primaryButton: 'bg-info hover:bg-block-strong',
-    secondaryButton: 'border-info text-info hover:bg-info/10',
-  },
-  error: {
-    accentClass: 'text-warning',
-    iconBg: 'bg-warning',
-    iconShadow: 'shadow-[0_0_40px_rgba(255,152,0,0.4)]',
-    containerBg: 'bg-bg-secondary',
-    border: 'border-warning',
-    primaryButton: 'bg-warning hover:opacity-90',
-    secondaryButton: 'border-warning text-warning hover:bg-warning/10',
-  },
-  other: {
-    accentClass: 'text-text-secondary',
-    iconBg: 'bg-bg-surface',
-    iconShadow: 'shadow-none',
-    containerBg: 'bg-bg-secondary',
-    border: 'border-border',
-    primaryButton: 'bg-accent hover:bg-accent-hover',
-    secondaryButton: 'border-border-strong text-text-secondary hover:bg-bg-surface',
-  },
-};
 
 export function BattleResultScreen() {
   const { battleId } = useParams<{ battleId: string }>();
@@ -99,7 +42,7 @@ export function BattleResultScreen() {
   }
 
   const { outcome, title, subtitle } = deriveOutcome(endReason, winnerPlayerId, myId);
-  const tone = TONE[outcome];
+  const tone = OUTCOME_TONE[outcome];
 
   const isPlayerA = myId !== null && myId === playerAId;
   const myName = (isPlayerA ? playerAName : playerBName) ?? 'You';
@@ -142,7 +85,7 @@ export function BattleResultScreen() {
         <div className="flex flex-col items-center gap-2 text-center">
           <h1
             className={clsx(
-              'font-display text-5xl font-bold uppercase tracking-[0.25em] drop-shadow-[0_0_20px_rgba(255,255,255,0.15)]',
+              'font-display text-5xl font-bold uppercase tracking-[0.25em] drop-shadow-[var(--shadow-title-glow)]',
               tone.accentClass,
             )}
           >

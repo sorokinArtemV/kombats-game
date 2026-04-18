@@ -1,8 +1,8 @@
 import { useRef, useEffect } from 'react';
-import { format } from 'date-fns';
 import { useGlobalMessages, useChatConnectionState } from '../hooks';
 import { ConnectionIndicator } from '@/ui/components/ConnectionIndicator';
 import { MessageInput } from './MessageInput';
+import { formatTimestamp } from '../format';
 
 interface ChatPanelProps {
   hideHeader?: boolean;
@@ -58,10 +58,3 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps = {}) {
   );
 }
 
-function formatTimestamp(sentAt: string): string {
-  try {
-    return format(new Date(sentAt), 'HH:mm');
-  } catch {
-    return '';
-  }
-}

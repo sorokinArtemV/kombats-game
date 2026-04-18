@@ -13,6 +13,20 @@ export interface ApiError {
   status: number;
 }
 
+/**
+ * Shared structural type guard for `ApiError`. Centralized here so every
+ * caller agrees on what "looks like an API error" means — previously the
+ * two matchmaking call-sites each defined their own identical copy.
+ */
+export function isApiError(err: unknown): err is ApiError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    typeof (err as ApiError).status === 'number'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Game state
 // ---------------------------------------------------------------------------

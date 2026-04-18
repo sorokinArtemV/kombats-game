@@ -1,30 +1,12 @@
-import { useState, useRef, useEffect } from 'react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { useAuth } from '@/modules/auth/hooks';
 import { usePlayerStore } from '@/modules/player/store';
 
 export function AppHeader() {
   const { displayName, logout } = useAuth();
   const character = usePlayerStore((s) => s.character);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const profileLabel = character?.name ?? displayName ?? 'Profile';
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onClick = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onClick);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onClick);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [menuOpen]);
 
   return (
     <header className="flex items-center gap-6 border-b border-border bg-bg-nav px-4 py-2">
@@ -39,35 +21,34 @@ export function AppHeader() {
         <NavLink>Community</NavLink>
       </nav>
 
-      <div className="ml-auto flex items-center gap-3" ref={menuRef}>
-        <button
-          type="button"
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-surface hover:text-text-primary"
-        >
-          <ProfileIcon />
-          <span className="max-w-[10rem] truncate">{profileLabel}</span>
-        </button>
-        {menuOpen && (
-          <div
-            role="menu"
-            className="absolute right-4 top-12 z-30 min-w-[10rem] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
-          >
+      <div className="ml-auto flex items-center gap-3">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
             <button
               type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                logout();
-              }}
-              className="block w-full px-3 py-2 text-left text-xs text-text-secondary transition-colors hover:bg-bg-surface hover:text-text-primary"
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-surface hover:text-text-primary data-[state=open]:bg-bg-surface data-[state=open]:text-text-primary"
             >
-              Sign out
+              <ProfileIcon />
+              <span className="max-w-[10rem] truncate">{profileLabel}</span>
             </button>
-          </div>
-        )}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              align="end"
+              sideOffset={6}
+              className="z-30 min-w-[10rem] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
+            >
+              <DropdownMenu.Item
+                onSelect={() => {
+                  logout();
+                }}
+                className="block w-full cursor-pointer px-3 py-2 text-left text-xs text-text-secondary outline-none transition-colors data-[highlighted]:bg-bg-surface data-[highlighted]:text-text-primary"
+              >
+                Sign out
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
     </header>
   );

@@ -72,4 +72,15 @@
   --duration-fast: 150ms;
   --duration-normal: 300ms;
   --duration-slow: 500ms;
+
+  /* Outcome glow shadows — used on the result screen's outcome icon and
+     anywhere else we want a status-tinted halo. Values match the status
+     colors above at 40% alpha. */
+  --shadow-success: 0 0 40px rgba(76, 175, 80, 0.4);
+  --shadow-error: 0 0 40px rgba(244, 67, 54, 0.4);
+  --shadow-info: 0 0 40px rgba(33, 150, 243, 0.4);
+  --shadow-warning: 0 0 40px rgba(255, 152, 0, 0.4);
+
+  /* Neutral white title glow used behind celebration headings. */
+  --shadow-title-glow: 0 0 20px rgba(255, 255, 255, 0.15);
 }

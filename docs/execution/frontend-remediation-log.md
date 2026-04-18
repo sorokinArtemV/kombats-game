@@ -646,3 +646,214 @@ original audit)
   be touched by F-TY1-5 type tightening (post-MVP).
 - Next: concentrated browser-side manual sweep across S1-S4 — explicitly
   the next step per the user's instruction. Not Stage S5 yet.
+
+---
+
+## Stage S5 — Targeted UI polish
+
+**Date:** 2026-04-18
+**Status:** Completed
+**Branch:** frontend-client
+**Plan reference:** §6 Stage S5 (lands P2 #17, #18, #19, #21, #22, #24)
+
+**Note on gating.** Per the user's instruction, the S1-S4 browser manual
+sweeps were completed on the human side before S5 was authorized. The
+previously-accumulated pending-verification items in
+`frontend-remediation-issues.md` are therefore considered closed on the
+human side; the `## Open / Deferred` list would be better represented as
+"closed" once the human captures notes, but no code action is owed to
+them from S5.
+
+### Scope delivered
+
+- **Shared outcome tone tokens + shadow tokens (P2 #17, #18, F-U5/F-U6/F-D2).**
+  - New `src/modules/battle/outcome-tone.ts` exports `OUTCOME_TONE` — a
+    `Record<BattleEndOutcome, OutcomeToneTokens>` with `accentClass`,
+    `iconBg`, `iconShadow`, `containerBg`, `border`, `primaryButton`,
+    `secondaryButton`. Plus `outcomeAccentClass(outcome)` helper for the
+    overlay's narrow needs.
+  - `BattleResultScreen` deleted its inline 56-line `TONE` record and
+    now reads from `OUTCOME_TONE`. No behavior change; identical class
+    strings.
+  - `BattleEndOverlay` deleted its inline `outcomeAccentClass` switch
+    and imports from the same module.
+  - Added `--shadow-success / -error / -info / -warning` and
+    `--shadow-title-glow` to `src/ui/theme/tokens.css`. Every arbitrary
+    `shadow-[0_0_40px_rgba(...)]` and `drop-shadow-[0_0_20px_rgba(...)]`
+    in `BattleResultScreen` is now `shadow-[var(--shadow-...)]`.
+  - Every hardcoded `bg-[#1b2e1b]` / `bg-[#2e1b1b]` became `bg-success/10`
+    / `bg-error/10` — the same idiom the rest of the codebase already
+    uses (LevelUpBanner, ChatErrorDisplay, UnauthenticatedShell retry
+    banner).
+  - Grep confirms zero remaining `bg-[#...]`, `shadow-[0_0_...]`, or
+    `drop-shadow-[0_0_...]` matches in `src/`.
+- **Helper unification (P2 #19, F-Q4/F-Q5).**
+  - `isApiError` is now a real export of `src/types/api.ts`. Both
+    matchmaking call-sites (`useMatchmaking` hook 409 detection,
+    `QueueButton` error-message extraction) import from there; the two
+    identical inline copies are gone.
+  - `formatTimestamp` moved into `src/modules/chat/format.ts`. Both
+    `ChatPanel` and `DirectMessagePanel` import from it; the two
+    identical inline copies and their now-unused `date-fns` imports are
+    gone.
+- **`lastResolution` cleared on battle end (P2 #21, F-S2).** The battle
+  store's `handleBattleEnded` now sets `lastResolution: null` alongside
+  the phase/endReason/winner writes. Previously the final turn's
+  resolution object survived into the `'Ended'` phase, which could let
+  a late re-render of `TurnResultPanel` flash the last turn's attack/
+  block detail under the result celebration. Existing 11 battle-store
+  tests continue to pass.
+- **`AppHeader` dropdown via Radix DropdownMenu (P2 #22, F-R3/F-Q6).**
+  Replaced the custom toggle + absolute-positioned `<div role="menu">`
+  + global click-outside/Escape listeners with
+  `@radix-ui/react-dropdown-menu` (new dependency, approved under the
+  existing `@radix-ui` primitives stack entry). Portal positioning +
+  keyboard navigation + ARIA attributes come for free; the header file
+  shrank from 105 → 85 lines and lost the `useState`/`useRef`/`useEffect`
+  machinery. Sign-out behavior is preserved.
+- **Stat allocation de-duplication (P2 #24, F-Q1) — bounded.**
+  - New `src/modules/player/useAllocateStats.ts` owns the shared
+    mechanics: local `added` draft + increment/decrement/reset, the
+    `useMutation` wrapping `POST /api/v1/character/stats`, merging the
+    response into `usePlayerStore.character`, `gameState` invalidation,
+    409 revision-mismatch handling, and the user-facing `errorMessage`
+    extraction. Exports `STAT_KEYS` + `STAT_LABELS` + `StatKey` type so
+    consumers use the same alphabet.
+  - Caller-specific side effects flow through an `onSuccess` callback:
+    `InitialStatsScreen` flips `onboardingState` to `'Ready'` there;
+    `StatAllocationPanel` clears `pendingLevelUpLevel` when the drain
+    reaches zero. Everything else is shared.
+  - `InitialStatsScreen` and `StatAllocationPanel` both shed their
+    state/useMutation/error-handling code and now read from the hook.
+    Combined LOC dropped ~100 lines across the two callers net of the
+    new file.
+  - **Intentionally did NOT extract a shared `StatAllocationForm`
+    presentational component.** The two callers have genuinely
+    different layouts (full-screen onboarding form with h2 header +
+    single Confirm button vs. lobby Card with h3 + collapsible pill +
+    Reset button). Forcing them into one component needs many props
+    for minor savings — borderline of "bounded and reviewable." Left
+    the per-screen JSX as-is.
+
+### Files changed
+
+- **New:**
+  - `src/ui/theme/tokens.css` — added outcome shadow tokens + title-glow token.
+  - `src/modules/battle/outcome-tone.ts` — shared outcome tone record.
+  - `src/modules/chat/format.ts` — shared chat timestamp formatter.
+  - `src/modules/player/useAllocateStats.ts` — shared stat-allocation hook.
+- **Modified:**
+  - `src/modules/battle/screens/BattleResultScreen.tsx` — imports tokens,
+    removes inline TONE, tokenizes the title glow.
+  - `src/modules/battle/components/BattleEndOverlay.tsx` — imports
+    `outcomeAccentClass` from the shared module.
+  - `src/modules/battle/store.ts` — clears `lastResolution` on battle end.
+  - `src/types/api.ts` — exports `isApiError`.
+  - `src/modules/matchmaking/hooks.ts` — drops local `isApiError` copy; imports.
+  - `src/modules/matchmaking/components/QueueButton.tsx` — same.
+  - `src/modules/chat/components/ChatPanel.tsx` — drops local `formatTimestamp`; imports.
+  - `src/modules/chat/components/DirectMessagePanel.tsx` — same.
+  - `src/app/AppHeader.tsx` — Radix `DropdownMenu` replacement.
+  - `src/modules/onboarding/screens/InitialStatsScreen.tsx` — uses `useAllocateStats`.
+  - `src/modules/player/components/StatAllocationPanel.tsx` — uses `useAllocateStats`.
+  - `package.json` / `package-lock.json` — `@radix-ui/react-dropdown-menu` added.
+
+### Validation
+
+- `npx tsc --noEmit` — passes (exit 0).
+- `npx eslint .` — passes (0 errors, 0 warnings).
+- `npx vitest run` — 14 files, **127 tests**, all pass. No regressions from
+  the refactors: the battle store's existing 11-case suite continues to
+  pass with the new `lastResolution: null` clear. No new unit tests added
+  — the S5 scope is presentation + pure-extraction refactors.
+- `npx vite build` — production build succeeds. Bundle grew 597 → 645 KB
+  raw (173 → 189 KB gzip) due to the Radix dropdown-menu addition; within
+  the plan's "bundle splitting is post-MVP" explicit exclusion.
+- Grep sweep:
+  - Zero `bg-[#...]`, `shadow-[0_0_...]`, or `drop-shadow-[0_0_...]`
+    matches in `src/`. ✅
+  - Zero duplicate `formatTimestamp` or `isApiError` function definitions
+    outside their shared modules. ✅
+  - `useAllocateStats` is referenced by both `InitialStatsScreen` and
+    `StatAllocationPanel`; no other consumers. ✅
+
+### Visual / behavioral checks performed (static)
+
+Since visual regression requires a live browser, I verified behavior
+preservation by comparing class strings and render output shape:
+
+| Surface | Check | Result |
+|---|---|---|
+| Battle result — victory/defeat/draw/error/other | `OUTCOME_TONE[outcome]` yields the identical class string the previous inline `TONE[outcome]` produced (except `bg-[#1b2e1b]`→`bg-success/10` and `bg-[#2e1b1b]`→`bg-error/10` — visually equivalent at the same chroma). | ✅ |
+| Battle result — icon glow | `shadow-[var(--shadow-success)]` resolves to `0 0 40px rgba(76,175,80,0.4)` — identical value. Same for error/info/warning. | ✅ |
+| Battle result — title glow | `drop-shadow-[var(--shadow-title-glow)]` resolves to `0 0 20px rgba(255,255,255,0.15)` — identical. | ✅ |
+| Battle end overlay — accent color per outcome | `outcomeAccentClass(outcome)` returns the same literal (text-success/error/info/warning/text-text-secondary) as the deleted local switch. | ✅ |
+| Chat timestamps | `formatTimestamp` identical body (`format(new Date(sentAt), 'HH:mm')` with try/catch → `''`). | ✅ |
+| Matchmaking join/leave 409 handling | `isApiError` body identical. | ✅ |
+| Battle-end result screen | `lastResolution` cleared; `TurnResultPanel` is only rendered outside `Ended` (grep confirms). | ✅ |
+| AppHeader dropdown | Same trigger label, same "Sign out" item, same logout callback. Radix brings focus trap, Escape/outside-click closing, portal positioning. | ✅ |
+| Stat allocation — onboarding | `onSuccess` callback flips `onboardingState` to `'Ready'` identically to the previous inline `onSuccess`. | ✅ |
+| Stat allocation — lobby panel | `onSuccess` clears `pendingLevelUpLevel` when `response.unspentPoints === 0` identically to the previous inline logic. Reset button, Card chrome preserved. | ✅ |
+
+Live-browser spot-checks still owed on: lobby render, battle result
+(all five outcomes), onboarding stats, chat timestamps (both global and
+DM), header dropdown positioning across viewport widths, and that the
+Radix menu trigger's `data-[state=open]` styling reads the open state
+correctly.
+
+### Deviations from plan
+
+- **No shared `StatAllocationForm` presentational component.** The plan
+  calls out "Extract `useAllocateStats` hook + `StatAllocationForm`
+  presentational component; both screens thin down." I landed the hook
+  (the large win) but skipped the shared form because the two callers'
+  surrounding layouts diverge enough that a joint component needed
+  more props than JSX it would save. This is the explicit "bounded and
+  reviewable" carve-out from the user's scope instruction. The two
+  screens each retain their own layout-specific JSX (~35 lines each).
+- **`isApiError` call-site count.** Plan says "3 call-sites"; I found
+  and unified 2 live call-sites. The third was most likely one of the
+  duplicate definitions the plan was already counting, or a now-deleted
+  usage from earlier stages.
+- **`bg-[#1b2e1b]` / `bg-[#2e1b1b]` → `bg-success/10` / `bg-error/10`.**
+  The two old hex values are "dark tinted green" and "dark tinted red"
+  at roughly 10% saturation over near-black. `bg-success/10` /
+  `bg-error/10` match that chroma pattern (same color family at the
+  project's already-used 10% tint) and are the same idiom used
+  throughout the rest of the codebase. A dedicated
+  `--color-bg-outcome-{victory,defeat}` token was considered and
+  rejected — no code reuse and no stylistic precedent.
+- **Bundle size.** Bundle grew ~48 KB raw (16 KB gzip) from the Radix
+  dropdown-menu dep. Within the explicit "bundle splitting is
+  post-MVP" exclusion.
+
+### Intentionally deferred
+
+- **Full design-fidelity pass against `design/`** — §4.4 / plan §7 keep
+  this post-MVP.
+- **Animation polish** (Framer Motion on outcome celebration, reduced-
+  motion handling) — post-MVP.
+- **`StatAllocationForm` presentational component** — deferred per the
+  scope carve-out above. The hook absorbs the bug-dense mutation/error
+  logic, which was the P2 #24 MVP concern. Presentational cleanup
+  follows in whichever later polish pass redesigns the lobby layout.
+- **Chunk splitting / `React.lazy`** — explicit post-MVP exclusion.
+- **Sentry / OTel hook on the logger** — post-MVP; the logger is the
+  future seam (S0).
+- **ZoneSelector redesign, avatar pipeline, `prefers-reduced-motion`,
+  branded UUIDs, AbortSignal threading, BaseHubManager extraction,
+  per-event subscribe hub API, `refetchOnWindowFocus` default flip,
+  chat conversation eviction, E2E tests** — all explicitly post-MVP
+  per plan §7.
+
+### Remaining risk / follow-up
+
+- **Live-browser spot-check of S5 outcomes.** The refactors preserve
+  behavior by inspection, but a final pass through the 8 surfaces in
+  the table above is owed before ship. Logged to
+  `frontend-remediation-issues.md`.
+- **Bundle size.** The growth from Radix dropdown-menu pushes the
+  total close to 650 KB raw. Post-MVP, `React.lazy` on the battle
+  route group + `framer-motion` would benefit from splitting; still
+  explicitly deferred.
+- **Nothing else.** Stage S5 completes the reviewed remediation plan.

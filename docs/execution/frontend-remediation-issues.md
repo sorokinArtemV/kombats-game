@@ -21,6 +21,7 @@ One line per item. Add an entry only when it comes up during an actual stage —
   3. Onboarding error paths (observed): duplicate name (409), revision mismatch (409 on allocate), network failure on each mutation. Each shows a recoverable error + a working retry.
   4. Chat `OnlinePlayersList`: row hover reveals DM button; clicking row calls view-profile; clicking DM button calls send-message. No React DOM warning about nested interactive elements in the console.
 - **Type-shape landmine in `guard-decisions.test.ts`** — `mkCharacter()` uses invented field names relative to `CharacterResponse`. Type-checks via cast only. Not a correctness bug (guard logic reads only `onboardingState`) but misleading for future readers. Touch when the post-MVP F-TY1-5 type-tightening campaign lands.
+- **S5 live-browser spot-check** — refactors are behavior-preserving by inspection; a final human pass is owed on: battle result (all 5 outcomes render with correct tone), battle end overlay, chat timestamps (global + DM), matchmaking queue error states, `AppHeader` dropdown (positioning across viewport widths, Escape + outside-click close), `InitialStatsScreen`, and lobby `StatAllocationPanel` (post-level-up case). Gate = no visible regression against the pre-S5 behavior.
 
 ---
 

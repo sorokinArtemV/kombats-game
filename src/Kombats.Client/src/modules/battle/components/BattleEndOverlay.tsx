@@ -4,22 +4,8 @@ import { clsx } from 'clsx';
 import { useBattleStore } from '../store';
 import { useBattlePhase, useBattleResult } from '../hooks';
 import { useAuthStore } from '@/modules/auth/store';
-import { deriveOutcome, type BattleEndOutcome } from '../battle-end-outcome';
-
-function outcomeAccentClass(outcome: BattleEndOutcome): string {
-  switch (outcome) {
-    case 'victory':
-      return 'text-success';
-    case 'defeat':
-      return 'text-error';
-    case 'draw':
-      return 'text-info';
-    case 'error':
-      return 'text-warning';
-    default:
-      return 'text-text-secondary';
-  }
-}
+import { deriveOutcome } from '../battle-end-outcome';
+import { outcomeAccentClass } from '../outcome-tone';
 
 export function BattleEndOverlay() {
   const phase = useBattlePhase();

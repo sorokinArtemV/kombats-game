@@ -259,6 +259,11 @@ export const useBattleStore = create<BattleState>()((set, get) => ({
       endReason: data.reason,
       winnerPlayerId: data.winnerPlayerId,
       phase: 'Ended',
+      // Final turn's per-turn resolution belongs to the live-battle UI
+      // only. Leaving it set bleeds into the result screen, where a
+      // TurnResultPanel could briefly flash the last turn's attack/block
+      // detail underneath the outcome celebration.
+      lastResolution: null,
     }),
 
   handleFeedUpdated: (data) => {

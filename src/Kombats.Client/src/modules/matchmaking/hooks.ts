@@ -6,7 +6,8 @@ import { gameKeys } from '@/app/query-client';
 import { usePlayerStore } from '@/modules/player/store';
 import { useMatchmakingStore } from './store';
 import { deriveQueueUiStatus, type QueueUiStatus } from './queue-ui-status';
-import type { QueueStatusResponse, LeaveQueueResponse, ApiError } from '@/types/api';
+import { isApiError } from '@/types/api';
+import type { QueueStatusResponse, LeaveQueueResponse } from '@/types/api';
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -200,11 +201,3 @@ export function useMatchmakingPolling(): void {
   }, [status]);
 }
 
-function isApiError(err: unknown): err is ApiError {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'status' in err &&
-    typeof (err as ApiError).status === 'number'
-  );
-}
