@@ -74,9 +74,7 @@ export function BattleScreen() {
         {phase === 'Error' && lastError && (
           <Banner tone="error">{lastError}</Banner>
         )}
-        {phase === 'ConnectionLost' && (
-          <Banner tone="warning">Connection lost — reconnecting…</Banner>
-        )}
+        {phase === 'ConnectionLost' && <ConnectionLostBanner />}
 
         <ErrorBoundary
           fallback={
@@ -168,8 +166,28 @@ function Banner({
       ? 'border-error bg-error/10 text-error'
       : 'border-warning bg-warning/10 text-warning';
   return (
-    <div className={`rounded-md border px-3 py-2 text-xs ${cls}`}>{children}</div>
+    <div
+      className={`rounded-md border px-3 py-2 text-xs ${cls}`}
+      role="status"
+      aria-live="polite"
+    >
+      {children}
+    </div>
   );
+}
+
+function ConnectionLostBanner() {
+  // Pull the live connection state so the banner stays truthful across the
+  // reconnecting → connected window. Without this, "reconnecting…" could
+  // linger briefly after SignalR actually comes back up.
+  const connectionState = useBattleConnectionState();
+  const message =
+    connectionState === 'reconnecting'
+      ? 'Connection lost — reconnecting…'
+      : connectionState === 'connecting'
+        ? 'Reconnecting to the battle…'
+        : 'Connection unstable — waiting for server.';
+  return <Banner tone="warning">{message}</Banner>;
 }
 
 function HourglassIcon() {

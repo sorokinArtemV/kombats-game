@@ -8,6 +8,10 @@ import type {
 import type { Uuid } from '@/types/common';
 
 const MAX_GLOBAL_MESSAGES = 500;
+// Per-conversation cap on real-time DM buffer. HTTP history backfills older
+// messages when a panel is (re)opened, so trimming the live buffer does not
+// lose data — it only bounds memory/render cost over long sessions.
+const MAX_DIRECT_MESSAGES_PER_CONVERSATION = 500;
 
 interface RateLimitState {
   isLimited: boolean;
@@ -107,9 +111,14 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     const updated = new Map(state.directConversations);
     if (existing) {
+      const appended = [...existing.messages, msg];
+      const trimmed =
+        appended.length > MAX_DIRECT_MESSAGES_PER_CONVERSATION
+          ? appended.slice(appended.length - MAX_DIRECT_MESSAGES_PER_CONVERSATION)
+          : appended;
       updated.set(msg.conversationId, {
         ...existing,
-        messages: [...existing.messages, msg],
+        messages: trimmed,
         lastMessageAt: msg.sentAt,
       });
     } else {

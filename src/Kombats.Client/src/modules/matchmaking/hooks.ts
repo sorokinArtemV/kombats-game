@@ -52,9 +52,17 @@ export function useMatchmaking() {
         matchState: null,
       });
     } catch (err: unknown) {
+      // 409 = already queued / matched — authoritative state lives on the
+      // server. Refetch and let the guards route accordingly.
       if (isApiError(err) && err.status === 409) {
         await queryClient.invalidateQueries({ queryKey: gameKeys.state() });
+        return;
       }
+      // Non-409 failures (5xx, network, 400, etc.) — rethrow so the caller
+      // can surface a visible error. Previously silently swallowed, which
+      // left the user staring at an un-pressed "Join Queue" button with no
+      // feedback.
+      throw err;
     }
   }, [queryClient]);
 

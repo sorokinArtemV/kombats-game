@@ -16,7 +16,10 @@ export function GameStateLoader() {
 
   if (isError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg-primary">
+      <div
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg-primary"
+        role="alert"
+      >
         <p className="text-error">Failed to load game state</p>
         <p className="text-sm text-text-muted">
           {(error as Error)?.message ?? 'An unexpected error occurred.'}
@@ -43,7 +46,10 @@ export function GameStateLoader() {
   // Auto-onboard failed
   if (onboard.isError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg-primary">
+      <div
+        className="flex min-h-screen flex-col items-center justify-center gap-4 bg-bg-primary"
+        role="alert"
+      >
         <p className="text-error">Failed to create character</p>
         <p className="text-sm text-text-muted">
           {(onboard.error as Error)?.message ?? 'An unexpected error occurred.'}

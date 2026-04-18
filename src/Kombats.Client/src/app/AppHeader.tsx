@@ -15,8 +15,15 @@ export function AppHeader() {
     const onClick = (e: MouseEvent) => {
       if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
     window.addEventListener('mousedown', onClick);
-    return () => window.removeEventListener('mousedown', onClick);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onClick);
+      window.removeEventListener('keydown', onKey);
+    };
   }, [menuOpen]);
 
   return (
@@ -36,15 +43,21 @@ export function AppHeader() {
         <button
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
           className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-surface hover:text-text-primary"
         >
           <ProfileIcon />
           <span className="max-w-[10rem] truncate">{profileLabel}</span>
         </button>
         {menuOpen && (
-          <div className="absolute right-4 top-12 z-30 min-w-[10rem] rounded-md border border-border bg-bg-secondary py-1 shadow-lg">
+          <div
+            role="menu"
+            className="absolute right-4 top-12 z-30 min-w-[10rem] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
+          >
             <button
               type="button"
+              role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
                 logout();

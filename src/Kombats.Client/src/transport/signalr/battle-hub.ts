@@ -61,6 +61,13 @@ export class BattleHubManager {
   // stop() to abort negotiate and reject start() with "The connection was
   // stopped during negotiation."
   private pending: Promise<void> = Promise.resolve();
+  // True once we've observed `onreconnecting` — used by `onclose` to decide
+  // whether a close is a clean teardown (still `disconnected`) or terminal
+  // reconnect exhaustion (`failed`).
+  private reconnectAttemptSeen = false;
+  // True when the consumer is intentionally tearing the connection down;
+  // prevents `onclose` from flipping to 'failed' during normal unmount.
+  private intentionalDisconnect = false;
 
   constructor(accessTokenFactory: () => string) {
     this.accessTokenFactory = accessTokenFactory;
@@ -81,6 +88,8 @@ export class BattleHubManager {
       if (this.connection?.state === HubConnectionState.Connected) return;
 
       this.setConnectionState('connecting');
+      this.reconnectAttemptSeen = false;
+      this.intentionalDisconnect = false;
 
       const conn = new HubConnectionBuilder()
         .withUrl(`${config.bff.baseUrl}/battlehub`, {
@@ -109,6 +118,7 @@ export class BattleHubManager {
 
   disconnect(): Promise<void> {
     const prev = this.pending;
+    this.intentionalDisconnect = true;
     const next = (async () => {
       await prev.catch(() => {});
       const conn = this.connection;
@@ -166,15 +176,22 @@ export class BattleHubManager {
 
   private registerLifecycle(conn: HubConnection): void {
     conn.onreconnecting(() => {
+      this.reconnectAttemptSeen = true;
       this.setConnectionState('reconnecting');
     });
 
     conn.onreconnected(() => {
+      this.reconnectAttemptSeen = false;
       this.setConnectionState('connected');
     });
 
     conn.onclose(() => {
-      this.setConnectionState('disconnected');
+      // Terminal 'failed' only when automatic reconnect actually ran and gave
+      // up — consumer-initiated stop() sets intentionalDisconnect, and a
+      // close without a prior reconnect attempt is a clean server-side end.
+      const terminal = this.reconnectAttemptSeen && !this.intentionalDisconnect;
+      this.reconnectAttemptSeen = false;
+      this.setConnectionState(terminal ? 'failed' : 'disconnected');
     });
   }
 

@@ -2,6 +2,108 @@
 
 ---
 
+## Batch 10 — Phase 9: Hardening / Error Handling / Reconnection / Polish
+
+### Resolved
+
+#### FEI-079: Flat `retry: 3` on every query retried permanent 4xx failures
+**Severity:** Medium
+**Status:** Resolved in Batch 10
+
+The default `QueryClient` retried 3 times on every failure, including 401/403/404/409. On a stale token this meant three consecutive `onAuthFailure` diagnostic log entries per affected query; on a 409 from stats allocation it meant three wasted attempts before the caller's own `onError` handled the conflict.
+
+**Resolution:** `shouldRetryQuery(failureCount, error)` retries only 5xx / no-`status` failures up to 3 times; 4xx short-circuits immediately. Unit-tested in `src/app/query-retry.test.ts`.
+
+#### FEI-080: `joinQueue` swallowed all errors, including 5xx
+**Severity:** Medium
+**Status:** Resolved in Batch 10
+
+`useMatchmaking.joinQueue` caught *every* error and only invalidated the query on 409. 5xx/network failures left the user staring at an unchanged "Join Queue" button with no feedback.
+
+**Resolution:** Non-409 errors now rethrow. `QueueButton` catches them, extracts a user-facing message (5xx → "Matchmaking is temporarily unavailable"; ApiError.message otherwise; generic fallback), and renders it with `role="alert"` beneath the button. 409 is still handled silently via a game-state refetch because the guards route the player automatically.
+
+#### FEI-081: No terminal connection state for SignalR hubs
+**Severity:** Medium
+**Status:** Resolved in Batch 10
+
+`ConnectionState` had only `connected | connecting | reconnecting | disconnected`. When the `@microsoft/signalr` client exhausted its automatic-reconnect budget and `onclose` fired, the hub emitted `disconnected` — indistinguishable from a clean unmount. The battle banner showed "Connection lost — reconnecting…" forever, and the chat UI silently offered no path back.
+
+**Resolution:** Added `failed` terminal variant. Both managers track whether `onreconnecting` actually fired and whether the disconnect was consumer-initiated; `onclose` emits `failed` only when reconnect-then-close happened without an intentional teardown. `useBattleConnection` maps `failed` to a terminal `handleError`; `ChatErrorDisplay` offers a "Reconnect" action when connection is `failed`. Covered by `connection-state.test.ts`.
+
+#### FEI-082: Chat rejoin failure after reconnect was silently swallowed
+**Severity:** Low
+**Status:** Resolved in Batch 10
+
+`useChatConnection`'s `onConnectionStateChanged` re-invoked `joinGlobalChat` on reconnect but only logged a comment on failure. The UI showed a green "Connected" pill even though no live messages would arrive.
+
+**Resolution:** On rejoin failure, the hook emits a `service_unavailable` chat error so the existing `ChatErrorDisplay` banner surfaces the problem. Next reconnect cycle re-attempts automatically.
+
+#### FEI-083: Logout did not tear down session state
+**Severity:** Medium
+**Status:** Resolved in Batch 10
+
+`useAuth.logout` cleared the auth store and redirected to Keycloak's logout endpoint. It did **not** disconnect the battle or chat hub, did not clear player/battle/chat/matchmaking stores, and did not reset the TanStack Query cache. On user switch (logout → login as a different account) the previous user's character, queue status, chat history, online players list, and player-card cache briefly bled into the new session.
+
+**Resolution:** New `src/app/session-cleanup.ts` centralizes a complete teardown sequence: parallel hub disconnects → cancel + remove all queries → reset every module Zustand store → clear auth. `useAuth.logout` is now async and awaits it before redirecting.
+
+#### FEI-084: No `beforeunload` warning during active battle
+**Severity:** Low
+**Status:** Resolved in Batch 10
+
+Closing the tab or hitting Reload mid-turn caused an immediate forfeit with no "are you sure?" prompt.
+
+**Resolution:** `BattleShell` mounts a `BattleUnloadGuard` that registers a `beforeunload` listener whenever the battle phase is `ArenaOpen | TurnOpen | Submitted | Resolving`. The browser shows its standard generic-prompt dialog. No prompt during `Idle`, `Connecting`, `WaitingForJoin`, `Ended`, `ConnectionLost`, or `Error`.
+
+#### FEI-085: Long-running DM session accumulated unbounded real-time buffer
+**Severity:** Low
+**Status:** Resolved in Batch 10
+
+`addDirectMessage` appended to the per-conversation messages array with no cap. Global chat had `MAX_GLOBAL_MESSAGES = 500`; DM did not.
+
+**Resolution:** `MAX_DIRECT_MESSAGES_PER_CONVERSATION = 500`. Trimming the real-time buffer does not lose data — HTTP history backfills on panel (re)open.
+
+#### FEI-086: `DirectMessagePanel` merge re-ran on every render
+**Severity:** Low
+**Status:** Resolved in Batch 10
+
+`mergeMessages()` (sort + Set dedup) ran on every render, including re-renders caused by unrelated chat-store fields (presence, global messages).
+
+**Resolution:** Wrapped in `useMemo` keyed on the actual inputs. No behavior change, only render cost.
+
+#### FEI-087: A11y gaps — missing live-region/role/aria on transport and error banners
+**Severity:** Low
+**Status:** Resolved in Batch 10
+
+`ConnectionIndicator`, `GameStateLoader` error screens, battle banners, `ChatErrorDisplay`, and the `AppHeader` profile menu lacked appropriate ARIA roles / live regions / keyboard handling.
+
+**Resolution:**
+- `ConnectionIndicator`: `role="status" aria-live="polite" aria-label="Connection: …"`, dot `aria-hidden`.
+- `GameStateLoader` error/auto-onboard-error screens: `role="alert"`.
+- Battle `Banner`: `role="status" aria-live="polite"`.
+- `ChatErrorDisplay` banners: `role="alert"`.
+- `AppHeader` profile menu: `Escape` closes, trigger has `aria-haspopup`/`aria-expanded`, menu `role="menu"`, menu item `role="menuitem"`.
+
+### Open
+
+No open frontend-specific issues from Batch 10.
+
+### Deferred
+
+The following hardening-adjacent items are **intentionally** left deferred with no change in status:
+
+- **FEI-032** — frontend `BASE_FACTOR` can drift from backend. Still requires a BFF contract change (expose the factor or include level thresholds in game state). Out of scope for client-side hardening.
+- **FEI-035** / **FEI-DEV-072** — toast infrastructure (`<Toaster />`) for DMs and level-up. Existing inline banners continue to do the job; toasts are broader polish, not hardening.
+- **FEI-041** — `Sheet` slide-in animation. Still gated on `tailwindcss-animate` or custom keyframes; not a hardening blocker.
+- **FEI-042** — `sendBeacon`-style leave-on-close. The 30-minute backend TTL still covers orphaned queue entries; `sendBeacon` cannot carry the bearer token. No viable implementation without a backend contract change.
+- **FEI-046** — elapsed search time resets to `0:00` on refresh. Requires the backend to surface a queue-entry timestamp. Acceptable degradation.
+- **FEI-055** / **FEI-056** — battle snapshot does not restore `winnerPlayerId`/`lastResolution` / `Submitted` phase across reconnect. Informational; no observable user impact in practice. `BattleEnded` and subsequent server events reconcile all mechanical state.
+
+### Deviations
+
+No new deviations. Previously accepted Phase 7/8 deviations (FEI-DEV-063, FEI-DEV-064, FEI-DEV-072, FEI-DEV-073) remain accepted.
+
+---
+
 ## Batch 9 — Phase 8: Post-battle / result flow — Cleanup Patch
 
 ### Resolved

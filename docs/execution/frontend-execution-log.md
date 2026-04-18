@@ -2,6 +2,125 @@
 
 ---
 
+## Batch 10 — Phase 9: Hardening / Error Handling / Reconnection / Polish
+
+**Date:** 2026-04-18
+**Status:** Completed
+**Branch:** frontend-client
+
+Hardening pass over the already-built client. No new product flows, no architecture drift, no layer crossings. Each change is local and motivated by a concrete rough edge the earlier phases or the frontend execution issues already flagged. The six P9.x sub-scopes are addressed below.
+
+### P9.1 HTTP error handling polish
+
+- **TanStack Query retry policy** — `shouldRetryQuery` in `src/app/query-client.ts` replaces the flat `retry: 3`. 4xx responses (401/403/404/409 in particular) are treated as permanent and are *not* retried; only 5xx / no-`status` (network-like) errors retry up to 3 times. 401 in particular was previously generating three consecutive `onAuthFailure` diagnostic log entries per stale-token read; that is now a single attempt.
+- **`joinQueue` failures no longer silent** — `useMatchmaking.joinQueue` rethrew only non-409 errors before this patch it swallowed all of them. `QueueButton` now captures the thrown error, extracts a user-facing message (5xx → "Matchmaking is temporarily unavailable"; ApiError message otherwise; generic fallback), and renders it beneath the button with `role="alert"`. 409 is still consumed silently and triggers a game-state refetch so the guards route the player to wherever the server thinks they belong — the existing intended behavior.
+- **Chat rejoin failure** — when the chat hub reconnects but `JoinGlobalChat` then fails, the hook now emits a `service_unavailable` chat error so the existing `ChatErrorDisplay` banner surfaces the problem. Previously the user saw a green "Connected" pill with no live messages and no indication anything was wrong.
+- Onboarding (name + stats) and post-battle refresh already had explicit 400/409 handling; no changes needed there. The general user-facing error surfaces from earlier phases were kept intact.
+
+### P9.2 SignalR reconnection hardening
+
+- **Terminal `failed` connection state** — `ConnectionState` gains a fifth variant. `BattleHubManager` and `ChatHubManager` now track whether automatic reconnect actually ran (`reconnectAttemptSeen` flipped on `onreconnecting`) and whether the consumer initiated the disconnect (`intentionalDisconnect` flipped by `disconnect()`). On `onclose`, the manager emits `failed` only when reconnect was attempted AND the close was not consumer-initiated; clean server-side closes and normal unmounts still emit `disconnected`. Covered by new `connection-state.test.ts` (6 tests across both managers).
+- **Battle hook** — `useBattleConnection`'s `onConnectionStateChanged` now treats `state === 'failed'` as a terminal battle error (`handleError('Connection to the battle was lost and could not be restored.')`), except when the battle has already ended. Previously the user was stuck on a "Connection lost — reconnecting…" banner forever.
+- **Battle screen banner stays truthful** — `ConnectionLostBanner` now reads `useBattleConnectionState()` and varies its message between "reconnecting…", "Reconnecting to the battle…", and "Connection unstable — waiting for server." depending on the live transport state.
+- **Chat hook stale-closure hygiene** — `useChatConnection` now sets a `disposed` flag in its cleanup and early-returns in every handler + `.then`, matching the pattern already used by `useBattleConnection`. Also clears event handlers on unmount to match the battle hub's `setEventHandlers({})` cleanup.
+- **Manual reconnect** — new exported `reconnectChat()` tears the hub down and brings it back up. `ChatErrorDisplay` shows a "Reconnect" action whenever the chat connection is in the terminal `failed` state, instead of silently leaving the user offline.
+- **ConnectionIndicator** maps `failed` → red dot + "Connection lost" label. Also got an `aria-live="polite"` + `aria-label` for screen readers.
+
+### P9.3 Browser lifecycle and tab behavior
+
+- **`beforeunload` during active battle** — `BattleShell` mounts a `BattleUnloadGuard` that registers a `beforeunload` listener while the battle phase is `ArenaOpen | TurnOpen | Submitted | Resolving`. Modern browsers show their own generic prompt (returnValue content is ignored), which is fine — the goal is to catch accidental tab closes mid-turn. Disabled in non-active phases (`Idle`, `Connecting`, `WaitingForJoin`, `Ended`, `ConnectionLost`, `Error`) so the user can close normally after a completed fight or during a degraded state.
+- **`visibilitychange` / `sendBeacon`-like leave-on-close** — **intentionally still deferred.** FEI-042 documents why `navigator.sendBeacon` cannot carry the bearer token, and that hasn't changed. The backend's 30-minute TTL plus the battle hub's `OpponentDisconnected` event already cover the abandoned-queue and abandoned-battle cases respectively. No change.
+- **Tab-switch return coherence** — chat's existing reconnect-on-`connected` rejoin (P9.2) already resyncs global presence and messages on tab return. `DirectMessagePanel` already invalidates its DM query on reconnect. No additional tab-switch hooks needed.
+
+### P9.4 Performance review / low-risk fixes
+
+- **DM message buffer capped** — `MAX_DIRECT_MESSAGES_PER_CONVERSATION = 500` trims the real-time buffer per conversation when new messages push it over the cap. HTTP history backfills older messages on demand, so trimming the live buffer does not lose data — it only bounds memory and render cost over long sessions. Matches the existing `MAX_GLOBAL_MESSAGES = 500`.
+- **`DirectMessagePanel` merge memoized** — `mergeMessages()` was running (sort + Set dedup) on *every* render, including unrelated `useChatStore` selector updates (global presence, etc.). Now wrapped in `useMemo` keyed on the actual inputs (`olderMessages`, `historyMessages`, `realtimeConversations`, `otherPlayerId`).
+- **`useBattle()` monolithic selector** — already flagged in FEI-060 and already unused in production (Phase 7 switched to focused selectors). Left as-is; removing it is opportunistic cleanup, not hardening.
+- No other rerender / retention issues found that were worth fixing versus leaving to a future polish batch. Not logging placeholders as open issues — the ones worth tracking are already present.
+
+### P9.5 Logout cleanup
+
+- **New `src/app/session-cleanup.ts`** centralizes teardown:
+  1. Disconnect `battleHubManager` and `chatHubManager` (settled in parallel; errors ignored).
+  2. `queryClient.cancelQueries()` then `queryClient.removeQueries()` — cancels in-flight requests before wiping cache so late responses cannot repopulate stale keys.
+  3. Reset every module Zustand store (`useBattleStore.reset`, `useChatStore.clearStore`, `useMatchmakingStore.setIdle`, `usePlayerStore.clearState`, `useAuthStore.clearAuth`). None of them cross-write, so order doesn't matter.
+- **`useAuth.logout`** is now async and awaits `clearSessionState()` before calling `oidcAuth.signoutRedirect()`. Previously only `clearAuth()` was called — a user switch re-logging in as a different account would briefly see the previous user's character, queue status, chat history, and player-card cache until every invalidation happened to trigger.
+- `AppHeader`'s fire-and-forget callsite is unchanged in shape; the awaited cleanup happens inside the menu's `onClick` before the redirect takes over.
+
+### P9.6 UI polish and accessibility
+
+- **App header menu** — `Escape` closes it (matches click-outside), trigger got `aria-haspopup="menu"` + `aria-expanded`, menu got `role="menu"`, menu item got `role="menuitem"`.
+- **Game-state error screens** — `role="alert"` on the two `GameStateLoader` error fallbacks so screen readers announce the failure instead of silently redrawing the retry button.
+- **Battle banners** — `role="status" aria-live="polite"` on the battle `Banner` so transport-state changes are announced.
+- **ConnectionIndicator** — `role="status" aria-live="polite" aria-label="Connection: …"`, decorative dot marked `aria-hidden`.
+- **`ChatErrorDisplay`** — existing error container got `role="alert"`; new failed-connection banner also `role="alert"` with a visible Reconnect action.
+- **Queue-join error surface** — previously nothing appeared if the join HTTP call failed; now the user sees a red message below the button.
+
+### New tests
+
+- `src/app/query-retry.test.ts` — 6 tests on the `shouldRetryQuery` predicate (4xx not retried, 5xx retried up to cap, no-status network errors retried, 3-retry cap).
+- `src/transport/signalr/connection-state.test.ts` — 6 tests (3 per manager) on the `disconnected` vs `failed` lifecycle transitions.
+
+Total vitest count: 76 → 88 across 10 test files (was 8).
+
+### Files created (3)
+
+- `src/app/session-cleanup.ts` — centralized teardown for logout / user switch
+- `src/app/query-retry.test.ts` — tests for the 4xx-no-retry policy
+- `src/transport/signalr/connection-state.test.ts` — tests for `failed` terminal state across both hubs
+
+### Files modified (15)
+
+- `src/app/query-client.ts` — export `shouldRetryQuery`, wire as default query retry
+- `src/app/AppHeader.tsx` — Escape-to-close + role=menu/menuitem + aria on trigger
+- `src/app/GameStateLoader.tsx` — `role="alert"` on both error fallbacks
+- `src/app/shells/BattleShell.tsx` — `BattleUnloadGuard` adds `beforeunload` during active phases
+- `src/modules/auth/hooks.ts` — async `logout` calls `clearSessionState()` before `signoutRedirect`
+- `src/modules/battle/hooks.ts` — terminal `failed` connection state → `handleError`
+- `src/modules/battle/screens/BattleScreen.tsx` — `ConnectionLostBanner` reflects live transport state; `Banner` announces via `aria-live`
+- `src/modules/chat/hooks.ts` — `disposed` hygiene; rejoin failure surfaces a chat error; new `reconnectChat()` helper
+- `src/modules/chat/store.ts` — DM buffer cap (`MAX_DIRECT_MESSAGES_PER_CONVERSATION = 500`)
+- `src/modules/chat/components/ChatErrorDisplay.tsx` — terminal-connection banner with manual Reconnect action
+- `src/modules/chat/components/DirectMessagePanel.tsx` — memoized `mergeMessages`
+- `src/modules/matchmaking/hooks.ts` — rethrow non-409 `joinQueue` errors
+- `src/modules/matchmaking/components/QueueButton.tsx` — visible failure message; typed ApiError extraction
+- `src/transport/signalr/connection-state.ts` — add `failed` terminal variant
+- `src/transport/signalr/battle-hub.ts` — track reconnect-attempt + intentional-disconnect; emit `failed`
+- `src/transport/signalr/chat-hub.ts` — same terminal-state handling as battle-hub
+- `src/ui/components/ConnectionIndicator.tsx` — map `failed` → red/"Connection lost"; a11y attrs
+
+### Out of scope (preserved)
+
+- No changes to `SessionShell`, `BattleShell` route hoisting, chat session scoping, `BattleGuard`, `OnboardingGuard`, `AuthGuard`, `AuthProvider`, or the OIDC bootstrap path.
+- No new npm dependencies; `sonner` is still installed and unused.
+- No animation/visual redesign, no token/theme changes.
+- No `sendBeacon`-style leave-on-close (FEI-042 still deferred; auth-header constraint unchanged).
+- No changes to the `BASE_FACTOR` leveling constant (FEI-032 still deferred — backend contract change).
+- No new `<Toaster />` infrastructure (FEI-035 / FEI-DEV-072 still deferred; inline banners continue to do the job).
+- The unused monolithic `useBattle()` selector is left in place — removing it is opportunistic cleanup, not hardening.
+
+### Validation
+
+- `npx tsc --noEmit`: passes (zero errors)
+- `npx eslint src/`: zero errors. 21 pre-existing "Unused eslint-disable directive" *warnings* for diagnostic `// eslint-disable-next-line no-console` comments from earlier phases — none introduced by this batch.
+- `npx vitest run`: 88 tests pass across 10 files (was 76 / 8)
+- `npx vite build`: succeeds
+- Manual browser validation not performed (no running BFF / Keycloak in this environment). All changes are either pure-logic (covered by new tests) or straightforward React wiring against the same contracts the earlier phases already exercise.
+
+### Batch 10 review-ready checklist
+
+- [x] P9.1 — 4xx not retried, `joinQueue` surfaces errors, chat rejoin failures are visible
+- [x] P9.2 — both hubs expose terminal `failed`; battle hook maps it to a real error; chat offers a manual reconnect; BattleScreen banner truthful
+- [x] P9.3 — active-battle `beforeunload` warning; `sendBeacon` still-deferred case explicitly documented
+- [x] P9.4 — DM buffer capped; DM merge memoized; no speculative optimization
+- [x] P9.5 — `clearSessionState()` wipes stores + query cache + hub connections on logout
+- [x] P9.6 — header menu a11y, alert roles on error screens, aria-live on transport banners
+- [x] No architecture drift; routing/session-shell/chat/matchmaking/battle/player structure preserved
+- [x] Execution docs updated
+
+---
+
 ## Batch 9 — Phase 8: Post-battle / result flow — Cleanup Patch
 
 **Date:** 2026-04-17

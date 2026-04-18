@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { chatKeys } from '@/app/query-client';
@@ -39,11 +39,18 @@ export function DirectMessagePanel({
   const serverHasMore = historyQuery.data?.hasMore ?? false;
   const effectiveHasMore = hasMore || serverHasMore;
 
-  // Merge HTTP history + cursor-loaded older messages + real-time messages, dedup by messageId
-  const messages = mergeMessages(
-    [...olderMessages, ...(historyQuery.data?.messages ?? [])],
-    realtimeConversations,
-    otherPlayerId,
+  // Merge HTTP history + cursor-loaded older messages + real-time messages, dedup by messageId.
+  // Memoized so unrelated chat-store updates (global messages, presence) don't
+  // re-run the merge+sort on every render.
+  const historyMessages = historyQuery.data?.messages;
+  const messages = useMemo(
+    () =>
+      mergeMessages(
+        [...olderMessages, ...(historyMessages ?? [])],
+        realtimeConversations,
+        otherPlayerId,
+      ),
+    [olderMessages, historyMessages, realtimeConversations, otherPlayerId],
   );
 
   const messageCount = messages.length;

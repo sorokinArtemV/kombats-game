@@ -96,6 +96,16 @@ export function useBattleConnection(battleId: string): void {
           }
         } else if (state === 'reconnecting') {
           useBattleStore.getState().handleConnectionLost();
+        } else if (state === 'failed') {
+          // Automatic reconnect budget exhausted while the battle was live.
+          // Surface this as a terminal battle error instead of leaving the
+          // user stuck on a "reconnecting…" banner that will never resolve.
+          const current = useBattleStore.getState();
+          if (current.phase !== 'Ended' && current.phase !== 'Idle') {
+            current.handleError(
+              'Connection to the battle was lost and could not be restored.',
+            );
+          }
         }
       },
     });

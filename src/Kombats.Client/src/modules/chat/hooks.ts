@@ -43,39 +43,54 @@ async function joinGlobalSession(): Promise<void> {
 
 export function useChatConnection(): void {
   useEffect(() => {
+    let disposed = false;
     const store = useChatStore.getState();
 
     chatHubManager.setEventHandlers({
       onGlobalMessageReceived: (data: GlobalMessageEvent) => {
+        if (disposed) return;
         const conversationId = useChatStore.getState().globalConversationId;
         if (!conversationId) return;
         useChatStore.getState().addGlobalMessage(toStoredMessage(data, conversationId));
       },
       onDirectMessageReceived: (data: DirectMessageEvent) => {
+        if (disposed) return;
         useChatStore.getState().addDirectMessage(directEventToMessage(data));
       },
       onPlayerOnline: (data: PlayerOnlineEvent) => {
+        if (disposed) return;
         useChatStore.getState().addOnlinePlayer({
           playerId: data.playerId,
           displayName: data.displayName,
         });
       },
       onPlayerOffline: (data: PlayerOfflineEvent) => {
+        if (disposed) return;
         useChatStore.getState().removeOnlinePlayer(data.playerId);
       },
       onChatError: (data: ChatErrorEvent) => {
+        if (disposed) return;
         useChatStore.getState().handleChatError(data);
       },
       onChatConnectionLost: () => {
+        if (disposed) return;
         useChatStore.getState().handleConnectionLost();
       },
       onConnectionStateChanged: (state) => {
+        if (disposed) return;
         useChatStore.getState().setConnectionState(state);
 
         // On reconnect, rejoin global chat to resync state
         if (state === 'connected' && useChatStore.getState().globalConversationId !== null) {
           joinGlobalSession().catch(() => {
-            // Silently handle — reconnection will retry
+            // Rejoin failures surface as a generic service_unavailable banner
+            // so the user is not stuck with a "Connected" pill but no live
+            // messages. Reconnect will re-run this when the hub cycles again.
+            if (disposed) return;
+            useChatStore.getState().handleChatError({
+              code: 'service_unavailable',
+              message: 'Chat resync failed after reconnect.',
+            });
           });
         }
 
@@ -93,18 +108,44 @@ export function useChatConnection(): void {
 
     chatHubManager
       .connect()
-      .then(() => joinGlobalSession())
+      .then(() => {
+        if (disposed) return;
+        return joinGlobalSession();
+      })
       .catch(() => {
+        if (disposed) return;
         useChatStore.getState().setConnectionState('disconnected');
       });
 
     return () => {
+      disposed = true;
+      chatHubManager.setEventHandlers({});
       chatHubManager.disconnect().catch(() => {
         // Cleanup — ignore disconnect errors
       });
       useChatStore.getState().clearStore();
     };
   }, []);
+}
+
+/**
+ * Manual reconnect for the chat hub. Used by the UI when the connection has
+ * entered the terminal `failed` state (automatic reconnect exhausted) and
+ * the user asks to retry.
+ */
+export async function reconnectChat(): Promise<void> {
+  try {
+    await chatHubManager.disconnect();
+  } catch {
+    // Ignore — we're about to reconnect anyway
+  }
+  useChatStore.getState().setConnectionState('connecting');
+  try {
+    await chatHubManager.connect();
+    await joinGlobalSession();
+  } catch {
+    useChatStore.getState().setConnectionState('failed');
+  }
 }
 
 export function useGlobalMessages() {
