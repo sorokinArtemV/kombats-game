@@ -4,6 +4,7 @@ import { gameKeys } from '@/app/query-client';
 import * as characterApi from '@/transport/http/endpoints/character';
 import { usePlayerStore } from './store';
 import type { AllocateStatsResponse, ApiError, CharacterResponse } from '@/types/api';
+import { isApiError } from '@/types/api';
 
 export type StatKey = 'strength' | 'agility' | 'intuition' | 'vitality';
 
@@ -114,7 +115,7 @@ export function useAllocateStats(
       options?.onSuccess?.(response);
     },
     onError: async (error) => {
-      const err = error as ApiError | undefined;
+      const err: ApiError | undefined = isApiError(error) ? error : undefined;
       // Revision mismatch — refetch and clear the draft so the user can
       // retry with fresh numbers. Never let the server think we are
       // replaying stale adjustments.
@@ -151,8 +152,8 @@ export function useAllocateStats(
 
   let errorMessage: string | null = null;
   if (mutation.isError) {
-    const err = mutation.error as ApiError | undefined;
-    if (!err?.error) {
+    const err = mutation.error;
+    if (!isApiError(err)) {
       errorMessage = 'An unexpected error occurred.';
     } else if (err.status === 409) {
       errorMessage =

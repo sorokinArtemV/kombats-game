@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from 'react-oidc-context';
+import { SplashScreen } from '@/ui/components/SplashScreen';
 
 export function AuthCallback() {
   const auth = useAuth();
@@ -18,9 +19,5 @@ export function AuthCallback() {
     }
   }, [auth.isLoading, auth.activeNavigator, auth.isAuthenticated, auth.error, auth.user, navigate]);
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-bg-primary">
-      <p className="text-text-secondary">Authenticating...</p>
-    </div>
-  );
+  return <SplashScreen />;
 }

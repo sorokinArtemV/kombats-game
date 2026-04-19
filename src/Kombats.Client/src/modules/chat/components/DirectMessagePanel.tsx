@@ -161,7 +161,10 @@ export function DirectMessagePanel({
 
 function mergeMessages(
   httpMessages: ChatMessageResponse[],
-  realtimeConversations: Map<string, { messages: ChatMessageResponse[] }>,
+  realtimeConversations: Map<
+    string,
+    { messages: ChatMessageResponse[]; otherPlayer: { playerId: string } }
+  >,
   otherPlayerId: string,
 ): ChatMessageResponse[] {
   const seen = new Set<string>();

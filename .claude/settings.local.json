@@ -160,7 +160,17 @@
       "Bash(/d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/node_modules/.bin/eslint /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/AuthProvider.tsx /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/main.tsx /d/Programming/Sharp/kombats-game/kombats-game/src/Kombats.Client/src/modules/auth/user-manager.ts)",
       "Bash(pnpm test *)",
       "Bash(node *)",
-      "Bash(echo \"ESLINT=$?\")"
+      "Bash(echo \"ESLINT=$?\")",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(pnpm lint *)",
+      "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" stash push -u -m \"splash-work\" -- src/Kombats.Client)",
+      "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" stash pop)",
+      "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" diff --stat src/Kombats.Client/src/modules/auth/hooks.ts)",
+      "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" status --short src/Kombats.Client/)",
+      "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" diff src/Kombats.Client/src/modules/auth/hooks.ts)",
+      "Bash(python -c \"import json; json.load\\(open\\('infra/keycloak/kombats-realm.json'\\)\\)\")",
+      "Bash(python *)"
     ]
   }
 }

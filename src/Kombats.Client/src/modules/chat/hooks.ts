@@ -90,6 +90,7 @@ export function useChatConnection(): void {
             useChatStore.getState().handleChatError({
               code: 'service_unavailable',
               message: 'Chat resync failed after reconnect.',
+              retryAfterMs: null,
             });
           });
         }

@@ -1,17 +1,14 @@
 import { Outlet } from 'react-router';
 import { useGameState } from '@/modules/player/hooks';
 import { useAutoOnboard } from '@/modules/onboarding/hooks';
+import { SplashScreen } from '@/ui/components/SplashScreen';
 
 export function GameStateLoader() {
   const { isPending, isError, error, refetch } = useGameState();
   const onboard = useAutoOnboard();
 
   if (isPending) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-bg-primary">
-        <p className="text-text-secondary">Loading game state...</p>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (isError) {
@@ -36,11 +33,7 @@ export function GameStateLoader() {
 
   // Auto-onboard in progress
   if (onboard.isPending) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-bg-primary">
-        <p className="text-text-secondary">Creating character...</p>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   // Auto-onboard failed

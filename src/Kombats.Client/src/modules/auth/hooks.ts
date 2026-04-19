@@ -34,8 +34,21 @@ export function useAuth() {
   const logout = useCallback(async () => {
     // Order matters.
     //
-    // 1. Remove the oidc-client-ts user first. If we cleared our Zustand
-    //    stores first, the AuthSync effect's next render would observe
+    // 1. Capture `id_token_hint` from the current oidc user BEFORE we touch
+    //    anything. Keycloak's end-session endpoint only skips its interactive
+    //    "Logout confirmation" page and honors `post_logout_redirect_uri`
+    //    silently when it can authenticate the logout request — which means
+    //    `id_token_hint` must be on the logout URL. Without it, Keycloak
+    //    lands the user on its own hosted confirmation / warning page
+    //    instead of the SPA's unauthenticated home, which the user sees as
+    //    a redirect error. oidc-client-ts *would* read the id_token off the
+    //    current user inside `signoutRedirect()`, but step 2 below removes
+    //    that user first, so we have to capture it now and pass it in
+    //    explicitly.
+    const idTokenHint = oidcAuth.user?.id_token;
+
+    // 2. Remove the oidc-client-ts user. If we cleared our Zustand stores
+    //    first, the AuthSync effect's next render would observe
     //    `auth.isAuthenticated && auth.user && !auth.user.expired` (still
     //    true until removeUser settles) and re-populate `useAuthStore` via
     //    setUser — silently "un-logging-out" the user. Removing the oidc
@@ -48,21 +61,20 @@ export function useAuth() {
       logger.warn('oidcAuth.removeUser() failed during logout', err);
     }
 
-    // 2. Tear down every session-scoped artifact (SignalR connections,
+    // 3. Tear down every session-scoped artifact (SignalR connections,
     //    module stores, TanStack Query cache). A clean slate on user
     //    switch / re-login — no previous session's game state, chat
     //    history, or battle store leaks through.
     await clearSessionState();
 
-    // 3. Hit Keycloak's end-session endpoint and redirect. If this fails
-    //    (unreachable IdP, CORS, missing post_logout_redirect_uri in
-    //    Keycloak client config, etc.) we still want the user to land on
-    //    a sane guest page — otherwise they are stuck on whatever screen
-    //    they clicked "Sign out" from, with cleared local state but no
-    //    visible auth UI. Falling back to a hard nav to the origin gives
-    //    them the UnauthenticatedShell either way.
+    // 4. Hit Keycloak's end-session endpoint and redirect. Passing the
+    //    captured `id_token_hint` lets Keycloak authenticate the logout,
+    //    validate `post_logout_redirect_uri` against the client, kill the
+    //    SSO session, and redirect back silently — no confirmation page.
+    //    If this fails (unreachable IdP, CORS, etc.) fall back to a hard
+    //    nav to the origin so the user still lands on a guest page.
     try {
-      await oidcAuth.signoutRedirect();
+      await oidcAuth.signoutRedirect({ id_token_hint: idTokenHint });
     } catch (err) {
       logger.error('oidcAuth.signoutRedirect() failed during logout', err);
       window.location.assign('/');

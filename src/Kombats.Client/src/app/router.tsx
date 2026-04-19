@@ -10,6 +10,7 @@ import { OnboardingGuard } from './guards/OnboardingGuard';
 import { BattleGuard } from './guards/BattleGuard';
 import { GameStateLoader } from './GameStateLoader';
 import { AppCrashScreen } from './AppCrashScreen';
+import { NotFoundScreen } from './NotFoundScreen';
 import { NameSelectionScreen } from '@/modules/onboarding/screens/NameSelectionScreen';
 import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScreen';
 import { LobbyScreen } from '@/modules/player/screens/LobbyScreen';
@@ -90,5 +91,15 @@ export const router = createBrowserRouter([
         ],
       },
     ],
+  },
+
+  // Catch-all: any unknown URL renders the branded 404 instead of falling
+  // through to React Router's default error surface. Placed at the top
+  // level so it only matches when no other route does — existing guards
+  // (AuthGuard, OnboardingGuard, BattleGuard) still own their redirects
+  // for known protected paths.
+  {
+    path: '*',
+    element: <NotFoundScreen />,
   },
 ]);

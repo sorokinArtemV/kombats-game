@@ -42,7 +42,7 @@ describe('usePlayerStore — dismissedBattleId suppression', () => {
           status: 'Matched',
           matchId: 'match-1',
           battleId: 'battle-X',
-          matchState: 'BattleReady',
+          matchState: 'BattleCreated',
         },
       }),
     );
@@ -61,7 +61,7 @@ describe('usePlayerStore — dismissedBattleId suppression', () => {
           status: 'Matched',
           matchId: 'match-2',
           battleId: 'battle-Y',
-          matchState: 'BattleReady',
+          matchState: 'BattleCreated',
         },
       }),
     );
@@ -104,7 +104,7 @@ describe('usePlayerStore — dismissedBattleId suppression', () => {
           status: 'Matched',
           matchId: 'match-1',
           battleId: 'battle-X',
-          matchState: 'BattleReady',
+          matchState: 'BattleCreated',
         },
       }),
     );

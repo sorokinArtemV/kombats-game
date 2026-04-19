@@ -2,6 +2,7 @@ import { Navigate } from 'react-router';
 import { useAuth } from '@/modules/auth/hooks';
 import { useAuthStore } from '@/modules/auth/store';
 import { retryBootstrap } from '@/modules/auth/bootstrap-retry';
+import { SplashScreen } from '@/ui/components/SplashScreen';
 
 export function UnauthenticatedShell() {
   const authStatus = useAuthStore((s) => s.authStatus);
@@ -13,11 +14,7 @@ export function UnauthenticatedShell() {
   // the guest landing here would flash the login screen and then navigate
   // away — instead, hold the render until bootstrap succeeds or fails.
   if (authStatus === 'loading') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-bg-primary">
-        <p className="text-text-secondary">Restoring session...</p>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   // Silent restore succeeded (SSO cookie still valid on Keycloak): route the

@@ -96,7 +96,7 @@ The `account` client also exists but is restored to its standard Keycloak role (
 | Client Authentication | Off | Public client |
 | Root URL | `http://localhost:5173` (dev) | Vite default dev server port |
 | Valid Redirect URIs | `http://localhost:5173/*`, `http://localhost:5000/*`, `http://localhost:3000/*` (dev) | SPA callback; multiple dev ports for flexibility |
-| Valid Post Logout Redirect URIs | `http://localhost:5173/*` (dev) | Where to go after Keycloak logout |
+| Valid Post Logout Redirect URIs | `http://localhost:5173/*`, `http://localhost:5000/*`, `http://localhost:3000/*` (dev) | Where to go after Keycloak logout. Must cover every dev port the SPA may actually run on — Vite defaults to 5173 but the Kombats `vite.config.ts` overrides it to 3000. A missing port here causes Keycloak to reject the post-logout redirect with "Invalid parameter" after sign-out. |
 | Web Origins | `http://localhost:5173`, `http://localhost:5000`, `http://localhost:3000` (dev) | CORS for token endpoint requests from each dev port |
 | PKCE Code Challenge Method | `S256` | Enforced via `pkce.code.challenge.method` attribute |
 | Front-channel Logout | `false` | Not needed for SPA |
@@ -111,9 +111,11 @@ Valid Redirect URIs:     http://localhost:5173/*
                          http://localhost:5000/*
                          http://localhost:3000/*
 Post Logout Redirect:    http://localhost:5173/*
+                         http://localhost:5000/*
+                         http://localhost:3000/*
 ```
 
-Multiple dev ports are registered for flexibility: `5173` is Vite's default, `5000` and `3000` are common alternatives. Only one is needed at a time; the extras avoid reconfiguration when port changes.
+Multiple dev ports are registered for flexibility: `5173` is Vite's default, `5000` and `3000` are common alternatives. The Kombats SPA currently runs on `3000` (`src/Kombats.Client/vite.config.ts`). The same three ports are registered as Valid Redirect URIs *and* as Post Logout Redirect URIs — if a port is missing from the post-logout list, Keycloak rejects the logout redirect with "Invalid parameter: redirect_uri" and the user lands on a Keycloak error page instead of the SPA guest landing.
 
 **Production (must be added per environment -- not in dev realm JSON):**
 ```
@@ -353,7 +355,7 @@ const userManagerSettings: UserManagerSettings = {
   authority: config.keycloakAuthority,    // e.g., "http://localhost:8080/realms/kombats"
   client_id: "kombats-web",
   redirect_uri: `${window.location.origin}/auth/callback`,
-  post_logout_redirect_uri: window.location.origin,
+  post_logout_redirect_uri: `${window.location.origin}/`,
   response_type: "code",
   scope: "openid profile email",
   automaticSilentRenew: true,
@@ -533,7 +535,7 @@ These are compile-time environment variables (Vite replaces `import.meta.env.VIT
 | Value | Derivation |
 |---|---|
 | `redirect_uri` | `${window.location.origin}/auth/callback` |
-| `post_logout_redirect_uri` | `${window.location.origin}` |
+| `post_logout_redirect_uri` | `${window.location.origin}/` (trailing `/` required to satisfy Keycloak's `<origin>/*` post-logout pattern) |
 | Battle hub URL | `${VITE_BFF_BASE_URL}/battlehub` |
 | Chat hub URL | `${VITE_BFF_BASE_URL}/chathub` |
 
@@ -592,8 +594,10 @@ const settings: UserManagerSettings = {
   // Callback route in the SPA
   redirect_uri: `${window.location.origin}/auth/callback`,
 
-  // Where to go after Keycloak logout
-  post_logout_redirect_uri: window.location.origin,
+  // Where to go after Keycloak logout.
+  // Trailing `/` required: Keycloak registers `<origin>/*` and the wildcard
+  // matcher demands a path separator after the host.
+  post_logout_redirect_uri: `${window.location.origin}/`,
 
   // Authorization Code flow
   response_type: "code",

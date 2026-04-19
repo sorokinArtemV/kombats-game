@@ -5,7 +5,7 @@ import * as characterApi from '@/transport/http/endpoints/character';
 import { usePlayerStore } from '@/modules/player/store';
 import { Button } from '@/ui/components/Button';
 import { NameInput, NAME_MIN, NAME_MAX } from '../components/NameInput';
-import type { ApiError } from '@/types/api';
+import { isApiError } from '@/types/api';
 
 function validateName(name: string): string | null {
   const trimmed = name.trim();
@@ -49,8 +49,8 @@ export function NameSelectionScreen() {
 
   function getServerError(): string | null {
     if (!mutation.isError) return null;
-    const err = mutation.error as ApiError | undefined;
-    if (!err?.error) return 'An unexpected error occurred.';
+    const err = mutation.error;
+    if (!isApiError(err)) return 'An unexpected error occurred.';
 
     if (err.status === 409) return 'This name is already taken.';
     if (err.status === 400) {

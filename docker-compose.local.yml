@@ -109,6 +109,7 @@ services:
       - keycloak-db
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
+      - ./infra/keycloak-themes:/opt/keycloak/themes:ro
 
 volumes:
   postgres_data:

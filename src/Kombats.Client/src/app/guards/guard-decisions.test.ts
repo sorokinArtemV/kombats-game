@@ -33,18 +33,18 @@ describe('decideAuthGuard', () => {
 
 function mkCharacter(state: CharacterResponse['onboardingState']): CharacterResponse {
   return {
-    identityId: 'id-1',
-    displayName: 'Test',
+    characterId: 'id-1',
+    name: 'Test',
     level: 1,
-    xp: 0,
+    totalXp: 0,
     strength: 10,
     agility: 10,
     intuition: 10,
     vitality: 10,
-    unspentStatPoints: 0,
+    unspentPoints: 0,
     onboardingState: state,
-    stateRevision: 1,
-  } as CharacterResponse;
+    revision: 1,
+  };
 }
 
 describe('decideOnboardingGuard', () => {

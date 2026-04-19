@@ -17,7 +17,12 @@ export const userManager = new UserManager({
   // token renewal AND for SSO session restore on page refresh — since tokens
   // live in memory (DEC-6), we recover the session via Keycloak's SSO cookie.
   silent_redirect_uri: `${window.location.origin}/silent-renew`,
-  post_logout_redirect_uri: window.location.origin,
+  // Trailing slash is required. Keycloak's `post.logout.redirect.uris` for this
+  // client is registered as `<origin>/*` — its wildcard matcher requires a path
+  // separator after the host, so bare-origin (e.g. `http://localhost:5173`) is
+  // rejected as an invalid redirect. `/` matches the wildcard and lands the
+  // user on the UnauthenticatedShell route.
+  post_logout_redirect_uri: `${window.location.origin}/`,
   response_type: 'code',
   scope: 'openid profile email',
   automaticSilentRenew: true,
