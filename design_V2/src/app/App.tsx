@@ -6,9 +6,10 @@ import {
   VictoryScreen,
   DefeatScreen,
 } from './components/GameScreens';
+import { OnboardingScreen, type OnboardingResult } from './components/OnboardingScreen';
 import type { BattleLogEntry } from './components/GameShell';
 
-type GameState = 'lobby' | 'queue' | 'battle' | 'victory' | 'defeat';
+type GameState = 'onboarding' | 'lobby' | 'queue' | 'battle' | 'victory' | 'defeat';
 
 // Mock seed for a new match — replaced wholesale when the next battle begins.
 const INITIAL_BATTLE_LOG: BattleLogEntry[] = [
@@ -47,9 +48,17 @@ const DEFEAT_FINAL: BattleLogEntry = {
 };
 
 export default function App() {
-  const [gameState, setGameState] = useState<GameState>('lobby');
+  const [gameState, setGameState] = useState<GameState>('onboarding');
   const [queueTime, setQueueTime] = useState(0);
   const [battleLog, setBattleLog] = useState<BattleLogEntry[]>([]);
+  const [profile, setProfile] = useState<OnboardingResult | null>(null);
+
+  const handleOnboardingComplete = (result: OnboardingResult) => {
+    setProfile(result);
+    // Temporary local flow — real onboarding will persist this through the BFF.
+    console.info('[onboarding] profile created', result);
+    setGameState('lobby');
+  };
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -106,6 +115,9 @@ export default function App() {
   const finalEntry = battleLog[battleLog.length - 1];
 
   switch (gameState) {
+    case 'onboarding':
+      return <OnboardingScreen onComplete={handleOnboardingComplete} />;
+
     case 'lobby':
       return <MainHub onJoinQueue={handleJoinQueue} />;
 

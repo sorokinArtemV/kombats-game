@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "Bash(md5sum *.png)",
+      "Bash(sha256sum *.png)",
+      "Bash(certutil -hashfile female_ninja.png MD5)",
+      "Bash(certutil -hashfile ronin.png MD5)",
+      "Bash(rm -rf dist)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

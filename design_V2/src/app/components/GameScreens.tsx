@@ -61,6 +61,88 @@ type FighterRecord = {
   streak?: string;
 };
 
+// ==================== HP BAR ====================
+// Tactical fighting-game HP bar: parallelogram silhouette via clip-path.
+// `mirror` flips both the skew direction and the fill direction — for the
+// opponent, HP depletes right-to-left (Tekken / MK / SF convention). The
+// surface is matte — muted pigment, subtle vertical gradient, thin border,
+// no glare or diagonal sheen.
+function HpBar({
+  hp,
+  maxHp,
+  hpColor,
+  mirror,
+}: {
+  hp: number;
+  maxHp: number;
+  hpColor: 'jade' | 'crimson';
+  mirror: boolean;
+}) {
+  const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+  const skew = mirror
+    ? 'polygon(0 0, calc(100% - 12px) 0, 100% 100%, 12px 100%)'
+    : 'polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)';
+  // Muted pigments with a subtle top-lighter, bottom-darker gradient.
+  const fillGradient =
+    hpColor === 'crimson'
+      ? 'linear-gradient(180deg, #aa4c4c 0%, #a04545 55%, #883a3a 100%)'
+      : 'linear-gradient(180deg, #648f73 0%, #5a8a6a 55%, #4a7a5a 100%)';
+
+  return (
+    <div
+      className="relative flex-1 h-7"
+      style={{
+        clipPath: skew,
+        background: 'rgba(15, 20, 28, 0.75)',
+        border: '0.5px solid rgba(255, 255, 255, 0.08)',
+      }}
+    >
+      {/* HP fill — grows from the side opposite to `mirror` */}
+      <div
+        className="absolute inset-y-0 transition-[width] duration-300 ease-out"
+        style={{
+          width: `${hpPct}%`,
+          left: mirror ? 'auto' : 0,
+          right: mirror ? 0 : 'auto',
+          background: fillGradient,
+        }}
+      >
+        {/* Leading edge — quiet 1px line at the current HP position */}
+        <div
+          aria-hidden
+          className="absolute inset-y-0 w-px pointer-events-none"
+          style={{
+            left: mirror ? 0 : 'auto',
+            right: mirror ? 'auto' : 0,
+            background: 'rgba(255, 255, 255, 0.22)',
+          }}
+        />
+      </div>
+
+      {/* Numbers overlay — mirrored side for the opponent */}
+      <div
+        className={`absolute inset-0 flex items-center px-3.5 pointer-events-none ${
+          mirror ? 'justify-start' : 'justify-end'
+        }`}
+      >
+        <span
+          className="text-[13px] leading-none text-[var(--kombats-text-primary)] tabular-nums [text-shadow:0_1px_2px_rgba(0,0,0,0.95),0_0_6px_rgba(0,0,0,0.7)]"
+          style={{
+            fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+            fontStyle: 'italic',
+            letterSpacing: '0.04em',
+            fontFeatureSettings: '"tnum"',
+          }}
+        >
+          {hp}
+          <span className="opacity-55 mx-[3px]">/</span>
+          {maxHp}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function LobbyStatRow({
   icon: Icon,
   color,
@@ -103,6 +185,7 @@ function FighterNameplate({
   attributes,
   record,
   mirror = false,
+  hpBarMirror,
   profileTitle = 'Fighter Profile',
   width = 420,
 }: {
@@ -116,13 +199,16 @@ function FighterNameplate({
   attributes?: FighterAttribute[];
   record?: FighterRecord;
   mirror?: boolean;
+  // Independently controls the HP bar's skew + fill direction without
+  // flipping the rest of the plate (name row, chevron, stats header).
+  // Falls back to `mirror` when not provided.
+  hpBarMirror?: boolean;
   profileTitle?: string;
   width?: number;
 }) {
-  const hpFillClass = hpColor === 'crimson' ? 'bg-[var(--kombats-crimson)]' : 'bg-[var(--kombats-jade)]';
-  const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
   const row = mirror ? 'flex-row-reverse' : '';
   const panelHeaderRow = mirror ? 'flex-row-reverse' : '';
+  const barMirror = hpBarMirror ?? mirror;
 
   return (
     <div
@@ -227,30 +313,13 @@ function FighterNameplate({
           </div>
 
           <div className={`flex items-center gap-2 ${row}`}>
-            <div className="relative flex-1 h-6 bg-[var(--kombats-ink-navy)]/55 shadow-[inset_0_1px_3px_rgba(0,0,0,0.6)] rounded-sm overflow-hidden">
-              <div
-                className={`absolute inset-y-0 ${hpFillClass} shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]`}
-                style={{
-                  width: `${hpPct}%`,
-                  left: mirror ? 'auto' : 0,
-                  right: mirror ? 0 : 'auto',
-                }}
-              />
-              <div className="absolute inset-0 flex items-center justify-between px-2.5">
-                <span className="text-[10px] text-[var(--kombats-text-primary)] uppercase tracking-wider [text-shadow:0_1px_2px_rgba(0,0,0,0.85)]">
-                  HP
-                </span>
-                <span className="text-xs text-[var(--kombats-text-primary)] tabular-nums font-medium [text-shadow:0_1px_2px_rgba(0,0,0,0.85)]">
-                  {hp} / {maxHp}
-                </span>
-              </div>
-            </div>
+            <HpBar hp={hp} maxHp={maxHp} hpColor={hpColor} mirror={barMirror} />
 
             <button
               onClick={onToggleStats}
               aria-label={showStats ? 'Hide fighter profile' : 'Show fighter profile'}
               aria-expanded={showStats}
-              className="h-6 w-6 flex items-center justify-center text-[var(--kombats-moon-silver)] hover:text-[var(--kombats-gold)] transition-colors [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.9))]"
+              className="h-7 w-7 flex items-center justify-center text-[var(--kombats-moon-silver)] hover:text-[var(--kombats-gold)] transition-colors [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.9))]"
             >
               {showStats
                 ? <ChevronDown className="w-4 h-4" />
@@ -503,6 +572,7 @@ export function BattleScreen({
             onToggleStats={() => setShowOpponentStats(!showOpponentStats)}
             attributes={OPPONENT_ATTRIBUTES}
             record={{ wins: 204, losses: 88, winrate: '70%', streak: 'W 3' }}
+            hpBarMirror
           />
           <div style={{ transform: 'scaleX(-1)', marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM }}>
             <motion.img

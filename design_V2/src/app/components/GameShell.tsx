@@ -295,20 +295,13 @@ export function LobbyChatDock({
       className="pointer-events-auto w-full max-w-5xl relative overflow-hidden rounded-xl"
       style={{
         height: `${CHAT_DOCK_HEIGHT_PX}px`,
-        background:
-          'linear-gradient(180deg, rgba(20,24,34,0.60) 0%, rgba(12,15,22,0.78) 100%)',
-        backdropFilter: 'blur(16px) saturate(115%)',
-        WebkitBackdropFilter: 'blur(16px) saturate(115%)',
-        boxShadow:
-          '0 18px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 0 0 1px rgba(201,169,97,0.10)',
+        background: 'rgba(15, 20, 28, 0.7)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '0.5px solid rgba(255, 255, 255, 0.08)',
+        boxShadow: '0 18px 48px rgba(0,0,0,0.55)',
       }}
     >
-      {/* Gold sill — a single atmospheric top hairline, fades at the edges. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[var(--kombats-gold)]/35 to-transparent"
-      />
-
       <div className="h-full flex items-stretch">
         {/* LEFT: Chat + Battle Log (≈75%) */}
         <div className="flex flex-col basis-3/4 grow min-w-0">
@@ -342,8 +335,12 @@ export function LobbyChatDock({
             {activeTab === 'general' && (
               <div className="space-y-1.5">
                 {messages.map(msg => (
-                  <div key={msg.id} className="text-xs leading-relaxed">
-                    <span className="text-[var(--kombats-moon-silver)]">{msg.user}:</span>{' '}
+                  <div
+                    key={msg.id}
+                    className="text-xs leading-relaxed"
+                    style={{ textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)' }}
+                  >
+                    <span style={{ color: 'rgba(201, 162, 90, 0.9)' }}>{msg.user}:</span>{' '}
                     <span className="text-[var(--kombats-text-secondary)]">{msg.text}</span>
                   </div>
                 ))}
@@ -366,7 +363,8 @@ export function LobbyChatDock({
               <input
                 type="text"
                 placeholder={activeTab === 'dm' ? 'Send a direct message…' : 'Type a message…'}
-                className="w-full px-3.5 py-1.5 bg-black/25 border border-white/[0.06] rounded-full text-xs text-[var(--kombats-text-primary)] placeholder:text-[var(--kombats-text-muted)] focus:outline-none focus:border-[var(--kombats-gold)]/40 focus:bg-black/35 transition-colors"
+                className="w-full px-3.5 py-1.5 border border-white/[0.06] rounded-full text-xs text-[var(--kombats-text-primary)] placeholder:text-[var(--kombats-text-muted)] focus:outline-none focus:border-[var(--kombats-gold)]/40 transition-colors"
+                style={{ background: 'rgba(15, 20, 28, 0.7)' }}
               />
             ) : (
               <div className="flex items-center gap-2 px-1 h-7 text-[10px] uppercase tracking-[0.22em] text-[var(--kombats-text-muted)]">
@@ -401,7 +399,12 @@ export function LobbyChatDock({
                 className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-white/[0.03] transition-colors cursor-pointer"
               >
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--kombats-jade)] shadow-[0_0_6px_var(--kombats-jade)]" />
-                <span className="text-xs text-[var(--kombats-text-primary)] truncate">{user.name}</span>
+                <span
+                  className="text-xs text-[var(--kombats-text-primary)] truncate"
+                  style={{ textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)' }}
+                >
+                  {user.name}
+                </span>
               </div>
             ))}
           </div>
@@ -428,7 +431,11 @@ function BattleLogFeed({ entries }: { entries: BattleLogEntry[] }) {
         const color = outcomeColor(entry.outcome);
         const label = outcomeLabel(entry.outcome);
         return (
-          <div key={entry.id} className="flex items-start gap-2 text-xs leading-relaxed">
+          <div
+            key={entry.id}
+            className="flex items-start gap-2 text-xs leading-relaxed"
+            style={{ textShadow: '0 1px 2px rgba(0, 0, 0, 0.8)' }}
+          >
             <span className="shrink-0 text-[10px] uppercase tracking-wider text-[var(--kombats-text-muted)] pt-[1px]">
               R{entry.round}
             </span>
