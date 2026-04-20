@@ -1,0 +1,205 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+
+  /* Kombats Japanese Fantasy Color System */
+  --kombats-charcoal: #1a1a1f;
+  --kombats-ink-navy: #0f1419;
+  --kombats-deep-indigo: #1e1e2e;
+  --kombats-smoke-gray: #2a2a35;
+
+  --kombats-gold: #c9a961;
+  --kombats-gold-light: #d4b876;
+  --kombats-gold-dark: #b8954a;
+
+  --kombats-crimson: #c03744;
+  --kombats-crimson-dark: #a02835;
+  --kombats-crimson-light: #d04654;
+
+  --kombats-jade: #5a8a7a;
+  --kombats-jade-dark: #4a7a6a;
+  --kombats-jade-light: #6a9a8a;
+
+  --kombats-moon-silver: #9a9aa8;
+  --kombats-moon-silver-light: #b8b8c4;
+  --kombats-moon-silver-dark: #7a7a88;
+
+  --kombats-panel: rgba(26, 26, 31, 0.92);
+  --kombats-panel-border: rgba(154, 154, 168, 0.18);
+  --kombats-panel-highlight: rgba(201, 169, 97, 0.08);
+
+  --kombats-text-primary: #e8e8f0;
+  --kombats-text-secondary: rgba(232, 232, 240, 0.75);
+  --kombats-text-muted: rgba(232, 232, 240, 0.48);
+
+  /* Legacy Variables */
+  --background: var(--kombats-ink-navy);
+  --foreground: var(--kombats-text-primary);
+  --card: var(--kombats-panel);
+  --card-foreground: var(--kombats-text-primary);
+  --popover: var(--kombats-deep-indigo);
+  --popover-foreground: var(--kombats-text-primary);
+  --primary: var(--kombats-gold);
+  --primary-foreground: var(--kombats-ink-navy);
+  --secondary: var(--kombats-smoke-gray);
+  --secondary-foreground: var(--kombats-text-primary);
+  --muted: var(--kombats-smoke-gray);
+  --muted-foreground: var(--kombats-text-muted);
+  --accent: var(--kombats-jade);
+  --accent-foreground: var(--kombats-ink-navy);
+  --destructive: var(--kombats-crimson);
+  --destructive-foreground: #ffffff;
+  --border: var(--kombats-panel-border);
+  --input: rgba(154, 154, 168, 0.12);
+  --input-background: rgba(26, 26, 31, 0.5);
+  --switch-background: rgba(154, 154, 168, 0.25);
+  --font-weight-medium: 600;
+  --font-weight-normal: 400;
+  --ring: var(--kombats-gold);
+  --radius: 0.25rem;
+}
+
+.dark {
+  /* Dark mode uses same game colors */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /**
+  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
+  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
+  */
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
+
+/* ==================== SCROLLBARS ====================
+   Scoped to .kombats-scroll so only opted-in surfaces (currently the chat
+   dock's feed / battle-log / players list) get the dark premium treatment —
+   default scrollbars elsewhere are left untouched. */
+
+.kombats-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201, 169, 97, 0.18) transparent;
+}
+
+.kombats-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.kombats-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.kombats-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  transition: background-color 180ms ease;
+}
+
+.kombats-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(201, 169, 97, 0.22);
+}
+
+.kombats-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(201, 169, 97, 0.4);
+}
+
+.kombats-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
