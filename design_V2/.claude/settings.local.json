@@ -7,7 +7,10 @@
       "Bash(certutil -hashfile female_ninja.png MD5)",
       "Bash(certutil -hashfile ronin.png MD5)",
       "Bash(rm -rf dist)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(./node_modules/.bin/esbuild --bundle src/design-system/primitives/index.ts --outfile=/dev/null --format=esm --jsx=automatic --loader:.tsx=tsx --external:react --target=es2020)"
     ]
   }
 }
