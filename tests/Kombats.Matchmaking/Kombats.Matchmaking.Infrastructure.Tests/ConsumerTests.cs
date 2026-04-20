@@ -29,7 +29,7 @@ public sealed class ConsumerTests
     public async Task ProfileChanged_NewProfile_InsertsProjection()
     {
         var identityId = Guid.NewGuid();
-        var message = CreateProfileChanged(identityId, revision: 1, isReady: true);
+        var message = CreateProfileChanged(identityId, revision: 1, isReady: true, avatarId: "warrior-01");
 
         await using (var db = _fixture.CreateDbContext())
         {
@@ -45,6 +45,27 @@ public sealed class ConsumerTests
             profile!.Level.Should().Be(5);
             profile.IsReady.Should().BeTrue();
             profile.Revision.Should().Be(1);
+            profile.AvatarId.Should().Be("warrior-01");
+        }
+    }
+
+    [Fact]
+    public async Task ProfileChanged_NullAvatar_PopulatesDefault()
+    {
+        var identityId = Guid.NewGuid();
+        var message = CreateProfileChanged(identityId, revision: 1, isReady: true, avatarId: null);
+
+        await using (var db = _fixture.CreateDbContext())
+        {
+            var consumer = CreateProfileConsumer(db);
+            await consumer.Consume(CreateContext(message));
+        }
+
+        await using (var db = _fixture.CreateDbContext())
+        {
+            var repo = new PlayerCombatProfileRepository(db, NullLogger<PlayerCombatProfileRepository>.Instance);
+            var profile = await repo.GetByIdentityIdAsync(identityId);
+            profile!.AvatarId.Should().Be("default");
         }
     }
 
@@ -320,7 +341,7 @@ public sealed class ConsumerTests
     }
 
     private static PlayerCombatProfileChanged CreateProfileChanged(
-        Guid identityId, int revision, bool isReady, int level = 5) => new()
+        Guid identityId, int revision, bool isReady, int level = 5, string? avatarId = "default") => new()
     {
         MessageId = Guid.NewGuid(),
         IdentityId = identityId,
@@ -333,6 +354,7 @@ public sealed class ConsumerTests
         Vitality = 12,
         IsReady = isReady,
         Revision = revision,
+        AvatarId = avatarId,
         OccurredAt = Now
     };
 

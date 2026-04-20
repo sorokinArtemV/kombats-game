@@ -49,4 +49,7 @@ public sealed record InternalPlayerProfileResponse(
     int Intuition,
     int Vitality,
     int Wins,
-    int Losses);
+    int Losses,
+    // Nullable to tolerate pre-feature Players payloads during rollout;
+    // BFF mappers coalesce to the default avatar id.
+    string? AvatarId);

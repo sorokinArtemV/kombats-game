@@ -9,6 +9,7 @@ using Kombats.Players.Application;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.Battles;
 using Kombats.Players.Application.UseCases.AllocateStatPoints;
+using Kombats.Players.Application.UseCases.ChangeAvatar;
 using Kombats.Players.Application.UseCases.EnsureCharacterExists;
 using Kombats.Players.Application.UseCases.GetCharacter;
 using Kombats.Players.Application.UseCases.GetPlayerProfile;
@@ -80,6 +81,7 @@ builder.Services.Configure<LevelingOptions>(
 
 // Application handlers
 builder.Services.AddScoped<ICommandHandler<AllocateStatPointsCommand, AllocateStatPointsResult>, AllocateStatPointsHandler>();
+builder.Services.AddScoped<ICommandHandler<ChangeAvatarCommand, ChangeAvatarResult>, ChangeAvatarHandler>();
 builder.Services.AddScoped<ICommandHandler<EnsureCharacterExistsCommand, CharacterStateResult>, EnsureCharacterExistsHandler>();
 builder.Services.AddScoped<ICommandHandler<SetCharacterNameCommand, CharacterStateResult>, SetCharacterNameHandler>();
 builder.Services.AddScoped<IQueryHandler<GetCharacterQuery, CharacterStateResult>, GetCharacterHandler>();

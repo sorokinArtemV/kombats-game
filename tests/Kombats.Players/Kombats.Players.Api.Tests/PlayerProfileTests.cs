@@ -38,7 +38,8 @@ public sealed class PlayerProfileTests : IClassFixture<PlayersApiFactory>, IDisp
             Vitality: 12,
             Wins: 3,
             Losses: 1,
-            OnboardingState: OnboardingState.Ready);
+            OnboardingState: OnboardingState.Ready,
+            AvatarId: "default");
 
         _factory.GetPlayerProfileHandler
             .HandleAsync(Arg.Any<GetPlayerProfileQuery>(), Arg.Any<CancellationToken>())

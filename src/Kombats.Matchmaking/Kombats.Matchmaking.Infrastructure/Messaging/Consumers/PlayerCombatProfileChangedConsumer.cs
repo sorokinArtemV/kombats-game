@@ -38,7 +38,8 @@ internal sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerComba
             Vitality = message.Vitality,
             IsReady = message.IsReady,
             Revision = message.Revision,
-            OccurredAt = message.OccurredAt
+            OccurredAt = message.OccurredAt,
+            AvatarId = message.AvatarId
         };
 
         await _repository.UpsertAsync(profile, context.CancellationToken);

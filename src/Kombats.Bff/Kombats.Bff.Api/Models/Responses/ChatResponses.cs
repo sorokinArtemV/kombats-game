@@ -48,4 +48,5 @@ public sealed record PlayerCardResponse(
     int Intuition,
     int Vitality,
     int Wins,
-    int Losses);
+    int Losses,
+    string AvatarId);

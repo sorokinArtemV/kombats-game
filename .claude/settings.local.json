@@ -170,7 +170,8 @@
       "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" status --short src/Kombats.Client/)",
       "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" diff src/Kombats.Client/src/modules/auth/hooks.ts)",
       "Bash(python -c \"import json; json.load\\(open\\('infra/keycloak/kombats-realm.json'\\)\\)\")",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(git status *)"
     ]
   }
 }

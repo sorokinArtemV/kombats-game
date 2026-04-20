@@ -2,6 +2,7 @@ using Kombats.Players.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
+
 namespace Kombats.Players.Infrastructure.Configuration;
 
 internal sealed class CharacterConfig : IEntityTypeConfiguration<Character>
@@ -16,6 +17,10 @@ internal sealed class CharacterConfig : IEntityTypeConfiguration<Character>
         b.HasIndex(x => x.IdentityId).IsUnique();
 
         b.Property(x => x.Name).HasMaxLength(16);
+
+        b.Property(x => x.AvatarId)
+            .IsRequired()
+            .HasMaxLength(AvatarCatalog.MaxLength);
 
         b.Property(x => x.OnboardingState)
             .IsRequired()

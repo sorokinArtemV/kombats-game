@@ -33,6 +33,7 @@ public sealed class CharacterCreationTests
         character.Revision.Should().Be(1);
         character.OnboardingState.Should().Be(OnboardingState.Draft);
         character.IsReady.Should().BeFalse();
+        character.AvatarId.Should().Be(AvatarCatalog.Default);
         character.Created.Should().Be(Now);
         character.Updated.Should().Be(Now);
     }
@@ -481,6 +482,75 @@ public sealed class CharacterIsReadyTests
         character.AllocatePoints(1, 0, 0, 0, Now);
 
         character.IsReady.Should().BeTrue();
+    }
+}
+
+public sealed class CharacterChangeAvatarTests
+{
+    private static readonly DateTimeOffset Now = new(2026, 4, 7, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Later = Now.AddMinutes(5);
+
+    private static Character CreateDraft() => Character.CreateDraft(Guid.NewGuid(), Now);
+
+    [Fact]
+    public void ChangeAvatar_ValidId_UpdatesAvatarAndBumpsRevision()
+    {
+        var character = CreateDraft();
+        var revisionBefore = character.Revision;
+        var target = AvatarCatalog.AllowedIds.First(id => id != AvatarCatalog.Default);
+
+        character.ChangeAvatar(target, Later);
+
+        character.AvatarId.Should().Be(target);
+        character.Revision.Should().Be(revisionBefore + 1);
+        character.Updated.Should().Be(Later);
+    }
+
+    [Fact]
+    public void ChangeAvatar_SameValue_IsNoOp()
+    {
+        var character = CreateDraft();
+        var revisionBefore = character.Revision;
+        var updatedBefore = character.Updated;
+
+        character.ChangeAvatar(character.AvatarId, Later);
+
+        character.Revision.Should().Be(revisionBefore);
+        character.Updated.Should().Be(updatedBefore);
+    }
+
+    [Fact]
+    public void ChangeAvatar_InvalidId_Throws()
+    {
+        var character = CreateDraft();
+
+        var act = () => character.ChangeAvatar("not-a-real-avatar", Later);
+
+        act.Should().Throw<DomainException>().Where(e => e.Code == "InvalidAvatar");
+    }
+
+    [Fact]
+    public void ChangeAvatar_EmptyId_Throws()
+    {
+        var character = CreateDraft();
+
+        var act = () => character.ChangeAvatar("", Later);
+
+        act.Should().Throw<DomainException>().Where(e => e.Code == "InvalidAvatar");
+    }
+
+    [Fact]
+    public void ChangeAvatar_WorksInAnyOnboardingState()
+    {
+        var character = CreateDraft();
+        character.SetNameOnce("Hero", Now);
+        character.AllocatePoints(1, 0, 0, 0, Now);
+        var target = AvatarCatalog.AllowedIds.First(id => id != AvatarCatalog.Default);
+
+        character.ChangeAvatar(target, Later);
+
+        character.OnboardingState.Should().Be(OnboardingState.Ready);
+        character.AvatarId.Should().Be(target);
     }
 }
 

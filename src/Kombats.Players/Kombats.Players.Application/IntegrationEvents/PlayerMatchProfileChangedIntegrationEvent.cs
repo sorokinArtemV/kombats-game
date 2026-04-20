@@ -24,6 +24,7 @@ internal static class PlayerCombatProfileChangedFactory
             Vitality = character.Vitality,
             IsReady = character.IsReady,
             Revision = character.Revision,
+            AvatarId = character.AvatarId,
             OccurredAt = DateTimeOffset.UtcNow
         };
     }

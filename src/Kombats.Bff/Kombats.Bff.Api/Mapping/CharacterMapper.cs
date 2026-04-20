@@ -5,6 +5,9 @@ namespace Kombats.Bff.Api.Mapping;
 
 internal static class CharacterMapper
 {
+    // Fallback when Players returns a payload without avatar (rollout / mixed-version).
+    private const string DefaultAvatarId = "default";
+
     public static CharacterResponse ToCharacterResponse(InternalCharacterResponse c) => new(
         CharacterId: c.CharacterId,
         OnboardingState: OnboardingStateMapper.ToDisplayString(c.OnboardingState),
@@ -16,7 +19,8 @@ internal static class CharacterMapper
         UnspentPoints: c.UnspentPoints,
         Revision: c.Revision,
         TotalXp: c.TotalXp,
-        Level: c.Level);
+        Level: c.Level,
+        AvatarId: c.AvatarId ?? DefaultAvatarId);
 
     public static OnboardResponse ToOnboardResponse(InternalCharacterResponse c) => new(
         CharacterId: c.CharacterId,
@@ -29,5 +33,6 @@ internal static class CharacterMapper
         UnspentPoints: c.UnspentPoints,
         Revision: c.Revision,
         TotalXp: c.TotalXp,
-        Level: c.Level);
+        Level: c.Level,
+        AvatarId: c.AvatarId ?? DefaultAvatarId);
 }

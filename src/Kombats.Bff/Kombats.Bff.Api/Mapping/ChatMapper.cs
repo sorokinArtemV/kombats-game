@@ -5,6 +5,9 @@ namespace Kombats.Bff.Api.Mapping;
 
 internal static class ChatMapper
 {
+    // Fallback when Players returns a profile payload without avatar (rollout / mixed-version).
+    private const string DefaultAvatarId = "default";
+
     public static ConversationListResponse Map(InternalConversationListResponse src) =>
         new(src.Conversations.Select(Map).ToArray());
 
@@ -24,7 +27,8 @@ internal static class ChatMapper
             Intuition: src.Intuition,
             Vitality: src.Vitality,
             Wins: src.Wins,
-            Losses: src.Losses);
+            Losses: src.Losses,
+            AvatarId: src.AvatarId ?? DefaultAvatarId);
 
     private static ChatConversationResponse Map(InternalConversationDto src) =>
         new(

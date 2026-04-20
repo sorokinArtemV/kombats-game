@@ -31,7 +31,8 @@ internal sealed class GetPlayerProfileHandler : IQueryHandler<GetPlayerProfileQu
             Vitality: character.Vitality,
             Wins: character.Wins,
             Losses: character.Losses,
-            OnboardingState: character.OnboardingState);
+            OnboardingState: character.OnboardingState,
+            AvatarId: character.AvatarId);
 
         return Result.Success(response);
     }

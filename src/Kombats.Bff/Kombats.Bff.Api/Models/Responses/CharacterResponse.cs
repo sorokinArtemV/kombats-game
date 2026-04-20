@@ -11,4 +11,5 @@ public sealed record CharacterResponse(
     int UnspentPoints,
     int Revision,
     long TotalXp,
-    int Level);
+    int Level,
+    string AvatarId);

@@ -34,6 +34,12 @@ namespace Kombats.Players.Infrastructure.Persistence.EF.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("agility");
 
+                    b.Property<string>("AvatarId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("avatar_id");
+
                     b.Property<DateTimeOffset>("Created")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created");

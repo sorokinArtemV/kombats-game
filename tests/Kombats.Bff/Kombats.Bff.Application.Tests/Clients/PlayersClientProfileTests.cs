@@ -23,7 +23,8 @@ public sealed class PlayersClientProfileTests
             Intuition: 6,
             Vitality: 5,
             Wins: 3,
-            Losses: 1);
+            Losses: 1,
+            AvatarId: "default");
 
         using var handler = new StubHandler(HttpStatusCode.OK, expected);
         var client = CreateClient(handler);

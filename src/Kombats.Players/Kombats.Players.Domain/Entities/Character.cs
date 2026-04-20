@@ -22,6 +22,8 @@ public sealed class Character
     public int Revision { get; private set; }
     public OnboardingState OnboardingState { get; private set; }
 
+    public string AvatarId { get; private set; } = AvatarCatalog.Default;
+
     public long TotalXp { get; private set; }
     public int Level { get; private set; }
     public int LevelingVersion { get; private set; }
@@ -52,9 +54,27 @@ public sealed class Character
             Losses = 0,
             Revision = 1,
             OnboardingState = OnboardingState.Draft,
+            AvatarId = AvatarCatalog.Default,
             Created = occurredAt,
             Updated = occurredAt
         };
+    }
+
+    public void ChangeAvatar(string avatarId, DateTimeOffset occurredAt)
+    {
+        if (!AvatarCatalog.IsValid(avatarId))
+        {
+            throw new DomainException("InvalidAvatar", "Avatar id is not in the allowed catalog.");
+        }
+
+        if (AvatarId == avatarId)
+        {
+            return;
+        }
+
+        AvatarId = avatarId;
+        Revision++;
+        Updated = occurredAt;
     }
 
     public void SetNameOnce(string displayName, DateTimeOffset occurredAt)

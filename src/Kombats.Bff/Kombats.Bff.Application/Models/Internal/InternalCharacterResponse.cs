@@ -13,4 +13,7 @@ public sealed record InternalCharacterResponse(
     int Revision,
     long TotalXp,
     int Level,
-    int LevelingVersion);
+    int LevelingVersion,
+    // Nullable to tolerate pre-feature Players payloads during rollout;
+    // BFF mappers coalesce to the default avatar id.
+    string? AvatarId);

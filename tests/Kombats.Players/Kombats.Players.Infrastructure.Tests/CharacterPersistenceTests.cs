@@ -47,6 +47,7 @@ public sealed class CharacterPersistenceTests
             loaded.Losses.Should().Be(0);
             loaded.Revision.Should().Be(1);
             loaded.OnboardingState.Should().Be(OnboardingState.Draft);
+            loaded.AvatarId.Should().Be(AvatarCatalog.Default);
             loaded.Created.Should().Be(Now);
             loaded.Updated.Should().Be(Now);
         }

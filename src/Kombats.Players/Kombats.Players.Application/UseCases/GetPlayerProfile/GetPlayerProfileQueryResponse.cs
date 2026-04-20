@@ -13,4 +13,5 @@ public sealed record GetPlayerProfileQueryResponse(
     int Vitality,
     int Wins,
     int Losses,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] OnboardingState OnboardingState);
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] OnboardingState OnboardingState,
+    string AvatarId);

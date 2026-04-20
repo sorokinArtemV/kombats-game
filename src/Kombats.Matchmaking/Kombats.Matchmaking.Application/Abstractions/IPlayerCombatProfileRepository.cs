@@ -36,4 +36,8 @@ internal sealed class PlayerCombatProfile
     public required bool IsReady { get; init; }
     public required int Revision { get; init; }
     public required DateTimeOffset OccurredAt { get; init; }
+
+    // Avatar id projected from the Players integration event. Nullable on the wire
+    // to tolerate older producers; default populated at projection time below.
+    public string? AvatarId { get; init; }
 }

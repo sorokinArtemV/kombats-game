@@ -64,6 +64,7 @@ public sealed class MatchmakingDbContext : DbContext
             entity.Property(e => e.Revision).IsRequired();
             entity.Property(e => e.OccurredAt).IsRequired();
             entity.Property(e => e.UpdatedAtUtc).IsRequired();
+            entity.Property(e => e.AvatarId).HasMaxLength(64).IsRequired();
 
             entity.HasIndex(e => e.CharacterId);
         });

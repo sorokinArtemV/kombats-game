@@ -213,7 +213,7 @@ public sealed class ChatEndpointHttpTests : IAsyncLifetime
             .Returns(new InternalPlayerProfileResponse(
                 playerId, "Alice", Level: 5,
                 Strength: 4, Agility: 3, Intuition: 2, Vitality: 1,
-                Wins: 10, Losses: 2));
+                Wins: 10, Losses: 2, AvatarId: "default"));
 
         var resp = await SendAuth(HttpMethod.Get, $"/api/v1/players/{playerId}/card");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -246,7 +246,7 @@ public sealed class ChatEndpointHttpTests : IAsyncLifetime
             .Returns(new InternalPlayerProfileResponse(
                 playerId, DisplayName: null, Level: 1,
                 Strength: 0, Agility: 0, Intuition: 0, Vitality: 0,
-                Wins: 0, Losses: 0));
+                Wins: 0, Losses: 0, AvatarId: "default"));
 
         var resp = await SendAuth(HttpMethod.Get, $"/api/v1/players/{playerId}/card");
         resp.StatusCode.Should().Be(HttpStatusCode.OK);

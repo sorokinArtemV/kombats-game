@@ -58,6 +58,7 @@ internal sealed class PlayerCombatProfileRepository : IPlayerCombatProfileReposi
             existing.IsReady = profile.IsReady;
             existing.Revision = profile.Revision;
             existing.OccurredAt = profile.OccurredAt;
+            existing.AvatarId = profile.AvatarId ?? PlayerCombatProfileEntityDefaults.AvatarId;
             existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
         else
@@ -75,6 +76,7 @@ internal sealed class PlayerCombatProfileRepository : IPlayerCombatProfileReposi
                 IsReady = profile.IsReady,
                 Revision = profile.Revision,
                 OccurredAt = profile.OccurredAt,
+                AvatarId = profile.AvatarId ?? PlayerCombatProfileEntityDefaults.AvatarId,
                 UpdatedAtUtc = DateTimeOffset.UtcNow
             });
         }
@@ -102,7 +104,8 @@ internal sealed class PlayerCombatProfileRepository : IPlayerCombatProfileReposi
             Vitality = entity.Vitality,
             IsReady = entity.IsReady,
             Revision = entity.Revision,
-            OccurredAt = entity.OccurredAt
+            OccurredAt = entity.OccurredAt,
+            AvatarId = entity.AvatarId
         };
     }
 }

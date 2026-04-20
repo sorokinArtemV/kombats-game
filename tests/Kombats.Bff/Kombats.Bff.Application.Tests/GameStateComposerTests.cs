@@ -206,5 +206,6 @@ public sealed class GameStateComposerTests
         Revision: 1,
         TotalXp: 100,
         Level: 2,
-        LevelingVersion: 1);
+        LevelingVersion: 1,
+        AvatarId: "default");
 }

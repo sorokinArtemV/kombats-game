@@ -43,4 +43,13 @@ public sealed class PlayersClient(HttpClient httpClient, ILogger<PlayersClient> 
             new { Str = strength, Agi = agility, Intuition = intuition, Vit = vitality, ExpectedRevision = expectedRevision },
             ServiceName, logger, cancellationToken);
     }
+
+    public async Task<InternalChangeAvatarResponse?> ChangeAvatarAsync(
+        int expectedRevision, string avatarId, CancellationToken cancellationToken = default)
+    {
+        return await HttpClientHelper.SendAsync<InternalChangeAvatarResponse>(
+            httpClient, HttpMethod.Post, "/api/v1/character/avatar",
+            new { ExpectedRevision = expectedRevision, AvatarId = avatarId },
+            ServiceName, logger, cancellationToken);
+    }
 }

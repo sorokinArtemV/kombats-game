@@ -33,7 +33,8 @@ public sealed class PlayerCombatProfileRepositoryTests
             Vitality = 12,
             IsReady = true,
             Revision = 1,
-            OccurredAt = DateTimeOffset.UtcNow
+            OccurredAt = DateTimeOffset.UtcNow,
+            AvatarId = "warrior-01"
         };
 
         var result = await repo.UpsertAsync(profile);
@@ -50,6 +51,7 @@ public sealed class PlayerCombatProfileRepositoryTests
         loaded.Strength.Should().Be(10);
         loaded.IsReady.Should().BeTrue();
         loaded.Revision.Should().Be(1);
+        loaded.AvatarId.Should().Be("warrior-01");
     }
 
     [Fact]
