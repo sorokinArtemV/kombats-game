@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { Shield, Sword, Zap, TrendingUp, Clock } from 'lucide-react';
 import {
   Button as DSButton,
@@ -21,19 +21,6 @@ const YOUR_TURN_BADGE_STYLE = {
   textTransform: typography.labelDisplay.textTransform,
   fontWeight: typography.labelDisplay.fontWeight,
 } as const;
-
-// Section heading — see note in GameScreens.tsx.
-const SECTION_TITLE_STYLE: CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
-  fontWeight: 500,
-  letterSpacing: '0.24em',
-  textTransform: 'uppercase',
-  color: accent.primary,
-  textShadow: '0 2px 12px rgba(201, 162, 90, 0.25)',
-  lineHeight: 1.2,
-};
 
 export function MockBattle() {
   const [selectedAttack, setSelectedAttack] = useState<BodyZone | null>(null);
@@ -206,16 +193,6 @@ export function MockBattle() {
               <div className="w-full max-w-xl">
                 <DSPanel variant="glass" radius="md" elevation="panel" bordered>
                   <div style={{ padding: space.lg }}>
-                    <div
-                      style={{
-                        textAlign: 'center',
-                        marginTop: space.md,
-                        marginBottom: space.md,
-                      }}
-                    >
-                      <h2 style={SECTION_TITLE_STYLE}>SELECT ATTACK &amp; BLOCK</h2>
-                    </div>
-
                     <div>
                       <BodyZoneSelector
                         attack={selectedAttack}

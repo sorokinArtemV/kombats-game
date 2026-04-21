@@ -216,8 +216,18 @@ export function BodyZoneSelector({
   const showHoverOutline =
     hover !== null && !visibleFilledZones.includes(hover);
 
+  // Silhouette backdrop layers (bottom → top), transplanted from commit
+  // c6837dd so the figure reads as standing inside a tactical HUD rather
+  // than floating on bare glass:
+  //   1. Soft backdrop   — warm gold radial glow, extends past the
+  //                        silhouette bounds (inset -8% -14%).
+  //   2. Tactical grid   — warm gold dot pattern tiled at 12×12, masked
+  //                        with a radial vignette so it fades at the
+  //                        container edges.
+  //   3. Base silhouette — dark fill + warm edge glow via drop-shadow.
   const silhouetteBase = (
     <>
+      {/* Soft backdrop */}
       <div
         aria-hidden
         className="absolute pointer-events-none"
@@ -227,6 +237,21 @@ export function BodyZoneSelector({
             'radial-gradient(58% 55% at 50% 55%, rgba(201,169,97,0.05) 0%, rgba(15,20,25,0) 70%)',
         }}
       />
+      {/* Tactical grid — gold dot pattern with radial vignette mask. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle, rgba(201,162,90,0.12) 1px, transparent 1.5px)',
+          backgroundSize: '12px 12px',
+          WebkitMaskImage:
+            'radial-gradient(ellipse at center, black 50%, transparent 90%)',
+          maskImage:
+            'radial-gradient(ellipse at center, black 50%, transparent 90%)',
+        }}
+      />
+      {/* Base silhouette — dark body fill with warm edge glow. */}
       <div
         aria-hidden
         className="absolute inset-0"
@@ -518,31 +543,17 @@ export function BodyZoneSelector({
     </div>
   );
 
+  // Silhouette column — simple relative wrapper sized to width × 1.5·width.
+  // All visual environment (soft backdrop, tactical grid, base silhouette)
+  // lives inside `silhouetteBase` per the c6837dd stack order; zone fills,
+  // outlines, and hit areas layer on top via `silhouetteOverlays`.
   const silhouetteStage = (
-    <div style={{ position: 'relative' }}>
-      {/* Static dark radial stage behind the figure — anchors the silhouette
-          so it reads as standing in front of something rather than
-          floating on bare glass. The rgba stops here deliberately reuse
-          the surface.glass RGB channel so the darker halo reads as
-          "deeper panel", not a new color. */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: '-8% -12%',
-          background:
-            'radial-gradient(ellipse 70% 75% at center, rgba(15, 20, 28, 0.45) 0%, rgba(15, 20, 28, 0.22) 45%, transparent 75%)',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
-      <div
-        className="relative select-none"
-        style={{ width, height, zIndex: 1 }}
-      >
-        {silhouetteBase}
-        {silhouetteOverlays}
-      </div>
+    <div
+      className="relative select-none"
+      style={{ width, height }}
+    >
+      {silhouetteBase}
+      {silhouetteOverlays}
     </div>
   );
 

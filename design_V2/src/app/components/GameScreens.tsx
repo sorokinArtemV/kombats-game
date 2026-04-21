@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Trophy, Heart, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PrimaryButton, SecondaryButton, GhostButton, GamePanel } from './KombatsUI';
@@ -69,23 +69,6 @@ const YOUR_TURN_BADGE_STYLE = {
   textTransform: typography.labelDisplay.textTransform,
   fontWeight: typography.labelDisplay.fontWeight,
 } as const;
-
-// Section heading sized between PanelHeader's 11px label scale and an
-// 18–22px ceremonial display. Cinzel at 14px reads as a workflow section
-// header that is still visibly louder than the 13px labelLarge tabs
-// below it. text-shadow follows the OnboardingCard TITLE_STYLE
-// precedent for gold-on-glass headings.
-const SECTION_TITLE_STYLE: CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
-  fontWeight: 500,
-  letterSpacing: '0.24em',
-  textTransform: 'uppercase',
-  color: accent.primary,
-  textShadow: '0 2px 12px rgba(201, 162, 90, 0.25)',
-  lineHeight: 1.2,
-};
 
 // ==================== MAIN HUB / LOBBY ====================
 
@@ -489,17 +472,7 @@ export function BattleScreen({
                 <span style={YOUR_TURN_BADGE_STYLE}>Your Turn</span>
               </div>
 
-              <div
-                style={{
-                  textAlign: 'center',
-                  marginTop: space.md,
-                  marginBottom: space.md,
-                }}
-              >
-                <h2 style={SECTION_TITLE_STYLE}>SELECT ATTACK &amp; BLOCK</h2>
-              </div>
-
-              <div>
+              <div style={{ marginTop: space.md }}>
                 <BodyZoneSelector
                   attack={selectedAttack}
                   block={selectedDefense}

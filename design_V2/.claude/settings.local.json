@@ -22,7 +22,10 @@
       "Bash(python scripts/analyze_silhouette.py)",
       "Bash(PYTHONIOENCODING=utf-8 python scripts/analyze_silhouette.py)",
       "Bash(git diff *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(git ls-tree *)",
+      "Bash(grep -E \"^tsc$|^vite$|^tsc\\\\.cmd\")",
+      "Bash(npx --no-install vite build)"
     ]
   }
 }
