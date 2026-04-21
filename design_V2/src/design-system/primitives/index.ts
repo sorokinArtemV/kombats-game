@@ -9,3 +9,4 @@ export {
 } from './Button';
 export { Label, type LabelProps } from './Label';
 export { StatBar, type StatBarProps } from './StatBar';
+export { TextInput, type TextInputProps } from './TextInput';

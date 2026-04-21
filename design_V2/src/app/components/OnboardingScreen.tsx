@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PrimaryButton } from './KombatsUI';
 import { GameShell, LobbyHeader } from './GameShell';
+import { Button, Label, TextInput } from '../../design-system/primitives';
+import { OnboardingCard } from '../../design-system/composed';
+// Tokens consumed here only for AvatarCard's visual binding (see Phase 2 Step 3, item F).
+// Screen-level logic stays off the token module — use primitives/composed for everything else.
+import { accent, border as borderTokens } from '../../design-system/tokens';
 import bgImage from '../../imports/bg-1.png';
 import femaleArcher from '../../assets/fighters/female_archer.png';
 import femaleNinja from '../../assets/fighters/female_ninja.png';
@@ -84,13 +88,16 @@ function AvatarCard({
       onClick={onSelect}
       aria-pressed={selected}
       aria-label={`Choose avatar ${avatar.name}`}
-      className={`group relative block aspect-[2/3] w-full overflow-hidden rounded-md border border-[var(--kombats-panel-border)] transition-opacity duration-200 focus:outline-none ${
+      style={{ border: borderTokens.subtle }}
+      className={`group relative block aspect-[2/3] w-full overflow-hidden rounded-md transition-opacity duration-200 focus:outline-none ${
         selected
           ? 'opacity-100'
           : 'opacity-55 hover:opacity-90 focus-visible:opacity-90'
       }`}
     >
-      {/* Background fill so any letterbox edges blend into the panel. */}
+      {/* Background fill so any letterbox edges blend into the panel.
+          Preserved verbatim — carries functional meaning (letterbox blending)
+          and is not substitutable by a design-system surface token. */}
       <div className="absolute inset-0 bg-gradient-to-b from-[var(--kombats-smoke-gray)]/70 via-[var(--kombats-ink-navy)]/80 to-[var(--kombats-ink-navy)]" />
 
       {/* Artwork — no blur, no saturation filter, no zoom. Pure pixels. */}
@@ -107,7 +114,8 @@ function AvatarCard({
       {selected && (
         <div
           aria-hidden
-          className="absolute inset-x-0 bottom-0 h-[2px] bg-[var(--kombats-gold)]"
+          className="absolute inset-x-0 bottom-0 h-[2px]"
+          style={{ background: accent.primary }}
         />
       )}
     </button>
@@ -178,35 +186,16 @@ export function OnboardingScreen({
           className="absolute top-1/2 left-1/2 w-[540px] max-w-[calc(100vw-2rem)]"
           style={{ transform: 'translate(-42%, -52%)' }}
         >
-          <div className="bg-[var(--kombats-panel)]/65 backdrop-blur-md border border-[var(--kombats-panel-border)] shadow-[0_12px_32px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.04)] rounded-md overflow-hidden">
-            {/* Header */}
-            <div className="px-6 pt-5 pb-4 border-b border-[var(--kombats-panel-border)] text-center">
-              <div className="text-[10px] text-[var(--kombats-moon-silver)] uppercase tracking-[0.32em] mb-1.5">
-                Welcome
+          <OnboardingCard
+            eyebrow="Welcome"
+            title="Choose Your Look"
+            subtitle="Pick a display name and the avatar that will represent you."
+          >
+            {/* Avatar selection */}
+            <div>
+              <div className="mb-2 text-center">
+                <Label tone="neutral">Avatar</Label>
               </div>
-              <h1
-                className="text-[22px] text-[var(--kombats-gold)] uppercase tracking-[0.28em] leading-none"
-                style={{
-                  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
-                  fontWeight: 600,
-                  textShadow: '0 2px 12px rgba(201,169,97,0.3)',
-                }}
-              >
-                Choose Your Look
-              </h1>
-              <p className="mt-2 text-xs text-[var(--kombats-text-secondary)] tracking-wide">
-                Pick a display name and the avatar that will represent you.
-              </p>
-            </div>
-
-            {/* Selection block */}
-            <div className="px-6 pt-5 pb-4 border-b border-[var(--kombats-panel-border)]">
-              <div className="mb-3 text-center">
-                <span className="text-[10px] text-[var(--kombats-text-muted)] uppercase tracking-[0.22em]">
-                  Avatar
-                </span>
-              </div>
-
               <div className="grid grid-cols-5 gap-2">
                 {AVATARS.map(a => (
                   <AvatarCard
@@ -219,52 +208,37 @@ export function OnboardingScreen({
               </div>
             </div>
 
-            {/* Name input */}
-            <div className="px-6 pt-5 pb-5 border-b border-[var(--kombats-panel-border)]">
-              <label htmlFor="onboarding-name" className="block text-[10px] text-[var(--kombats-text-muted)] uppercase tracking-[0.22em] mb-2">
-                Display Name
-              </label>
-              <input
-                id="onboarding-name"
-                type="text"
-                autoComplete="off"
-                spellCheck={false}
-                maxLength={NAME_MAX}
-                value={name}
-                placeholder="e.g. Kazumi"
-                onChange={e => setName(e.target.value)}
-                onBlur={() => setTouched(true)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleSubmit();
-                }}
-                aria-invalid={showError}
-                aria-describedby="onboarding-name-help"
-                className={`w-full px-4 py-2.5 bg-black/30 border text-sm text-[var(--kombats-text-primary)] placeholder:text-[var(--kombats-text-muted)] focus:outline-none transition-colors rounded-sm ${
-                  showError
-                    ? 'border-[var(--kombats-crimson)]/70 focus:border-[var(--kombats-crimson)]'
-                    : 'border-[var(--kombats-panel-border)] focus:border-[var(--kombats-gold)]/60'
-                }`}
-              />
-              <div
-                id="onboarding-name-help"
-                className="mt-2 flex items-center justify-between text-[10px] uppercase tracking-[0.2em]"
-              >
-                <span className={showError ? 'text-[var(--kombats-crimson)]' : 'text-[var(--kombats-text-muted)]'}>
-                  {showError ? validation.error : `${NAME_MIN}–${NAME_MAX} characters`}
-                </span>
-                <span className="text-[var(--kombats-text-muted)] tabular-nums">
-                  {validation.trimmed.length}/{NAME_MAX}
-                </span>
-              </div>
-            </div>
+            {/* Display name */}
+            <TextInput
+              id="onboarding-name"
+              label="Display Name"
+              value={name}
+              onChange={setName}
+              onBlur={() => setTouched(true)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSubmit();
+              }}
+              placeholder="e.g. Kazumi"
+              error={showError ? validation.error : undefined}
+              helperLeft={`${NAME_MIN}–${NAME_MAX} characters`}
+              helperRight={`${validation.trimmed.length}/${NAME_MAX}`}
+              maxLength={NAME_MAX}
+              autoComplete="off"
+              spellCheck={false}
+            />
 
             {/* CTA */}
-            <div className="px-6 py-5 flex items-center justify-center">
-              <PrimaryButton size="large" disabled={!canSubmit} onClick={handleSubmit}>
+            <div className="flex items-center justify-center">
+              <Button
+                variant="primary"
+                size="lg"
+                disabled={!canSubmit}
+                onClick={handleSubmit}
+              >
                 Continue
-              </PrimaryButton>
+              </Button>
             </div>
-          </div>
+          </OnboardingCard>
         </div>
       </div>
     </GameShell>

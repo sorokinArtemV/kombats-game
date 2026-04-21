@@ -10,7 +10,8 @@
       "Bash(node -e ' *)",
       "Bash(npm run *)",
       "Bash(npx tsc *)",
-      "Bash(./node_modules/.bin/esbuild --bundle src/design-system/primitives/index.ts --outfile=/dev/null --format=esm --jsx=automatic --loader:.tsx=tsx --external:react --target=es2020)"
+      "Bash(./node_modules/.bin/esbuild --bundle src/design-system/primitives/index.ts --outfile=/dev/null --format=esm --jsx=automatic --loader:.tsx=tsx --external:react --target=es2020)",
+      "Bash(./node_modules/.bin/esbuild --bundle src/design-system/composed/index.ts --outfile=/dev/null --format=esm --jsx=automatic --loader:.tsx=tsx --external:react --external:react-dom --external:motion/react --external:lucide-react --target=es2020)"
     ]
   }
 }

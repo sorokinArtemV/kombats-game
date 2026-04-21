@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Trophy, Heart, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PrimaryButton, SecondaryButton, GhostButton, GamePanel } from './KombatsUI';
+import { RewardRow, QueueCard } from '../../design-system/composed';
 import {
   GameShell,
   LobbyHeader,
@@ -400,15 +401,14 @@ function LobbyScene({ centerCard }: { centerCard: React.ReactNode }) {
 }
 
 // Shared wrapper that positions a card in the same spot as the lobby queue card.
+// Panel surface now lives in the card component itself (QueueCard).
 function LobbyCenterCard({ children }: { children: React.ReactNode }) {
   return (
     <div
       className="absolute top-1/2 left-1/2 w-80"
       style={{ transform: 'translate(-50%, -55%)' }}
     >
-      <div className="bg-[var(--kombats-panel)]/55 backdrop-blur-md border border-[var(--kombats-panel-border)] shadow-[0_12px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)] rounded-md p-6">
-        {children}
-      </div>
+      {children}
     </div>
   );
 }
@@ -418,24 +418,14 @@ export function MainHub({ onJoinQueue }: { onJoinQueue: () => void }) {
     <LobbyScene
       centerCard={
         <LobbyCenterCard>
-          <h3 className="text-xs text-[var(--kombats-text-muted)] uppercase tracking-[0.22em] mb-5 text-center">
-            Ready to Fight
-          </h3>
-
-          <div className="flex items-center justify-center">
-            <PrimaryButton size="large" onClick={onJoinQueue}>
-              Join Queue
-            </PrimaryButton>
-          </div>
-
-          <div className="mt-5 pt-4 border-t border-[var(--kombats-panel-border)] text-center">
-            <div className="text-[10px] text-[var(--kombats-text-secondary)] uppercase tracking-wider mb-1">
-              Battle Type
-            </div>
-            <div className="text-sm text-[var(--kombats-gold)] uppercase tracking-wide">
-              Fist Fight
-            </div>
-          </div>
+          <QueueCard
+            status="ready"
+            title="Ready to Fight"
+            battleType="Fist Fight"
+            searchingLabel="Finding"
+            searchingValue="Worthy Challenger"
+            onJoinQueue={onJoinQueue}
+          />
         </LobbyCenterCard>
       }
     />
@@ -449,48 +439,15 @@ export function QueueScreen({ onCancel, elapsedTime }: { onCancel: () => void; e
     <LobbyScene
       centerCard={
         <LobbyCenterCard>
-          <h3 className="text-xs text-[var(--kombats-gold)] uppercase tracking-[0.22em] mb-5 text-center">
-            Searching for Opponent
-          </h3>
-
-          <div className="flex justify-center mb-4">
-            <motion.div
-              className="w-20 h-20 rounded-full border-2 border-[var(--kombats-gold)] relative"
-              animate={{
-                scale: [1, 1.15, 1],
-                opacity: [0.55, 1, 0.55]
-              }}
-              transition={{
-                duration: 2,
-                repeat: Infinity,
-                ease: 'easeInOut'
-              }}
-            >
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Target className="w-10 h-10 text-[var(--kombats-gold)]" />
-              </div>
-            </motion.div>
-          </div>
-
-          <div className="flex items-center justify-center gap-2 mb-5 text-[var(--kombats-moon-silver)]">
-            <Clock className="w-3.5 h-3.5" />
-            <span className="text-lg tabular-nums">{elapsedTime}s</span>
-          </div>
-
-          <div className="flex items-center justify-center">
-            <SecondaryButton onClick={onCancel}>
-              Cancel Search
-            </SecondaryButton>
-          </div>
-
-          <div className="mt-5 pt-4 border-t border-[var(--kombats-panel-border)] text-center">
-            <div className="text-[10px] text-[var(--kombats-text-secondary)] uppercase tracking-wider mb-1">
-              Finding
-            </div>
-            <div className="text-sm text-[var(--kombats-gold)] uppercase tracking-wide">
-              Worthy Challenger
-            </div>
-          </div>
+          <QueueCard
+            status="searching"
+            title="Searching for Opponent"
+            battleType="Fist Fight"
+            searchingLabel="Finding"
+            searchingValue="Worthy Challenger"
+            elapsedSeconds={elapsedTime}
+            onCancel={onCancel}
+          />
         </LobbyCenterCard>
       }
     />
@@ -744,14 +701,8 @@ export function VictoryScreen({
                 Rewards
               </h3>
               <div className="space-y-2">
-                <div className="flex justify-between items-center px-4 py-2 bg-[var(--kombats-smoke-gray)]/50 border border-[var(--kombats-panel-border)] rounded-sm">
-                  <span className="text-sm text-[var(--kombats-text-primary)]">XP Gained</span>
-                  <span className="text-sm text-[var(--kombats-gold)]">+1,250 XP</span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-2 bg-[var(--kombats-smoke-gray)]/50 border border-[var(--kombats-panel-border)] rounded-sm">
-                  <span className="text-sm text-[var(--kombats-text-primary)]">Rating Gained</span>
-                  <span className="text-sm text-[var(--kombats-jade)]">+25 RP</span>
-                </div>
+                <RewardRow label="XP Gained" value="+1,250 XP" tone="accent" />
+                <RewardRow label="Rating Gained" value="+25 RP" tone="success" />
               </div>
             </div>
 
@@ -872,14 +823,8 @@ export function DefeatScreen({
                 Rewards
               </h3>
               <div className="space-y-2">
-                <div className="flex justify-between items-center px-4 py-2 bg-[var(--kombats-smoke-gray)]/50 border border-[var(--kombats-panel-border)] rounded-sm">
-                  <span className="text-sm text-[var(--kombats-text-primary)]">XP Gained</span>
-                  <span className="text-sm text-[var(--kombats-gold)]">+250 XP</span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-2 bg-[var(--kombats-smoke-gray)]/50 border border-[var(--kombats-panel-border)] rounded-sm">
-                  <span className="text-sm text-[var(--kombats-text-primary)]">Rating Lost</span>
-                  <span className="text-sm text-[var(--kombats-crimson)]">-18 RP</span>
-                </div>
+                <RewardRow label="XP Gained" value="+250 XP" tone="accent" />
+                <RewardRow label="Rating Lost" value="-18 RP" tone="danger" />
               </div>
             </div>
 
