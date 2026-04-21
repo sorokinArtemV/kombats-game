@@ -1,24 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sword, Shield } from 'lucide-react';
 import silhouetteSrc from '../../assets/fighters/silhouette.png';
-import { NinjaSmokeOverlay } from './NinjaSmokeOverlay.jsx';
+import kunaiSrc from '../../assets/icons/kunai.png';
+import mitsudomoeSrc from '../../assets/icons/mitsudomoe.png';
+
+// NOTE: lucide Sword / Shield are still used by SummaryBlock and
+// ModeSegment below — those are the ATTACK/BLOCK tab labels and
+// selection summaries, which step 7b leaves untouched. Only the
+// gutter markers swap from lucide to the custom PNGs.
 
 // ---------- Layout modes ----------
 //
 // Silhouette stack (inside the width × width*1.5 wrapper, bottom → top):
-//   1. Soft backdrop
-//   2. Base silhouette (dark fill, warm edge glow)
-//   3. NinjaSmokeOverlay
-//   4. Per-zone FILL overlays   — silhouette-masked divs, vertically clipped
-//                                 to each zone's y-band, radial-gradient bg,
-//                                 pulse. Only the current mode's selected
-//                                 zones render.
-//   5. Hover OUTLINE overlay    — silhouette-masked div, same clip as
-//                                 hovered zone, thin ring via drop-shadow
-//                                 filter. Mode-coloured.
-//   6. Hover tooltip label
-//   7. Side markers             (outside wrapper, sword/shield)
-//   8. Hit areas                (full-width rectangles per zone y-band)
+//   1. Soft backdrop             — faint warm radial glow behind the body.
+//   2. Tactical grid             — gold dot-grid tiled at 12×12, vignette-
+//                                   masked so it fades at the container
+//                                   edges. Reads as HUD texture.
+//   3. Tactical scan lines       — two horizontal sweeps (1 px, gold,
+//                                   soft side-fade), 8s ease-in-out loop,
+//                                   the second offset by -4s so they
+//                                   stagger.
+//   4. Base silhouette           — dark fill, warm edge glow.
+//   5. Per-zone FILL overlays    — silhouette-masked, clipped to each
+//                                   zone's y-band, radial gradient, pulse.
+//                                   Only the current mode's selections.
+//   6. SVG outline+glow layer    — feMorphology-derived outline + outer
+//                                   glow on selected zones, hairline-only
+//                                   on hover preview.
+//   7. Hover tooltip label
+//   8. Gutter reminder icons     — cross-tab memory:
+//                                     ATTACK tab → mitsudomoe icons on
+//                                                  LEFT (existing block
+//                                                  pair, if any)
+//                                     BLOCK tab  → kunai icon on RIGHT
+//                                                  (existing attack, if
+//                                                  any)
+//   9. Hit areas                 — full-width rectangles per zone y-band.
 //
 //   STACKED  (default <520px, or layout="stacked")
 //   SPLIT    (≥520px with layout="auto", or layout="split")
@@ -272,8 +289,10 @@ export function BodyZoneSelector({
   const showHoverOutline =
     hover !== null && !visibleFilledZones.includes(hover);
 
-  // Lower silhouette layers — painted first, below the smoke overlay
-  // in stacked mode.
+  // Lower silhouette layers — painted first, behind the body. The
+  // tactical grid and scan lines sit between the backdrop and the
+  // silhouette so the silhouette body visually sits ON the HUD grid,
+  // not in front of it.
   const silhouetteBase = (
     <>
       {/* Soft backdrop */}
@@ -286,6 +305,78 @@ export function BodyZoneSelector({
             'radial-gradient(58% 55% at 50% 55%, rgba(201,169,97,0.05) 0%, rgba(15,20,25,0) 70%)',
         }}
       />
+
+      {/* Tactical grid — warm gold dot pattern tiled at 12×12. The
+          radial-gradient mask fades the grid to transparent near the
+          container edges so it reads as ambient HUD texture, not
+          graph paper. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle, rgba(201,162,90,0.12) 1px, transparent 1.5px)',
+          backgroundSize: '12px 12px',
+          WebkitMaskImage:
+            'radial-gradient(ellipse at center, black 50%, transparent 90%)',
+          maskImage:
+            'radial-gradient(ellipse at center, black 50%, transparent 90%)',
+        }}
+      />
+
+      {/* Tactical scan lines — two 1 px horizontal sweeps. Each track
+          is a full-height transparent box containing a 1 px gold
+          gradient line at top:0, and the box itself translates with
+          `kombats-tactical-scan` — starts 100% below (line is at
+          container bottom edge), sweeps through, ends 100% above
+          (line exits past top). 8s ease-in-out infinite; second line
+          offsets by -4s for stagger. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none overflow-hidden"
+      >
+        <div
+          className="absolute left-0 right-0 top-0"
+          style={{
+            height: '100%',
+            animation:
+              'kombats-tactical-scan 8s ease-in-out infinite',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 1,
+              background:
+                'linear-gradient(to right, transparent 0%, rgba(201,162,90,0.4) 50%, transparent 100%)',
+            }}
+          />
+        </div>
+        <div
+          className="absolute left-0 right-0 top-0"
+          style={{
+            height: '100%',
+            animation:
+              'kombats-tactical-scan 8s ease-in-out infinite',
+            animationDelay: '-4s',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 1,
+              background:
+                'linear-gradient(to right, transparent 0%, rgba(201,162,90,0.4) 50%, transparent 100%)',
+            }}
+          />
+        </div>
+      </div>
 
       {/* Base silhouette — dark fill with a subtle warm edge glow. */}
       <div
@@ -588,30 +679,34 @@ export function BodyZoneSelector({
         </div>
       )}
 
-      {/* Left gutter, outer column — sword marker at the attack zone. */}
-      {attack && (
+      {/* Gutter reminder icons — cross-tab memory only. On ATTACK tab
+          the block selection (if any) shows as mitsudomoe icons in the
+          LEFT gutter; on BLOCK tab the attack selection (if any) shows
+          as a kunai icon in the RIGHT gutter. The active tab's own
+          selection is already visible via the zone fill + glow on the
+          silhouette, so no icon is rendered for it. */}
+      {mode === 'block' && attack && (
         <SideMarker
-          side="left"
-          offset={-5}
+          key="attack-mark"
+          side="right"
+          offset={-28}
           top={ZONE_CENTER_Y[attack]}
-          tone="crimson"
         >
-          <Sword className="w-3 h-3" />
+          <GutterIcon src={kunaiSrc} />
         </SideMarker>
       )}
 
-      {/* Left gutter, inner column — shield markers at the block zones. */}
-      {blockZones?.map((z) => (
-        <SideMarker
-          key={`${z}-block-mark`}
-          side="left"
-          offset={-30}
-          top={ZONE_CENTER_Y[z]}
-          tone="jade"
-        >
-          <Shield className="w-3 h-3" />
-        </SideMarker>
-      ))}
+      {mode === 'attack' &&
+        blockZones?.map((z) => (
+          <SideMarker
+            key={`${z}-block-mark`}
+            side="left"
+            offset={-28}
+            top={ZONE_CENTER_Y[z]}
+          >
+            <GutterIcon src={mitsudomoeSrc} />
+          </SideMarker>
+        ))}
 
       {/* Hit areas — full-width rectangles per zone y-band. No polygon
           clipping; click accuracy is good enough without it because
@@ -697,14 +792,9 @@ export function BodyZoneSelector({
           >
             <div
               className="relative select-none"
-              style={{
-                width,
-                height,
-                transform: 'translateX(24px)',
-              }}
+              style={{ width, height }}
             >
               {silhouetteBase}
-              <NinjaSmokeOverlay intensity={0.55} />
               {silhouetteOverlays}
             </div>
           </div>
@@ -728,7 +818,6 @@ export function BodyZoneSelector({
             style={{ width, height }}
           >
             {silhouetteBase}
-            <NinjaSmokeOverlay intensity={0.55} />
             {silhouetteOverlays}
           </div>
 
@@ -759,24 +848,21 @@ const ZONE_ANIMATION_CSS = `
     from { opacity: 0; }
     to   { opacity: 1; }
   }
+  @keyframes kombats-tactical-scan {
+    from { transform: translateY(100%); }
+    to   { transform: translateY(-100%); }
+  }
 `;
 
 interface SideMarkerProps {
   side: 'left' | 'right';
   top: number;
-  tone: 'crimson' | 'jade';
   /** px offset past the silhouette edge along `side`. 0 = at edge. */
   offset?: number;
   children: React.ReactNode;
 }
 
-function SideMarker({ side, top, tone, offset = 0, children }: SideMarkerProps) {
-  const color =
-    tone === 'crimson'
-      ? 'var(--kombats-crimson-light)'
-      : 'var(--kombats-jade-light)';
-  const glow =
-    tone === 'crimson' ? 'rgba(208,70,84,0.45)' : 'rgba(106,154,138,0.45)';
+function SideMarker({ side, top, offset = 0, children }: SideMarkerProps) {
   return (
     <div
       aria-hidden
@@ -785,12 +871,37 @@ function SideMarker({ side, top, tone, offset = 0, children }: SideMarkerProps) 
         top: `${top}%`,
         [side === 'left' ? 'right' : 'left']: `calc(100% + ${offset}px)`,
         transform: 'translateY(-50%)',
-        color,
-        filter: `drop-shadow(0 0 4px ${glow})`,
       }}
     >
       {children}
     </div>
+  );
+}
+
+// Gutter reminder icon — a 26×26 square tinted uniformly gold
+// (#c9a25a) by using the PNG's alpha channel as a CSS mask on a
+// gold-filled <div>. A soft drop-shadow lifts the icon off the
+// tactical grid. No state-dependent colouring: semantics come from
+// shape (kunai vs mitsudomoe) + position (right vs left gutter).
+function GutterIcon({ src }: { src: string }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: 26,
+        height: 26,
+        background: '#c9a25a',
+        WebkitMaskImage: `url(${src})`,
+        maskImage: `url(${src})`,
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+        filter: 'drop-shadow(0 0 4px rgba(201, 162, 90, 0.5))',
+      }}
+    />
   );
 }
 
