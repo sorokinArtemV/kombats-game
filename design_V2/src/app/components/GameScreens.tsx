@@ -1,0 +1,854 @@
+import { useState } from 'react';
+import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Trophy, Heart, ChevronDown, ChevronUp } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { PrimaryButton, SecondaryButton, GhostButton, GamePanel } from './KombatsUI';
+import { RewardRow, QueueCard } from '../../design-system/composed';
+import {
+  GameShell,
+  LobbyHeader,
+  LobbyChatDock,
+  BattleLogRecap,
+  CHAT_DOCK_SAFE_AREA_PX,
+  type BattleLogEntry,
+} from './GameShell';
+import { BodyZoneSelector, type BodyZone, type BlockPair } from './BodyZoneSelector';
+import bgImage from '../../imports/bg-1.png';
+import characterImage from '../../imports/charackter.png';
+
+// Mock data for shell
+const mockChatMessages = [
+  { id: 1, user: 'Akira', text: 'Anyone for ranked?' },
+  { id: 2, user: 'Yuki', text: 'GG last match!' },
+  { id: 3, user: 'Hiro', text: 'Looking for practice partner' },
+  { id: 4, user: 'Sakura', text: 'New player here, any tips?' }
+];
+
+const mockOnlineUsers = [
+  { id: 1, name: 'Akira' },
+  { id: 2, name: 'Yuki' },
+  { id: 3, name: 'Hiro' },
+  { id: 4, name: 'Sakura' },
+  { id: 5, name: 'Ryu' },
+  { id: 6, name: 'Ken' },
+  { id: 7, name: 'Chun-Li' },
+  { id: 8, name: 'Guile' }
+];
+
+// ==================== FIGHTER ANCHOR (shared across all screens) ====================
+// Canonical player-side fighter composition. Reused so the character appears
+// anchored in the same spot regardless of screen (lobby / battle / victory / defeat).
+const FIGHTER_IMAGE_CLASSNAME = 'h-[82vh] w-auto object-contain drop-shadow-2xl';
+const FIGHTER_IMAGE_BASE_FILTER = 'drop-shadow(0 25px 50px rgba(0,0,0,0.9))';
+// Pushes the bottom-anchored fighter column down so the expanded info panel
+// (which opens upward from the nameplate) fits fully inside the viewport with
+// a small gap under the header.
+const FIGHTER_IMAGE_MARGIN_BOTTOM = '-17vh';
+const FIGHTER_COLUMN_LEFT_CLASSNAME = 'absolute left-0 bottom-0 flex flex-col items-center';
+const FIGHTER_COLUMN_RIGHT_CLASSNAME = 'absolute right-0 bottom-0 flex flex-col items-center';
+
+// ==================== MAIN HUB / LOBBY ====================
+
+type FighterAttribute = {
+  icon: React.ElementType;
+  color: 'crimson' | 'gold' | 'jade' | 'silver';
+  label: string;
+  value: number;
+};
+
+type FighterRecord = {
+  wins: number;
+  losses: number;
+  winrate?: string;
+  streak?: string;
+};
+
+// ==================== HP BAR ====================
+// Tactical fighting-game HP bar: parallelogram silhouette via clip-path.
+// `mirror` flips both the skew direction and the fill direction — for the
+// opponent, HP depletes right-to-left (Tekken / MK / SF convention). The
+// surface is matte — muted pigment, subtle vertical gradient, thin border,
+// no glare or diagonal sheen.
+function HpBar({
+  hp,
+  maxHp,
+  hpColor,
+  mirror,
+}: {
+  hp: number;
+  maxHp: number;
+  hpColor: 'jade' | 'crimson';
+  mirror: boolean;
+}) {
+  const hpPct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+  const skew = mirror
+    ? 'polygon(0 0, calc(100% - 12px) 0, 100% 100%, 12px 100%)'
+    : 'polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)';
+  // Muted pigments with a subtle top-lighter, bottom-darker gradient.
+  const fillGradient =
+    hpColor === 'crimson'
+      ? 'linear-gradient(180deg, #aa4c4c 0%, #a04545 55%, #883a3a 100%)'
+      : 'linear-gradient(180deg, #648f73 0%, #5a8a6a 55%, #4a7a5a 100%)';
+
+  return (
+    <div
+      className="relative flex-1 h-7"
+      style={{
+        clipPath: skew,
+        background: 'rgba(15, 20, 28, 0.75)',
+        border: '0.5px solid rgba(255, 255, 255, 0.08)',
+      }}
+    >
+      {/* HP fill — grows from the side opposite to `mirror` */}
+      <div
+        className="absolute inset-y-0 transition-[width] duration-300 ease-out"
+        style={{
+          width: `${hpPct}%`,
+          left: mirror ? 'auto' : 0,
+          right: mirror ? 0 : 'auto',
+          background: fillGradient,
+        }}
+      >
+        {/* Leading edge — quiet 1px line at the current HP position */}
+        <div
+          aria-hidden
+          className="absolute inset-y-0 w-px pointer-events-none"
+          style={{
+            left: mirror ? 0 : 'auto',
+            right: mirror ? 'auto' : 0,
+            background: 'rgba(255, 255, 255, 0.22)',
+          }}
+        />
+      </div>
+
+      {/* Numbers overlay — mirrored side for the opponent */}
+      <div
+        className={`absolute inset-0 flex items-center px-3.5 pointer-events-none ${
+          mirror ? 'justify-start' : 'justify-end'
+        }`}
+      >
+        <span
+          className="text-[13px] leading-none text-[var(--kombats-text-primary)] tabular-nums [text-shadow:0_1px_2px_rgba(0,0,0,0.95),0_0_6px_rgba(0,0,0,0.7)]"
+          style={{
+            fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+            fontStyle: 'italic',
+            letterSpacing: '0.04em',
+            fontFeatureSettings: '"tnum"',
+          }}
+        >
+          {hp}
+          <span className="opacity-55 mx-[3px]">/</span>
+          {maxHp}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LobbyStatRow({
+  icon: Icon,
+  color,
+  label,
+  value,
+  mirror = false
+}: {
+  icon: React.ElementType;
+  color: 'crimson' | 'gold' | 'jade' | 'silver';
+  label: string;
+  value: number;
+  mirror?: boolean;
+}) {
+  const colorClass = {
+    crimson: 'text-[var(--kombats-crimson)]',
+    gold: 'text-[var(--kombats-gold)]',
+    jade: 'text-[var(--kombats-jade)]',
+    silver: 'text-[var(--kombats-moon-silver)]'
+  }[color];
+
+  return (
+    <div className={`flex items-center justify-between ${mirror ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center gap-2 ${mirror ? 'flex-row-reverse' : ''}`}>
+        <Icon className={`w-3.5 h-3.5 ${colorClass}`} />
+        <span className="text-xs text-[var(--kombats-text-secondary)]">{label}</span>
+      </div>
+      <span className="text-xs text-[var(--kombats-text-primary)] font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+function FighterNameplate({
+  name,
+  rank,
+  hp,
+  maxHp,
+  hpColor = 'jade',
+  showStats,
+  onToggleStats,
+  attributes,
+  record,
+  mirror = false,
+  hpBarMirror,
+  profileTitle = 'Fighter Profile',
+  width = 420,
+}: {
+  name: string;
+  rank?: string;
+  hp: number;
+  maxHp: number;
+  hpColor?: 'jade' | 'crimson';
+  showStats: boolean;
+  onToggleStats: () => void;
+  attributes?: FighterAttribute[];
+  record?: FighterRecord;
+  mirror?: boolean;
+  // Independently controls the HP bar's skew + fill direction without
+  // flipping the rest of the plate (name row, chevron, stats header).
+  // Falls back to `mirror` when not provided.
+  hpBarMirror?: boolean;
+  profileTitle?: string;
+  width?: number;
+}) {
+  const row = mirror ? 'flex-row-reverse' : '';
+  const panelHeaderRow = mirror ? 'flex-row-reverse' : '';
+  const barMirror = hpBarMirror ?? mirror;
+
+  return (
+    <div
+      className="relative z-20 mb-3"
+      style={{ width: `${width}px` }}
+    >
+      <AnimatePresence>
+        {showStats && (attributes || record) && (
+          <motion.div
+            key="fighter-stats"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
+            className="absolute left-0 right-0 bottom-full mb-3 bg-[var(--kombats-panel)]/55 backdrop-blur-md border border-[var(--kombats-panel-border)] shadow-[0_12px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)] rounded-md overflow-hidden"
+          >
+            <div className={`px-4 py-2 border-b border-[var(--kombats-panel-border)] flex items-center justify-between ${panelHeaderRow}`}>
+              <span className="text-[10px] text-[var(--kombats-text-muted)] uppercase tracking-[0.22em]">
+                {profileTitle}
+              </span>
+              {rank && (
+                <span className="text-[10px] text-[var(--kombats-gold)] uppercase tracking-[0.22em]">
+                  {rank}
+                </span>
+              )}
+            </div>
+
+            <div className={`px-4 py-3 grid gap-x-6 gap-y-3 ${record && attributes ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {attributes && (
+                <div>
+                  <div className={`text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mb-2 ${mirror ? 'text-right' : ''}`}>
+                    Attributes
+                  </div>
+                  <div className="space-y-1.5">
+                    {attributes.map(a => (
+                      <LobbyStatRow
+                        key={a.label}
+                        icon={a.icon}
+                        color={a.color}
+                        label={a.label}
+                        value={a.value}
+                        mirror={mirror}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {record && (
+                <div>
+                  <div className="text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mb-2">
+                    Record
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="text-center py-1.5 bg-[var(--kombats-jade)]/10 border border-[var(--kombats-jade)]/30 rounded-sm">
+                      <div className="text-lg text-[var(--kombats-jade)] leading-none tabular-nums">{record.wins}</div>
+                      <div className="text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mt-1">Wins</div>
+                    </div>
+                    <div className="text-center py-1.5 bg-[var(--kombats-crimson)]/10 border border-[var(--kombats-crimson)]/30 rounded-sm">
+                      <div className="text-lg text-[var(--kombats-crimson)] leading-none tabular-nums">{record.losses}</div>
+                      <div className="text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mt-1">Losses</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {record.winrate && (
+                      <div className="flex justify-between text-[10px] uppercase tracking-wider">
+                        <span className="text-[var(--kombats-text-muted)]">Winrate</span>
+                        <span className="text-[var(--kombats-gold)] tabular-nums">{record.winrate}</span>
+                      </div>
+                    )}
+                    {record.streak && (
+                      <div className="flex justify-between text-[10px] uppercase tracking-wider">
+                        <span className="text-[var(--kombats-text-muted)]">Streak</span>
+                        <span className="text-[var(--kombats-jade)] tabular-nums">{record.streak}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="relative">
+        <div
+          aria-hidden
+          className="absolute pointer-events-none"
+          style={{
+            inset: '-38px -56px',
+            background:
+              'radial-gradient(ellipse 68% 62% at center, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.38) 48%, rgba(0,0,0,0) 88%)',
+            filter: 'blur(22px)',
+          }}
+        />
+
+        <div className="relative">
+          <div className={`flex mb-2 ${row}`}>
+            <div className="text-2xl text-[var(--kombats-text-primary)] leading-none tracking-wide [text-shadow:0_2px_8px_rgba(0,0,0,0.95),0_0_20px_rgba(0,0,0,0.7)]">
+              {name}
+            </div>
+          </div>
+
+          <div className={`flex items-center gap-2 ${row}`}>
+            <HpBar hp={hp} maxHp={maxHp} hpColor={hpColor} mirror={barMirror} />
+
+            <button
+              onClick={onToggleStats}
+              aria-label={showStats ? 'Hide fighter profile' : 'Show fighter profile'}
+              aria-expanded={showStats}
+              className="h-7 w-7 flex items-center justify-center text-[var(--kombats-moon-silver)] hover:text-[var(--kombats-gold)] transition-colors [filter:drop-shadow(0_1px_3px_rgba(0,0,0,0.9))]"
+            >
+              {showStats
+                ? <ChevronDown className="w-4 h-4" />
+                : <ChevronUp className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const LOBBY_PLAYER_ATTRIBUTES: FighterAttribute[] = [
+  { icon: Sword, color: 'crimson', label: 'Strength', value: 92 },
+  { icon: Zap, color: 'gold', label: 'Agility', value: 88 },
+  { icon: TrendingUp, color: 'jade', label: 'Intuition', value: 85 },
+  { icon: Heart, color: 'silver', label: 'Endurance', value: 78 }
+];
+
+const OPPONENT_ATTRIBUTES: FighterAttribute[] = [
+  { icon: Sword, color: 'crimson', label: 'Strength', value: 86 },
+  { icon: Zap, color: 'gold', label: 'Agility', value: 75 },
+  { icon: TrendingUp, color: 'jade', label: 'Intuition', value: 90 },
+  { icon: Heart, color: 'silver', label: 'Endurance', value: 82 }
+];
+
+function LobbyScene({ centerCard }: { centerCard: React.ReactNode }) {
+  const [showStats, setShowStats] = useState(false);
+
+  return (
+    <GameShell
+      header={<LobbyHeader />}
+      bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
+    >
+      {/* Background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${bgImage})` }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/30 to-[var(--kombats-ink-navy)]/60" />
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 h-full">
+        {/* Left: character + premium upward-expandable status strip */}
+        <div className={FIGHTER_COLUMN_LEFT_CLASSNAME}>
+          <FighterNameplate
+            name="Kazumi"
+            rank="Silver III"
+            hp={1000}
+            maxHp={1000}
+            hpColor="jade"
+            showStats={showStats}
+            onToggleStats={() => setShowStats(!showStats)}
+            attributes={LOBBY_PLAYER_ATTRIBUTES}
+            record={{ wins: 127, losses: 71, winrate: '64%', streak: 'W 5' }}
+          />
+
+          <motion.img
+            src={characterImage}
+            alt="Your Character"
+            className={FIGHTER_IMAGE_CLASSNAME}
+            style={{
+              filter: FIGHTER_IMAGE_BASE_FILTER,
+              marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM,
+            }}
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6 }}
+          />
+        </div>
+
+        {/* Center card slot — lobby state or queue/searching state */}
+        {centerCard}
+      </div>
+    </GameShell>
+  );
+}
+
+// Shared wrapper that positions a card in the same spot as the lobby queue card.
+// Panel surface now lives in the card component itself (QueueCard).
+function LobbyCenterCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="absolute top-1/2 left-1/2 w-80"
+      style={{ transform: 'translate(-50%, -55%)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function MainHub({ onJoinQueue }: { onJoinQueue: () => void }) {
+  return (
+    <LobbyScene
+      centerCard={
+        <LobbyCenterCard>
+          <QueueCard
+            status="ready"
+            title="Ready to Fight"
+            battleType="Fist Fight"
+            searchingLabel="Finding"
+            searchingValue="Worthy Challenger"
+            onJoinQueue={onJoinQueue}
+          />
+        </LobbyCenterCard>
+      }
+    />
+  );
+}
+
+// ==================== QUEUE / SEARCHING ====================
+
+export function QueueScreen({ onCancel, elapsedTime }: { onCancel: () => void; elapsedTime: number }) {
+  return (
+    <LobbyScene
+      centerCard={
+        <LobbyCenterCard>
+          <QueueCard
+            status="searching"
+            title="Searching for Opponent"
+            battleType="Fist Fight"
+            searchingLabel="Finding"
+            searchingValue="Worthy Challenger"
+            elapsedSeconds={elapsedTime}
+            onCancel={onCancel}
+          />
+        </LobbyCenterCard>
+      }
+    />
+  );
+}
+
+// ==================== BATTLE SCREEN ====================
+
+export function BattleScreen({
+  onVictory,
+  onDefeat,
+  battleLog = [],
+}: {
+  onVictory?: () => void;
+  onDefeat?: () => void;
+  battleLog?: BattleLogEntry[];
+}) {
+  const [selectedAttack, setSelectedAttack] = useState<BodyZone | null>(null);
+  const [selectedDefense, setSelectedDefense] = useState<BlockPair | null>(null);
+  const [showPlayerStats, setShowPlayerStats] = useState(false);
+  const [showOpponentStats, setShowOpponentStats] = useState(false);
+
+  return (
+    <GameShell
+      header={<LobbyHeader />}
+      bottomOverlay={
+        <LobbyChatDock
+          messages={mockChatMessages}
+          onlineUsers={mockOnlineUsers}
+          battleLog={battleLog}
+        />
+      }
+    >
+      {/* Background — same moonlit scene as lobby */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${bgImage})` }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/30 to-[var(--kombats-ink-navy)]/60" />
+      </div>
+
+      <div className="relative z-10 h-full">
+        {/* Player — left, grounded */}
+        <div className={FIGHTER_COLUMN_LEFT_CLASSNAME}>
+          <FighterNameplate
+            name="Kazumi"
+            rank="Silver III"
+            hp={850}
+            maxHp={1000}
+            hpColor="jade"
+            showStats={showPlayerStats}
+            onToggleStats={() => setShowPlayerStats(!showPlayerStats)}
+            attributes={LOBBY_PLAYER_ATTRIBUTES}
+            record={{ wins: 127, losses: 71, winrate: '64%', streak: 'W 5' }}
+          />
+          <motion.img
+            src={characterImage}
+            alt="Player"
+            className={FIGHTER_IMAGE_CLASSNAME}
+            style={{
+              filter: FIGHTER_IMAGE_BASE_FILTER,
+              marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM,
+            }}
+            initial={{ opacity: 0, x: -40 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5 }}
+          />
+        </div>
+
+        {/* Opponent — right; only the sprite is mirrored, HUD stays non-mirrored */}
+        <div className={FIGHTER_COLUMN_RIGHT_CLASSNAME}>
+          <FighterNameplate
+            name="Shadow Oni"
+            rank="Gold II"
+            hp={620}
+            maxHp={950}
+            hpColor="crimson"
+            showStats={showOpponentStats}
+            onToggleStats={() => setShowOpponentStats(!showOpponentStats)}
+            attributes={OPPONENT_ATTRIBUTES}
+            record={{ wins: 204, losses: 88, winrate: '70%', streak: 'W 3' }}
+            hpBarMirror
+          />
+          <div style={{ transform: 'scaleX(-1)', marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM }}>
+            <motion.img
+              src={characterImage}
+              alt="Opponent"
+              className={FIGHTER_IMAGE_CLASSNAME}
+              style={{
+                filter: `${FIGHTER_IMAGE_BASE_FILTER} hue-rotate(180deg)`,
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+        </div>
+
+        {/* Center Action Panel — battle-control unit (status + selector + lock in) */}
+        <div
+          className="absolute top-1/2 left-1/2 w-[400px]"
+          style={{ transform: 'translate(-50%, -62%)' }}
+        >
+          <div className="bg-[var(--kombats-panel)]/55 backdrop-blur-md border border-[var(--kombats-panel-border)] shadow-[0_12px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)] rounded-md overflow-hidden">
+            {/* Battle meta row — round / timer / turn state */}
+            <div className="px-4 py-2 border-b border-[var(--kombats-panel-border)] flex items-center justify-between gap-3 bg-[var(--kombats-panel)]/45">
+              <span className="text-[11px] text-[var(--kombats-gold)] uppercase tracking-widest">Round 2</span>
+              <span className="flex items-center gap-1.5 text-[var(--kombats-text-primary)] text-xs">
+                <Clock className="w-3 h-3 text-[var(--kombats-moon-silver)]" />
+                <span className="tabular-nums">28</span>
+              </span>
+              <span className="px-2 py-0.5 bg-[var(--kombats-gold)]/20 border border-[var(--kombats-gold)] text-[var(--kombats-gold)] text-[10px] uppercase tracking-widest rounded-sm">
+                Your Turn
+              </span>
+            </div>
+
+            {/* Section header */}
+            <div className="px-4 py-2 border-b border-[var(--kombats-panel-border)] flex items-center justify-center">
+              <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--kombats-gold)]">Select Attack &amp; Block</span>
+            </div>
+
+            <div className="px-5 pt-4 pb-4">
+              <BodyZoneSelector
+                attack={selectedAttack}
+                block={selectedDefense}
+                onAttackChange={setSelectedAttack}
+                onBlockChange={setSelectedDefense}
+                width={160}
+                layout="split"
+                action={
+                  <PrimaryButton
+                    size="large"
+                    disabled={!selectedAttack || !selectedDefense}
+                  >
+                    Lock In
+                  </PrimaryButton>
+                }
+              />
+            </div>
+          </div>
+
+          {(onVictory || onDefeat) && (
+            <div className="flex gap-2 justify-center mt-2">
+              {onVictory && (
+                <button onClick={onVictory} className="text-xs text-[var(--kombats-text-muted)] hover:text-[var(--kombats-text-primary)]">
+                  [Test Victory]
+                </button>
+              )}
+              {onDefeat && (
+                <button onClick={onDefeat} className="text-xs text-[var(--kombats-text-muted)] hover:text-[var(--kombats-text-primary)]">
+                  [Test Defeat]
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </GameShell>
+  );
+}
+
+// ==================== VICTORY SCREEN ====================
+
+export function VictoryScreen({
+  onReturnToLobby,
+  onQueueAgain,
+  finalEntry,
+}: {
+  onReturnToLobby: () => void;
+  onQueueAgain: () => void;
+  finalEntry?: BattleLogEntry;
+}) {
+  return (
+    <GameShell
+      header={<LobbyHeader />}
+      bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
+    >
+      {/* Background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${bgImage})` }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/40 to-[var(--kombats-ink-navy)]/60" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--kombats-jade)]/10 via-transparent to-transparent" />
+      </div>
+
+      {/* Player character — celebratory, no HP/stat overlay */}
+      <div className={`${FIGHTER_COLUMN_LEFT_CLASSNAME} z-10 pointer-events-none`}>
+        <motion.img
+          src={characterImage}
+          alt="Your Character"
+          className={FIGHTER_IMAGE_CLASSNAME}
+          style={{
+            filter: FIGHTER_IMAGE_BASE_FILTER,
+            marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM,
+          }}
+          initial={{ opacity: 0, x: -40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+        />
+      </div>
+
+      {/* Content — bottom padding reserves the shared chat dock's safe area so
+          the centered result panel never collides with the lower chat. */}
+      <div
+        className="relative z-20 h-full flex flex-col items-center justify-center px-8 pointer-events-none"
+        style={{ paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px` }}
+      >
+        {/* Victory Banner */}
+        <motion.div
+          className="text-center mb-8"
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', duration: 0.6 }}
+        >
+          <h1
+            className="text-6xl text-[var(--kombats-gold)] mb-2 tracking-wide"
+            style={{
+              textShadow:
+                '0 2px 10px rgba(0,0,0,0.75), 0 0 24px rgba(201,169,97,0.32), 0 0 56px rgba(201,169,97,0.16)',
+            }}
+          >
+            VICTORY
+          </h1>
+          <p className="text-sm text-[var(--kombats-text-muted)] uppercase tracking-wider">Triumph in Combat</p>
+        </motion.div>
+
+        {/* Result Panel */}
+        <div className="max-w-2xl w-full pointer-events-auto">
+          <div className="bg-[var(--kombats-panel)] backdrop-blur-md border-2 border-[var(--kombats-jade)]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_30px_rgba(90,138,122,0.15)] rounded-lg overflow-hidden">
+            {/* Match Summary */}
+            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
+              <div className="grid grid-cols-2 gap-8">
+                <div className="text-center">
+                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">You</div>
+                  <div className="text-2xl text-[var(--kombats-jade)]">Kazumi</div>
+                  <div className="text-xs text-[var(--kombats-jade)] mt-1">Winner</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">Opponent</div>
+                  <div className="text-2xl text-[var(--kombats-text-primary)]">Shadow Oni</div>
+                  <div className="text-xs text-[var(--kombats-text-muted)] mt-1">Defeated</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Rewards */}
+            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
+              <h3 className="text-xs text-[var(--kombats-text-muted)] uppercase tracking-wider mb-3 flex items-center justify-center gap-2">
+                <Trophy className="w-3 h-3 text-[var(--kombats-gold)]" />
+                Rewards
+              </h3>
+              <div className="space-y-2">
+                <RewardRow label="XP Gained" value="+1,250 XP" tone="accent" />
+                <RewardRow label="Rating Gained" value="+25 RP" tone="success" />
+              </div>
+            </div>
+
+            {/* Final Exchange Recap */}
+            {finalEntry && (
+              <div className="px-6 py-4 border-b border-[var(--kombats-panel-border)]">
+                <BattleLogRecap entry={finalEntry} tone="victory" />
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="p-6 bg-[var(--kombats-panel)]/50">
+              <div className="flex gap-3 justify-center">
+                <PrimaryButton onClick={onQueueAgain}>
+                  Battle Again
+                </PrimaryButton>
+                <SecondaryButton onClick={onReturnToLobby}>
+                  Return to Lobby
+                </SecondaryButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </GameShell>
+  );
+}
+
+// ==================== DEFEAT SCREEN ====================
+
+export function DefeatScreen({
+  onReturnToLobby,
+  onQueueAgain,
+  finalEntry,
+}: {
+  onReturnToLobby: () => void;
+  onQueueAgain: () => void;
+  finalEntry?: BattleLogEntry;
+}) {
+  return (
+    <GameShell
+      header={<LobbyHeader />}
+      bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
+    >
+      {/* Background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${bgImage})` }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/40 to-[var(--kombats-ink-navy)]/60" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[var(--kombats-crimson)]/10 via-transparent to-transparent" />
+      </div>
+
+      {/* Enemy character — the one who won, right side, mirrored & hue-shifted */}
+      <div className={`${FIGHTER_COLUMN_RIGHT_CLASSNAME} z-10 pointer-events-none`}>
+        <div style={{ transform: 'scaleX(-1)', marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM }}>
+          <motion.img
+            src={characterImage}
+            alt="Victorious Opponent"
+            className={FIGHTER_IMAGE_CLASSNAME}
+            style={{
+              filter: `${FIGHTER_IMAGE_BASE_FILTER} hue-rotate(180deg)`,
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6 }}
+          />
+        </div>
+      </div>
+
+      {/* Content — bottom padding reserves the shared chat dock's safe area so
+          the centered result panel never collides with the lower chat. */}
+      <div
+        className="relative z-20 h-full flex flex-col items-center justify-center px-8 pointer-events-none"
+        style={{ paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px` }}
+      >
+        {/* Defeat Banner */}
+        <motion.div
+          className="text-center mb-8"
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', duration: 0.6 }}
+        >
+          <h1
+            className="text-6xl text-[var(--kombats-crimson)] mb-2 tracking-wide"
+            style={{
+              textShadow:
+                '0 2px 10px rgba(0,0,0,0.75), 0 0 24px rgba(192,55,68,0.32), 0 0 56px rgba(192,55,68,0.16)',
+            }}
+          >
+            DEFEAT
+          </h1>
+          <p className="text-sm text-[var(--kombats-text-muted)] uppercase tracking-wider">Honor in Battle</p>
+        </motion.div>
+
+        {/* Result Panel */}
+        <div className="max-w-2xl w-full pointer-events-auto">
+          <div className="bg-[var(--kombats-panel)] backdrop-blur-md border-2 border-[var(--kombats-crimson)]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_30px_rgba(192,55,68,0.15)] rounded-lg overflow-hidden">
+            {/* Match Summary */}
+            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
+              <div className="grid grid-cols-2 gap-8">
+                <div className="text-center">
+                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">You</div>
+                  <div className="text-2xl text-[var(--kombats-text-primary)]">Kazumi</div>
+                  <div className="text-xs text-[var(--kombats-crimson)] mt-1">Defeated</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">Opponent</div>
+                  <div className="text-2xl text-[var(--kombats-gold)]">Shadow Oni</div>
+                  <div className="text-xs text-[var(--kombats-gold)] mt-1">Victor</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Rewards — same progression-style structure as Victory */}
+            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
+              <h3 className="text-xs text-[var(--kombats-text-muted)] uppercase tracking-wider mb-3 text-center">
+                Rewards
+              </h3>
+              <div className="space-y-2">
+                <RewardRow label="XP Gained" value="+250 XP" tone="accent" />
+                <RewardRow label="Rating Lost" value="-18 RP" tone="danger" />
+              </div>
+            </div>
+
+            {/* Final Exchange Recap */}
+            {finalEntry && (
+              <div className="px-6 py-4 border-b border-[var(--kombats-panel-border)]">
+                <BattleLogRecap entry={finalEntry} tone="defeat" />
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="p-6 bg-[var(--kombats-panel)]/50">
+              <div className="flex gap-3 justify-center">
+                <PrimaryButton onClick={onQueueAgain}>
+                  Try Again
+                </PrimaryButton>
+                <SecondaryButton onClick={onReturnToLobby}>
+                  Return to Lobby
+                </SecondaryButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </GameShell>
+  );
+}

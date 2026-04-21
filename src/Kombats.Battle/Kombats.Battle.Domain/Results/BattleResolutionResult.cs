@@ -11,6 +11,7 @@ public sealed record BattleResolutionResult
 {
     public BattleDomainState NewState { get; init; } = null!;
     public IReadOnlyList<IDomainEvent> Events { get; init; } = Array.Empty<IDomainEvent>();
+    public TurnResolutionLog? TurnLog { get; init; }
 }
 
 

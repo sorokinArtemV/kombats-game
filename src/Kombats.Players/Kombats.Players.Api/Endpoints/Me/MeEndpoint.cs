@@ -1,10 +1,9 @@
+using Kombats.Abstractions;
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Api.Identity;
 using Kombats.Players.Application;
 using Kombats.Players.Application.UseCases.EnsureCharacterExists;
-using Kombats.Players.Application.UseCases.GetMe;
-using Kombats.Shared.CustomResults;
-using Kombats.Shared.Types;
+using Kombats.Players.Application.UseCases.GetCharacter;
 
 namespace Kombats.Players.Api.Endpoints.Me;
 
@@ -15,7 +14,7 @@ internal sealed class MeEndpoint : IEndpoint
         // GET /api/me — character-centric; 404 if not provisioned
         app.MapGet("api/v1/me", async (
                 ICurrentIdentityProvider identityProvider,
-                ICommandHandler<GetMeCommand, CharacterStateResult> getMeHandler,
+                IQueryHandler<GetCharacterQuery, CharacterStateResult> getCharacterHandler,
                 CancellationToken ct) =>
             {
                 var identityResult = identityProvider.GetRequired();
@@ -28,12 +27,12 @@ internal sealed class MeEndpoint : IEndpoint
                         type: "https://tools.ietf.org/html/rfc7235#section-3.1");
                 }
 
-                var getMeResult = await getMeHandler.HandleAsync(
-                    new GetMeCommand(identityResult.Value.Subject), ct);
+                var result = await getCharacterHandler.HandleAsync(
+                    new GetCharacterQuery(identityResult.Value.Subject), ct);
 
-                return getMeResult.Match(
+                return result.Match(
                     value => Results.Ok(MeResponse.FromCharacterState(value)),
-                    failure => CustomResults.Problem(getMeResult));
+                    failure => result.ToProblem());
             })
             .RequireAuthorization()
             .WithTags(Tags.Account)
@@ -64,7 +63,7 @@ internal sealed class MeEndpoint : IEndpoint
 
                 return ensureResult.Match(
                     value => Results.Ok(MeResponse.FromCharacterState(value)),
-                    failure => CustomResults.Problem(ensureResult));
+                    failure => ensureResult.ToProblem());
             })
             .RequireAuthorization()
             .WithTags(Tags.Account)
@@ -74,17 +73,21 @@ internal sealed class MeEndpoint : IEndpoint
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
-        // GET /api/me/claims — development: dump JWT claims
-        app.MapGet("api/v1/me/claims", (HttpContext httpContext) =>
-            {
-                var user = httpContext.User;
-                var claims = user.Claims.Select(c => new ClaimDto(c.Type, c.Value)).ToArray();
-                return Results.Ok(new { subject = user.FindFirst("sub")?.Value, claims });
-            })
-            .RequireAuthorization()
-            .WithTags(Tags.Account)
-            .WithSummary("Current claims (dev)")
-            .WithDescription("Returns the current JWT claims. For development or debugging.")
-            .Produces<object>();
+        // GET /api/me/claims — development only: dump JWT claims
+        var env = app.ServiceProvider.GetRequiredService<IHostEnvironment>();
+        if (env.IsDevelopment())
+        {
+            app.MapGet("api/v1/me/claims", (HttpContext httpContext) =>
+                {
+                    var user = httpContext.User;
+                    var claims = user.Claims.Select(c => new ClaimDto(c.Type, c.Value)).ToArray();
+                    return Results.Ok(new { subject = user.FindFirst("sub")?.Value, claims });
+                })
+                .RequireAuthorization()
+                .WithTags(Tags.Account)
+                .WithSummary("Current claims (dev)")
+                .WithDescription("Returns the current JWT claims. For development or debugging.")
+                .Produces<object>();
+        }
     }
 }

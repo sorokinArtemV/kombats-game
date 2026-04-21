@@ -15,9 +15,7 @@ public static class ValidationExtensions
     /// </summary>
     public static IServiceCollection AddValidation(this IServiceCollection services, Assembly assembly)
     {
-        services.AddValidatorsFromAssembly(assembly);
-        
-        services.AddValidatorsFromAssemblyContaining<AllocateStatPointsRequestValidator>();
+        services.AddValidatorsFromAssembly(assembly, includeInternalTypes: true);
 
         return services;
     }

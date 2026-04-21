@@ -10,229 +10,147 @@ namespace Kombats.Matchmaking.Infrastructure.Repositories;
 /// <summary>
 /// Infrastructure implementation of IMatchRepository using EF Core.
 /// </summary>
-public class MatchRepository : IMatchRepository
+internal sealed class MatchRepository : IMatchRepository
 {
-    private readonly MatchmakingDbContext _dbContext;
+    private readonly MatchmakingDbContext _db;
     private readonly ILogger<MatchRepository> _logger;
 
-    public MatchRepository(
-        MatchmakingDbContext dbContext,
-        ILogger<MatchRepository> logger)
+    public MatchRepository(MatchmakingDbContext db, ILogger<MatchRepository> logger)
     {
-        _dbContext = dbContext;
+        _db = db;
         _logger = logger;
     }
 
-    public async Task<Match?> GetLatestForPlayerAsync(Guid playerId, CancellationToken cancellationToken = default)
+    public async Task<Match?> GetActiveForPlayerAsync(Guid playerId, CancellationToken ct = default)
     {
-        try
-        {
-            var entity = await _dbContext.Matches
-                .Where(m => m.PlayerAId == playerId || m.PlayerBId == playerId)
-                .OrderByDescending(m => m.CreatedAtUtc)
-                .FirstOrDefaultAsync(cancellationToken);
+        var entity = await _db.Matches
+            .Where(m => (m.PlayerAId == playerId || m.PlayerBId == playerId)
+                        && m.State != (int)MatchState.Completed
+                        && m.State != (int)MatchState.TimedOut
+                        && m.State != (int)MatchState.Cancelled)
+            .OrderByDescending(m => m.CreatedAtUtc)
+            .FirstOrDefaultAsync(ct);
 
-            return entity == null ? null : ToDomain(entity);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error in GetLatestForPlayerAsync for PlayerId: {PlayerId}",
-                playerId);
-            throw;
-        }
+        return entity == null ? null : ToDomain(entity);
     }
 
-    public async Task<Match?> GetByMatchIdAsync(Guid matchId, CancellationToken cancellationToken = default)
+    public async Task<Match?> GetByMatchIdAsync(Guid matchId, CancellationToken ct = default)
     {
-        try
-        {
-            var entity = await _dbContext.Matches
-                .FirstOrDefaultAsync(m => m.MatchId == matchId, cancellationToken);
+        var entity = await _db.Matches
+            .FirstOrDefaultAsync(m => m.MatchId == matchId, ct);
 
-            return entity == null ? null : ToDomain(entity);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error in GetByMatchIdAsync for MatchId: {MatchId}",
-                matchId);
-            throw;
-        }
+        return entity == null ? null : ToDomain(entity);
     }
 
-    public async Task InsertAsync(Match match, CancellationToken cancellationToken = default)
+    public async Task<Match?> GetByBattleIdAsync(Guid battleId, CancellationToken ct = default)
     {
-        try
-        {
-            var entity = ToEntity(match);
-            _dbContext.Matches.Add(entity);
-            await _dbContext.SaveChangesAsync(cancellationToken);
+        var entity = await _db.Matches
+            .FirstOrDefaultAsync(m => m.BattleId == battleId, ct);
 
-            _logger.LogInformation(
-                "Inserted match: MatchId={MatchId}, BattleId={BattleId}, PlayerA={PlayerAId}, PlayerB={PlayerBId}",
-                match.MatchId, match.BattleId, match.PlayerAId, match.PlayerBId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error in InsertAsync for MatchId: {MatchId}",
-                match.MatchId);
-            throw;
-        }
+        return entity == null ? null : ToDomain(entity);
     }
 
-    public async Task UpdateStateAsync(Guid matchId, MatchState newState, DateTime updatedAtUtc, CancellationToken cancellationToken = default)
+    public void Add(Match match)
     {
-        try
-        {
-            var entity = await _dbContext.Matches
-                .FirstOrDefaultAsync(m => m.MatchId == matchId, cancellationToken);
-
-            if (entity == null)
-            {
-                _logger.LogWarning(
-                    "Match not found for UpdateStateAsync: MatchId={MatchId}",
-                    matchId);
-                throw new InvalidOperationException($"Match not found: {matchId}");
-            }
-
-            entity.State = (int)newState;
-            entity.UpdatedAtUtc = new DateTimeOffset(updatedAtUtc, TimeSpan.Zero);
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
-
-            _logger.LogInformation(
-                "Updated match state: MatchId={MatchId}, NewState={NewState}",
-                matchId, newState);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error in UpdateStateAsync for MatchId: {MatchId}, NewState: {NewState}",
-                matchId, newState);
-            throw;
-        }
+        _db.Matches.Add(ToEntity(match));
     }
 
-    public async Task<bool> TryUpdateStateAsync(
-        Guid matchId,
-        MatchState expectedState,
-        MatchState newState,
-        DateTime updatedAtUtc,
-        CancellationToken cancellationToken = default)
+    public async Task<bool> TryAdvanceToBattleCreatedAsync(Guid matchId, DateTimeOffset now, CancellationToken ct = default)
     {
-        try
-        {
-            // CAS update: only update if current state matches expected state
-            var affectedRows = await _dbContext.Matches
-                .Where(m => m.MatchId == matchId && m.State == (int)expectedState)
-                .ExecuteUpdateAsync(
-                    setter => setter
-                        .SetProperty(m => m.State, (int)newState)
-                        .SetProperty(m => m.UpdatedAtUtc, new DateTimeOffset(updatedAtUtc, TimeSpan.Zero)),
-                    cancellationToken);
+        var rows = await _db.Matches
+            .Where(m => m.MatchId == matchId && m.State == (int)MatchState.BattleCreateRequested)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(m => m.State, (int)MatchState.BattleCreated)
+                    .SetProperty(m => m.UpdatedAtUtc, now),
+                ct);
 
-            var success = affectedRows > 0;
+        if (rows > 0)
+            _logger.LogInformation("Match {MatchId} advanced to BattleCreated", matchId);
 
-            if (success)
-            {
-                _logger.LogInformation(
-                    "CAS update succeeded: MatchId={MatchId}, ExpectedState={ExpectedState}, NewState={NewState}",
-                    matchId, expectedState, newState);
-            }
-            else
-            {
-                _logger.LogWarning(
-                    "CAS update failed (state mismatch or match not found): MatchId={MatchId}, ExpectedState={ExpectedState}, NewState={NewState}",
-                    matchId, expectedState, newState);
-            }
-
-            return success;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error in TryUpdateStateAsync for MatchId: {MatchId}, ExpectedState: {ExpectedState}, NewState: {NewState}",
-                matchId, expectedState, newState);
-            throw;
-        }
+        return rows > 0;
     }
 
-    public async Task<int> TimeoutMatchesConditionallyAsync(
-        DateTimeOffset timeoutThreshold,
-        DateTime updatedAtUtc,
-        CancellationToken cancellationToken = default)
+    public async Task<bool> TryAdvanceToTerminalAsync(Guid matchId, MatchState terminalState, DateTimeOffset now, CancellationToken ct = default)
     {
-        try
-        {
-            // Conditional update: only update matches that are still in BattleCreateRequested state
-            // and older than the threshold. This ensures race-free updates - matches that have
-            // already progressed to BattleCreated or other states will not be affected.
-            var affectedRows = await _dbContext.Matches
-                .Where(m => m.State == (int)MatchState.BattleCreateRequested 
-                         && m.UpdatedAtUtc < timeoutThreshold)
-                .ExecuteUpdateAsync(
-                    setter => setter
-                        .SetProperty(m => m.State, (int)MatchState.TimedOut)
-                        .SetProperty(m => m.UpdatedAtUtc, new DateTimeOffset(updatedAtUtc, TimeSpan.Zero)),
-                    cancellationToken);
+        var rows = await _db.Matches
+            .Where(m => m.MatchId == matchId && m.State == (int)MatchState.BattleCreated)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(m => m.State, (int)terminalState)
+                    .SetProperty(m => m.UpdatedAtUtc, now),
+                ct);
 
-            if (affectedRows > 0)
-            {
-                _logger.LogInformation(
-                    "Conditionally timed out {Count} matches that were still in BattleCreateRequested state",
-                    affectedRows);
-            }
+        if (rows > 0)
+            _logger.LogInformation("Match {MatchId} advanced to {State}", matchId, terminalState);
 
-            return affectedRows;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex,
-                "Error in TimeoutMatchesConditionallyAsync with threshold: {TimeoutThreshold}",
-                timeoutThreshold);
-            throw;
-        }
+        return rows > 0;
     }
 
-    private static Match ToDomain(MatchEntity entity)
+    public async Task<List<(Guid PlayerAId, Guid PlayerBId)>> TimeoutStaleMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default)
     {
-        return new Match
-        {
-            MatchId = entity.MatchId,
-            BattleId = entity.BattleId,
-            PlayerAId = entity.PlayerAId,
-            PlayerBId = entity.PlayerBId,
-            Variant = entity.Variant,
-            State = (MatchState)entity.State,
-            CreatedAtUtc = entity.CreatedAtUtc,
-            UpdatedAtUtc = entity.UpdatedAtUtc
-        };
+        // Query affected player IDs before updating state
+        var affected = await _db.Matches
+            .Where(m => m.State == (int)MatchState.BattleCreateRequested && m.UpdatedAtUtc < cutoff)
+            .Select(m => new { m.PlayerAId, m.PlayerBId })
+            .ToListAsync(ct);
+
+        if (affected.Count == 0)
+            return [];
+
+        var rows = await _db.Matches
+            .Where(m => m.State == (int)MatchState.BattleCreateRequested && m.UpdatedAtUtc < cutoff)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(m => m.State, (int)MatchState.TimedOut)
+                    .SetProperty(m => m.UpdatedAtUtc, now),
+                ct);
+
+        if (rows > 0)
+            _logger.LogWarning("Timed out {Count} stale matches", rows);
+
+        return affected.Select(a => (a.PlayerAId, a.PlayerBId)).ToList();
     }
 
-    private static MatchEntity ToEntity(Match match)
+    public async Task<List<(Guid PlayerAId, Guid PlayerBId)>> TimeoutStaleBattleCreatedMatchesAsync(DateTimeOffset cutoff, DateTimeOffset now, CancellationToken ct = default)
     {
-        // Ensure UTC: DateTimeOffset.UtcNow already has offset=0, but normalize to be safe
-        var createdAtUtc = match.CreatedAtUtc.Offset == TimeSpan.Zero
-            ? match.CreatedAtUtc
-            : new DateTimeOffset(match.CreatedAtUtc.UtcDateTime, TimeSpan.Zero);
-        
-        var updatedAtUtc = match.UpdatedAtUtc.Offset == TimeSpan.Zero
-            ? match.UpdatedAtUtc
-            : new DateTimeOffset(match.UpdatedAtUtc.UtcDateTime, TimeSpan.Zero);
+        // Query affected player IDs before updating state
+        var affected = await _db.Matches
+            .Where(m => m.State == (int)MatchState.BattleCreated && m.UpdatedAtUtc < cutoff)
+            .Select(m => new { m.PlayerAId, m.PlayerBId })
+            .ToListAsync(ct);
 
-        return new MatchEntity
-        {
-            MatchId = match.MatchId,
-            BattleId = match.BattleId,
-            PlayerAId = match.PlayerAId,
-            PlayerBId = match.PlayerBId,
-            Variant = match.Variant,
-            State = (int)match.State,
-            CreatedAtUtc = createdAtUtc,
-            UpdatedAtUtc = updatedAtUtc
-        };
+        if (affected.Count == 0)
+            return [];
+
+        var rows = await _db.Matches
+            .Where(m => m.State == (int)MatchState.BattleCreated && m.UpdatedAtUtc < cutoff)
+            .ExecuteUpdateAsync(
+                s => s
+                    .SetProperty(m => m.State, (int)MatchState.TimedOut)
+                    .SetProperty(m => m.UpdatedAtUtc, now),
+                ct);
+
+        if (rows > 0)
+            _logger.LogWarning("Timed out {Count} stale BattleCreated matches", rows);
+
+        return affected.Select(a => (a.PlayerAId, a.PlayerBId)).ToList();
     }
+
+    private static Match ToDomain(MatchEntity e) =>
+        Match.Rehydrate(e.MatchId, e.BattleId, e.PlayerAId, e.PlayerBId, e.Variant,
+            (MatchState)e.State, e.CreatedAtUtc, e.UpdatedAtUtc);
+
+    private static MatchEntity ToEntity(Match m) => new()
+    {
+        MatchId = m.MatchId,
+        BattleId = m.BattleId,
+        PlayerAId = m.PlayerAId,
+        PlayerBId = m.PlayerBId,
+        Variant = m.Variant,
+        State = (int)m.State,
+        CreatedAtUtc = m.CreatedAtUtc,
+        UpdatedAtUtc = m.UpdatedAtUtc
+    };
 }
 

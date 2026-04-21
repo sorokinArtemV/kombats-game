@@ -19,7 +19,8 @@ internal sealed record MeResponse(
     int Revision,
     long TotalXp,
     int Level,
-    int LevelingVersion)
+    int LevelingVersion,
+    string AvatarId)
 {
     public static MeResponse FromCharacterState(CharacterStateResult r) => new(
         CharacterId: r.CharacterId,
@@ -34,5 +35,6 @@ internal sealed record MeResponse(
         Revision: r.Revision,
         TotalXp: r.TotalXp,
         Level: r.Level,
-        LevelingVersion: r.LevelingVersion);
+        LevelingVersion: r.LevelingVersion,
+        AvatarId: r.AvatarId);
 }

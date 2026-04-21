@@ -1,4 +1,4 @@
-namespace Combats.Battle.Realtime.Contracts;
+namespace Kombats.Battle.Realtime.Contracts;
 
 /// <summary>
 /// Battle phase enum for realtime contracts.

@@ -1,5 +1,6 @@
 using Kombats.Battle.Application.ReadModels;
 using Kombats.Battle.Domain.Model;
+using Kombats.Battle.Domain.Results;
 
 namespace Kombats.Battle.Infrastructure.State.Redis.Mapping;
 
@@ -7,7 +8,7 @@ namespace Kombats.Battle.Infrastructure.State.Redis.Mapping;
 /// Mapper between Infrastructure stored state (Redis schema) and Domain/Application models.
 /// Infrastructure layer owns this mapping (persistence schema <-> domain/read models).
 /// </summary>
-public static class StoredStateMapper
+internal static class StoredStateMapper
 {
     /// <summary>
     /// Maps Infrastructure BattleState to Application BattleSnapshot (read model).
@@ -27,6 +28,10 @@ public static class StoredStateMapper
             LastResolvedTurnIndex = state.LastResolvedTurnIndex,
             MatchId = state.MatchId,
             Version = state.Version,
+            PlayerAName = state.PlayerAName,
+            PlayerBName = state.PlayerBName,
+            PlayerAMaxHp = state.PlayerAMaxHp,
+            PlayerBMaxHp = state.PlayerBMaxHp,
             PlayerAHp = state.PlayerAHp,
             PlayerBHp = state.PlayerBHp,
             PlayerAStrength = state.PlayerAStrength,
@@ -36,8 +41,20 @@ public static class StoredStateMapper
             PlayerBStrength = state.PlayerBStrength,
             PlayerBStamina = state.PlayerBStamina,
             PlayerBAgility = state.PlayerBAgility,
-            PlayerBIntuition = state.PlayerBIntuition
+            PlayerBIntuition = state.PlayerBIntuition,
+            EndWinnerPlayerId = ParseWinnerId(state.EndWinnerPlayerId),
+            EndReason = state.EndReason.HasValue ? (EndBattleReason)state.EndReason.Value : null,
+            EndFinalTurnIndex = state.EndFinalTurnIndex,
+            EndedAt = state.EndedAtUnixMs.HasValue
+                ? DateTimeOffset.FromUnixTimeMilliseconds(state.EndedAtUnixMs.Value)
+                : null
         };
+    }
+
+    private static Guid? ParseWinnerId(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        return Guid.TryParse(raw, out var id) ? id : null;
     }
 
     /// <summary>

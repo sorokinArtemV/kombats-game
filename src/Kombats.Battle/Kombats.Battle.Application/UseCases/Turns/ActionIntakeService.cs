@@ -13,7 +13,7 @@ namespace Kombats.Battle.Application.UseCases.Turns;
 /// Separates wire-level parsing (JSON) from domain logic.
 /// All invalid payloads are normalized to NoAction with appropriate quality/reason.
 /// </summary>
-public class ActionIntakeService : IActionIntake
+internal sealed class ActionIntakeService : IActionIntake
 {
     private readonly IClock _clock;
     private readonly ILogger<ActionIntakeService> _logger;

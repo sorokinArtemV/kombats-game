@@ -11,7 +11,7 @@ namespace Kombats.Battle.Application.UseCases.Lifecycle;
 /// Application service for battle lifecycle operations.
 /// Orchestrates battle initialization and turn opening.
 /// </summary>
-public class BattleLifecycleAppService
+public sealed class BattleLifecycleAppService
 {
     private readonly IBattleStateStore _stateStore;
     private readonly IBattleRealtimeNotifier _notifier;
@@ -58,6 +58,8 @@ public class BattleLifecycleAppService
         Guid playerBId,
         CombatProfile profileA,
         CombatProfile profileB,
+        string? playerAName,
+        string? playerBName,
         CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Handling battle creation for BattleId: {BattleId}", battleId);
@@ -100,9 +102,15 @@ public class BattleLifecycleAppService
             profileA,
             profileB);
 
+        // Compute max HP from derived stats (same computation used for initial HP)
+        var playerAStats = new PlayerStats(profileA.Strength, profileA.Stamina, profileA.Agility, profileA.Intuition);
+        var playerBStats = new PlayerStats(profileB.Strength, profileB.Stamina, profileB.Agility, profileB.Intuition);
+        int playerAMaxHp = CombatMath.ComputeDerived(playerAStats, domainRuleset.Balance).HpMax;
+        int playerBMaxHp = CombatMath.ComputeDerived(playerBStats, domainRuleset.Balance).HpMax;
+
         // Convergent initialization: blind call to TryInitializeBattleAsync
         // This is idempotent (SETNX) - ignore return value for flow decisions
-        await _stateStore.TryInitializeBattleAsync(battleId, initialState, cancellationToken);
+        await _stateStore.TryInitializeBattleAsync(battleId, initialState, playerAName, playerBName, playerAMaxHp, playerBMaxHp, cancellationToken);
 
         // Convergent turn opening: blind call to TryOpenTurnAsync
         // TryOpenTurnScript is the convergence gate - it will:
@@ -116,7 +124,7 @@ public class BattleLifecycleAppService
         if (isTurnOpened)
         {
             // Use the computed deadlineUtc we passed to TryOpenTurnAsync (Lua stores exactly the passed deadline)
-            await _notifier.NotifyBattleReadyAsync(battleId, playerAId, playerBId, cancellationToken);
+            await _notifier.NotifyBattleReadyAsync(battleId, playerAId, playerBId, playerAName, playerBName, cancellationToken);
             await _notifier.NotifyTurnOpenedAsync(battleId, 1, turn1Deadline, cancellationToken);
 
             _logger.LogInformation(
@@ -133,7 +141,9 @@ public class BattleLifecycleAppService
         return new BattleInitializationResult
         {
             RulesetVersion = domainRuleset.Version,
-            Seed = battleSeed
+            Seed = battleSeed,
+            PlayerAMaxHp = playerAMaxHp,
+            PlayerBMaxHp = playerBMaxHp
         };
     }
 

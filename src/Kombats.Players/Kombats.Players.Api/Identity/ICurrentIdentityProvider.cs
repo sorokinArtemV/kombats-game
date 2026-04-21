@@ -1,4 +1,4 @@
-using Kombats.Shared.Types;
+using Kombats.Abstractions;
 
 namespace Kombats.Players.Api.Identity;
 

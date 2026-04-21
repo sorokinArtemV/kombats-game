@@ -1,6 +1,6 @@
+using Kombats.Abstractions;
 using Kombats.Battle.Contracts.Battle;
 using Kombats.Players.Application.Battles;
-using Kombats.Shared.Types;
 using MassTransit;
 
 namespace Kombats.Players.Infrastructure.Messaging.Consumers;
@@ -24,6 +24,7 @@ internal sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
 
         var command = new HandleBattleCompletedCommand(
             msg.MessageId,
+            msg.BattleId,
             msg.WinnerIdentityId,
             msg.LoserIdentityId,
             msg.Reason.ToString());

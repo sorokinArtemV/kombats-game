@@ -1,63 +1,63 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
+using Scalar.AspNetCore;
 
 namespace Kombats.Players.Api.Extensions;
 
 public static class SwaggerExtensions
 {
-    public static IServiceCollection AddSwaggerDocumentation(this IServiceCollection services)
+    public static IServiceCollection AddApiDocumentation(this IServiceCollection services)
     {
-        services.AddEndpointsApiExplorer();
-
-        services.AddSwaggerGen(options =>
+        services.AddOpenApi("v1", options =>
         {
-            options.SwaggerDoc("v1", new OpenApiInfo
+            options.AddDocumentTransformer((document, context, ct) =>
             {
-                Title = "Kombats Players Service",
-                Version = "v1",
-                Description = "Kombats Players Service",
-                Contact = new OpenApiContact
+                document.Info = new OpenApiInfo
                 {
-                    Name = "Kombats Players Team"
-                }
-            });
+                    Title = "Kombats Players Service",
+                    Version = "v1",
+                    Description = "Kombats Players Service"
+                };
 
-            // JWT Bearer
-            options.AddSecurityDefinition(JwtBearerDefaults.AuthenticationScheme, new OpenApiSecurityScheme
-            {
-                Name = "Authorization",
-                Type = SecuritySchemeType.Http,
-                Scheme = JwtBearerDefaults.AuthenticationScheme,
-                BearerFormat = "JWT",
-                In = ParameterLocation.Header,
-                Description = "Enter the JWT access token"
-            });
+                document.Components ??= new OpenApiComponents();
+                document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
 
-            // Apply security requirement globally to all endpoints
-            options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-            {
+                document.Components.SecuritySchemes[JwtBearerDefaults.AuthenticationScheme] = new OpenApiSecurityScheme
                 {
-                    new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme),
-                    []
-                }
+                    Type = SecuritySchemeType.Http,
+                    Scheme = JwtBearerDefaults.AuthenticationScheme,
+                    BearerFormat = "JWT",
+                    In = ParameterLocation.Header,
+                    Description = "Enter the JWT access token"
+                };
+
+                document.Security ??= [];
+                document.Security.Add(new OpenApiSecurityRequirement
+                {
+                    {
+                        new OpenApiSecuritySchemeReference(JwtBearerDefaults.AuthenticationScheme, document),
+                        []
+                    }
+                });
+
+                return Task.CompletedTask;
             });
         });
 
         return services;
     }
 
-    public static IApplicationBuilder UseSwaggerDocumentation(this IApplicationBuilder app)
+    public static WebApplication UseApiDocumentation(this WebApplication app)
     {
-        app.UseSwagger();
-
-        app.UseSwaggerUI(options =>
+        app.MapOpenApi();
+        app.MapScalarApiReference(options =>
         {
-            options.SwaggerEndpoint("/swagger/v1/swagger.json", "Kombats Players v1");
-            options.RoutePrefix = "swagger";
-            options.DocumentTitle = "Kombats Players API Documentation";
+            options
+                .WithTitle("Kombats Players API")
+                .WithDefaultHttpClient(ScalarTarget.CSharp, ScalarClient.HttpClient);
         });
 
         return app;
     }
 }
-

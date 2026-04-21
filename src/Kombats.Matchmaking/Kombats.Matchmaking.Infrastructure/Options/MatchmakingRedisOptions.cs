@@ -3,7 +3,7 @@ namespace Kombats.Matchmaking.Infrastructure.Options;
 /// <summary>
 /// Configuration options for Redis matchmaking stores.
 /// </summary>
-public class MatchmakingRedisOptions
+internal sealed class MatchmakingRedisOptions
 {
     public const string SectionName = "Matchmaking:Redis";
 
@@ -29,7 +29,7 @@ public class MatchmakingRedisOptions
 /// <summary>
 /// Configuration options for matchmaking worker.
 /// </summary>
-public class MatchmakingWorkerOptions
+internal sealed class MatchmakingWorkerOptions
 {
     public const string SectionName = "Matchmaking:Worker";
 

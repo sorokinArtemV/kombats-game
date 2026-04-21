@@ -1,12 +1,10 @@
+using Kombats.Abstractions;
 using Kombats.Players.Api.Endpoints.Me;
 using Kombats.Players.Api.Extensions;
 using Kombats.Players.Api.Filters;
 using Kombats.Players.Api.Identity;
 using Kombats.Players.Application;
 using Kombats.Players.Application.UseCases.SetCharacterName;
-using Kombats.Shared.CustomResults;
-using Kombats.Shared.Types;
-
 
 namespace Kombats.Players.Api.Endpoints.CharacterName;
 
@@ -35,7 +33,7 @@ internal sealed class SetCharacterNameEndpoint : IEndpoint
 
                 return result.Match(
                     value => Results.Ok(MeResponse.FromCharacterState(value)),
-                    failure => CustomResults.Problem(result));
+                    failure => result.ToProblem());
             })
             .WithRequestValidation<SetCharacterNameRequest>()
             .RequireAuthorization()

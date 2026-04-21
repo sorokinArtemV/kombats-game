@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Kombats.Players.Infrastructure.Configuration;
 
-public sealed class LevelingConfigProvider : ILevelingConfigProvider
+internal sealed class LevelingConfigProvider : ILevelingConfigProvider
 {
     private readonly IOptions<LevelingOptions> _options;
 

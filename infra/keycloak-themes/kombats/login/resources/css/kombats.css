@@ -1,0 +1,654 @@
+/*
+ * Kombats Keycloak Login Theme
+ * Visual source of truth: src/Kombats.Client/src/app/shells/UnauthenticatedShell.tsx
+ * Token source of truth:  src/Kombats.Client/src/ui/theme/tokens.css
+ *
+ * Inherits from the classic `keycloak` login theme. This stylesheet is loaded
+ * after the parent theme's login.css and is intended to override every visible
+ * surface so that the auth pages feel like a natural extension of the Kombats
+ * client shell.
+ */
+
+/* ---------- Design tokens (mirrored from the client) ---------- */
+:root {
+  --kc-bg-primary: #121212;
+  --kc-bg-secondary: #1e1e1e;
+  --kc-bg-surface: #2a2a2a;
+  --kc-bg-nav: #0a0a0a;
+
+  --kc-border: #333333;
+  --kc-border-strong: #444444;
+
+  --kc-text-primary: #ffffff;
+  --kc-text-secondary: rgba(255, 255, 255, 0.7);
+  --kc-text-muted: rgba(255, 255, 255, 0.5);
+
+  --kc-accent: #e94560;
+  --kc-accent-hover: #ff6b6b;
+
+  --kc-success: #4caf50;
+  --kc-warning: #ff9800;
+  --kc-error: #f44336;
+  --kc-info: #2196f3;
+
+  --kc-space-xs: 0.25rem;
+  --kc-space-sm: 0.5rem;
+  --kc-space-md: 1rem;
+  --kc-space-lg: 1.5rem;
+  --kc-space-xl: 2rem;
+
+  --kc-radius-sm: 0.25rem;
+  --kc-radius-md: 0.5rem;
+  --kc-radius-lg: 1rem;
+
+  --kc-font-primary: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --kc-font-display: 'Orbitron', 'Inter', system-ui, sans-serif;
+
+  --kc-title-glow: 0 0 20px rgba(255, 255, 255, 0.15);
+}
+
+/* ---------- Font loading (self-contained, no external dependency required) ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700&display=swap');
+
+/* ---------- Reset + page shell ----------
+ *
+ * The parent classic theme sets `html, body { height: 100% }` and places
+ * the login container with fixed-height assumptions. That clips anything
+ * taller than the viewport (most visible on the register form, on laptops
+ * with shorter viewports, and whenever a validation error pushes content
+ * down). Explicitly unwind those constraints: use min-height so the page
+ * is AT LEAST the viewport tall, but is free to grow and scroll when the
+ * form needs more room.
+ */
+html,
+html.kombats-html,
+body,
+body.kombats-body,
+body.login-pf {
+  height: auto !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto !important;
+  margin: 0;
+  padding: 0;
+  background: var(--kc-bg-primary) !important;
+  color: var(--kc-text-primary);
+  font-family: var(--kc-font-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Drop decorative pseudo-elements inherited from the parent theme's
+ * background art — they create stacking contexts / overflow we don't want. */
+body.login-pf::before,
+body.login-pf::after {
+  display: none !important;
+}
+
+/* Full-page container. Flex column that centers content vertically when
+ * the viewport has room; when content is taller than the viewport the
+ * container grows to content height and the page scrolls naturally. No
+ * fixed height anywhere — that is what was cropping the card before. */
+.login-pf-page,
+body.kombats-body .login-pf-page {
+  background: var(--kc-bg-primary);
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.5rem, 5vh, 3rem) 1rem;
+  gap: var(--kc-space-lg);
+  box-sizing: border-box;
+}
+
+/* Classic theme's inner Bootstrap container sometimes wraps children.
+ * Neutralise its max-width/padding so our flex layout drives sizing. */
+.login-pf-page > .container,
+.login-pf-page > .container-fluid {
+  width: 100%;
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  display: contents;
+}
+
+/* ---------- Brand header (uses realm.displayNameHtml) ----------
+ *
+ * Keycloak renders `#kc-header-wrapper` inside `#kc-header`. This acts as
+ * our centered hero block — the large Orbitron "KOMBATS" + tagline that
+ * matches the React UnauthenticatedShell. The hero is a flex sibling of
+ * the card, not a full-width top bar (a body::before strip was the
+ * original cause of the vertical clipping — it injected out-of-flow
+ * height above the page container, pushing the card past the viewport
+ * and into the area the parent theme's `overflow: hidden` cut off).
+ */
+#kc-header {
+  width: 100%;
+  max-width: 28rem;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--kc-text-primary);
+  flex: 0 0 auto;
+  text-align: center;
+}
+
+#kc-header-wrapper {
+  padding: 0 var(--kc-space-sm);
+  text-align: center;
+  font-family: var(--kc-font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--kc-text-primary);
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  line-height: 1.1;
+  text-shadow: var(--kc-title-glow);
+  background: transparent;
+  white-space: normal;
+}
+
+/* Classes the realm's displayNameHtml can use for richer hero markup. */
+#kc-header-wrapper .kc-brand-title {
+  display: block;
+  font-family: var(--kc-font-display);
+  font-weight: 700;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--kc-text-primary);
+  text-shadow: var(--kc-title-glow);
+  line-height: 1.1;
+}
+#kc-header-wrapper .kc-brand-tagline {
+  display: block;
+  margin-top: var(--kc-space-sm);
+  font-family: var(--kc-font-primary);
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  color: var(--kc-text-muted);
+  text-shadow: none;
+}
+
+/* ---------- Card ---------- */
+/*
+ * Keycloak classic login uses `.card-pf` as the primary surface. We make it
+ * match the onboarding / unauthenticated card: dark surface, subtle border,
+ * medium radius, generous padding.
+ */
+.card-pf {
+  background: var(--kc-bg-secondary);
+  border: 1px solid var(--kc-border);
+  border-radius: var(--kc-radius-md);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  color: var(--kc-text-primary);
+  max-width: 28rem;
+  width: 100%;
+  /* Horizontal + vertical centering is handled by the flex parent
+   * (.login-pf-page). Reset the classic theme's margin so the card can't
+   * introduce its own offsets or push below the viewport. */
+  margin: 0;
+  padding: var(--kc-space-xl) var(--kc-space-xl) 40px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+@media (max-width: 480px) {
+  .card-pf {
+    padding: var(--kc-space-lg) var(--kc-space-md);
+    border-radius: var(--kc-radius-sm);
+  }
+}
+
+/* Shorter viewports: tighten the gap between hero and card so a full
+ * register form still fits above the fold on a 720-768px laptop. */
+@media (max-height: 820px) {
+  .login-pf-page,
+  body.kombats-body .login-pf-page {
+    gap: var(--kc-space-md);
+    padding-top: clamp(1rem, 3vh, 1.5rem);
+    padding-bottom: clamp(1rem, 3vh, 1.5rem);
+  }
+}
+@media (max-height: 680px) {
+  #kc-header-wrapper,
+  #kc-header-wrapper .kc-brand-title {
+    font-size: 1.75rem;
+  }
+  #kc-header-wrapper .kc-brand-tagline {
+    display: none;
+  }
+  .login-pf-page,
+  body.kombats-body .login-pf-page {
+    justify-content: flex-start;
+  }
+}
+
+/* Remove the default PatternFly border/shadow on the header inside the card. */
+#kc-form-header,
+#kc-content-wrapper,
+#kc-content {
+  background: transparent;
+  color: inherit;
+}
+
+#kc-page-title {
+  font-family: var(--kc-font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kc-text-primary);
+  margin: 0 0 var(--kc-space-md);
+  text-align: center;
+}
+
+/* Section with "Username or email" subheader Keycloak sometimes emits. */
+#kc-attempted-username {
+  color: var(--kc-text-secondary);
+}
+
+/* ---------- Form layout ---------- */
+.form-group,
+.pf-c-form__group {
+  margin-bottom: var(--kc-space-md) !important;
+}
+
+label,
+.pf-c-form__label,
+.control-label {
+  display: block;
+  margin-bottom: var(--kc-space-xs);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--kc-text-secondary);
+}
+
+/* ---------- Inputs ---------- */
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'],
+input[type='tel'],
+input[type='url'],
+select,
+textarea,
+.form-control,
+.pf-c-form-control {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--kc-bg-secondary) !important;
+  color: var(--kc-text-primary) !important;
+  border: 1px solid var(--kc-bg-surface) !important;
+  border-radius: var(--kc-radius-sm) !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  font-family: var(--kc-font-primary) !important;
+  box-shadow: none !important;
+  outline: none !important;
+  transition: border-color 150ms ease, background-color 150ms ease;
+  height: auto !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+.form-control:focus,
+.pf-c-form-control:focus {
+  border-color: var(--kc-accent) !important;
+  background: var(--kc-bg-secondary) !important;
+  box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.15) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--kc-text-muted) !important;
+  opacity: 1;
+}
+
+/* Browser autofill: keep dark background and light text. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: var(--kc-text-primary);
+  caret-color: var(--kc-text-primary);
+  transition: background-color 5000s ease-in-out 0s;
+  box-shadow: inset 0 0 0 1000px var(--kc-bg-secondary) !important;
+}
+
+/* Error state for inputs. */
+.pf-c-form-control[aria-invalid='true'],
+input[aria-invalid='true'],
+.form-control.error,
+.has-error .form-control {
+  border-color: var(--kc-error) !important;
+  box-shadow: 0 0 0 3px rgba(244, 67, 54, 0.15) !important;
+}
+
+/* Show-password toggle. */
+.pf-c-input-group,
+.input-group {
+  background: transparent;
+  border: none;
+}
+.pf-c-input-group button,
+.input-group .btn {
+  background: var(--kc-bg-secondary);
+  border: 1px solid var(--kc-bg-surface);
+  border-left: none;
+  color: var(--kc-text-secondary);
+  border-radius: 0 var(--kc-radius-sm) var(--kc-radius-sm) 0;
+  padding: 0 0.75rem;
+}
+.pf-c-input-group button:hover,
+.input-group .btn:hover {
+  color: var(--kc-text-primary);
+}
+.pf-c-input-group .pf-c-form-control {
+  border-right: none;
+  border-radius: var(--kc-radius-sm) 0 0 var(--kc-radius-sm) !important;
+}
+
+/* ---------- Buttons ---------- */
+/*
+ * Primary button mirrors UnauthenticatedShell's login button:
+ * solid accent background, white text, medium radius.
+ */
+.btn,
+.pf-c-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--kc-font-primary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: var(--kc-radius-sm);
+  padding: 0.625rem 1.25rem;
+  border: 1px solid transparent;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  cursor: pointer;
+  line-height: 1.25;
+  text-decoration: none;
+  box-shadow: none;
+}
+
+.btn-primary,
+.pf-c-button.pf-m-primary,
+input[type='submit'].btn,
+#kc-login {
+  background: var(--kc-accent) !important;
+  color: var(--kc-text-primary) !important;
+  border-color: var(--kc-accent) !important;
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.pf-c-button.pf-m-primary:hover,
+.pf-c-button.pf-m-primary:focus,
+input[type='submit'].btn:hover,
+#kc-login:hover {
+  background: var(--kc-accent-hover) !important;
+  border-color: var(--kc-accent-hover) !important;
+  color: var(--kc-text-primary) !important;
+}
+.btn-primary:focus-visible,
+.pf-c-button.pf-m-primary:focus-visible,
+#kc-login:focus-visible {
+  outline: 2px solid var(--kc-accent-hover);
+  outline-offset: 2px;
+}
+
+/* Secondary / default / link-style buttons — render as outlined. */
+.btn-default,
+.pf-c-button.pf-m-secondary,
+.btn-lg.btn-default {
+  background: transparent !important;
+  color: var(--kc-accent) !important;
+  border-color: var(--kc-accent) !important;
+}
+.btn-default:hover,
+.pf-c-button.pf-m-secondary:hover {
+  background: var(--kc-accent) !important;
+  color: var(--kc-text-primary) !important;
+  border-color: var(--kc-accent) !important;
+}
+
+/* Keycloak's "kc-form-buttons" wrapper stacks primary submit buttons. */
+#kc-form-buttons,
+.kc-form-buttons {
+  margin-top: var(--kc-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--kc-space-sm);
+}
+#kc-form-buttons .btn,
+#kc-form-buttons .pf-c-button,
+#kc-form-buttons input[type='submit'] {
+  width: 100%;
+}
+
+/* ---------- Links ---------- */
+a,
+.login-pf-page a {
+  color: var(--kc-accent);
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+a:hover,
+a:focus,
+.login-pf-page a:hover {
+  color: var(--kc-accent-hover);
+  text-decoration: underline;
+}
+
+/* "Forgot password?" + "Register" side links under the form. */
+#kc-form-options,
+.login-pf-settings,
+#kc-registration,
+#kc-registration-container {
+  margin-top: var(--kc-space-md);
+  font-size: 0.875rem;
+  color: var(--kc-text-secondary);
+}
+
+#kc-form-options .checkbox,
+#kc-form-options label {
+  color: var(--kc-text-secondary);
+  font-weight: 400;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--kc-accent);
+}
+
+/* "New user? Register" panel below the card. */
+#kc-info,
+#kc-info-wrapper {
+  background: transparent;
+  color: var(--kc-text-secondary);
+  text-align: center;
+  padding: 0;
+  margin-top: var(--kc-space-md);
+  border: none;
+}
+#kc-info a {
+  color: var(--kc-accent);
+  font-weight: 600;
+}
+
+/* ---------- Alerts / messages ---------- */
+.alert,
+.pf-c-alert {
+  border-radius: var(--kc-radius-sm);
+  padding: 0.75rem 1rem;
+  margin-bottom: var(--kc-space-md);
+  font-size: 0.875rem;
+  border: 1px solid transparent;
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  line-height: 1.4;
+}
+.alert-error,
+.alert.alert-error,
+.pf-c-alert.pf-m-danger {
+  background: rgba(244, 67, 54, 0.1);
+  border-color: var(--kc-error);
+  color: var(--kc-error);
+}
+.alert-warning,
+.pf-c-alert.pf-m-warning {
+  background: rgba(255, 152, 0, 0.1);
+  border-color: var(--kc-warning);
+  color: var(--kc-warning);
+}
+.alert-success,
+.pf-c-alert.pf-m-success {
+  background: rgba(76, 175, 80, 0.1);
+  border-color: var(--kc-success);
+  color: var(--kc-success);
+}
+.alert-info,
+.pf-c-alert.pf-m-info {
+  background: rgba(33, 150, 243, 0.1);
+  border-color: var(--kc-info);
+  color: var(--kc-info);
+}
+.alert .pficon,
+.pf-c-alert__icon {
+  color: inherit;
+  margin-right: 0.25rem;
+}
+
+/* Per-field validation helper text. */
+.kc-feedback-text,
+.pf-c-form__helper-text,
+.help-block {
+  color: var(--kc-error) !important;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+/* "Required fields" legend (red asterisks on register page). */
+.required,
+.pf-c-form__label-required {
+  color: var(--kc-accent);
+}
+
+/* ---------- Social / identity-provider buttons (safe defaults) ---------- */
+#kc-social-providers,
+.kc-social-providers {
+  margin-top: var(--kc-space-md);
+  border-top: 1px solid var(--kc-border);
+  padding-top: var(--kc-space-md);
+}
+#kc-social-providers h2,
+.kc-social-providers h2 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--kc-text-muted);
+  text-align: center;
+  margin-bottom: var(--kc-space-sm);
+  font-weight: 500;
+}
+#kc-social-providers li {
+  list-style: none;
+  margin-bottom: 0.5rem;
+}
+#kc-social-providers a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--kc-bg-surface);
+  border: 1px solid var(--kc-border-strong);
+  color: var(--kc-text-primary);
+  border-radius: var(--kc-radius-sm);
+  text-decoration: none;
+}
+#kc-social-providers a:hover {
+  background: var(--kc-border-strong);
+}
+
+/* ---------- Locale switcher ---------- */
+#kc-locale {
+  position: absolute;
+  top: var(--kc-space-md);
+  right: var(--kc-space-md);
+  z-index: 2;
+}
+#kc-locale ul {
+  background: var(--kc-bg-secondary);
+  border: 1px solid var(--kc-border);
+  border-radius: var(--kc-radius-sm);
+  padding: 0.25rem;
+}
+#kc-locale a,
+#kc-locale-dropdown a {
+  color: var(--kc-text-secondary);
+}
+
+/* ---------- Info / logout confirmation page ---------- */
+/*
+ * Keycloak's `info.ftl` (used for logout confirmation, password reset
+ * confirmation, email verification notice, etc.) re-uses the same card,
+ * so it inherits all of the above automatically. These rules just tidy
+ * up the "back to application" link layout.
+ */
+#kc-content-wrapper > p {
+  color: var(--kc-text-secondary);
+  line-height: 1.5;
+  margin-bottom: var(--kc-space-md);
+}
+#kc-content-wrapper > p > a {
+  font-weight: 600;
+}
+
+/* ---------- Try another way / credential selector ---------- */
+#kc-select-try-another-way-form,
+#kc-try-another-way,
+#kc-try-another-way-form {
+  margin-top: var(--kc-space-md);
+}
+
+/* ---------- Parent-theme brand block suppression ----------
+ *
+ * The classic theme renders a small PatternFly brand block (logo image
+ * placeholder) inside the page header. Hide it — our hero title takes
+ * its place. Do NOT hide `.login-pf-page-header`: on some Keycloak
+ * versions that class is applied to `#kc-header` itself, which would
+ * also hide the branded hero we just built. */
+.login-pf-brand,
+.login-pf-page-header-brand {
+  display: none;
+}
+
+/* ---------- Responsive tweaks ---------- */
+@media (max-width: 640px) {
+  .login-pf-page,
+  body.kombats-body .login-pf-page {
+    padding: var(--kc-space-lg) var(--kc-space-sm);
+    gap: var(--kc-space-md);
+  }
+}
+
+/* ---------- Focus accessibility ---------- */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--kc-accent-hover);
+  outline-offset: 2px;
+}

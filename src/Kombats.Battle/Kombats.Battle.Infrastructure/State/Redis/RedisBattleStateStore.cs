@@ -18,7 +18,7 @@ namespace Kombats.Battle.Infrastructure.State.Redis;
 /// Production scheduling: TurnDeadlineWorker uses ClaimDueBattlesAsync in a tick loop with adaptive backoff.
 /// Do not use legacy methods (GetNextDeadlineUtcAsync, GetDueBattlesAsync) for production code.
 /// </summary>
-public class RedisBattleStateStore : IBattleStateStore
+internal sealed class RedisBattleStateStore : IBattleStateStore
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisBattleStateStore> _logger;
@@ -66,8 +66,12 @@ public class RedisBattleStateStore : IBattleStateStore
     private string GetSubmissionMarkerKey(Guid battleId, int turnIndex) => $"battle:turn:{battleId}:{turnIndex}:submitted";
 
     public async Task<bool> TryInitializeBattleAsync(
-        Guid battleId, 
-        BattleDomainState initialState, 
+        Guid battleId,
+        BattleDomainState initialState,
+        string? playerAName,
+        string? playerBName,
+        int? playerAMaxHp,
+        int? playerBMaxHp,
         CancellationToken cancellationToken = default)
     {
         var db = _redis.GetDatabase();
@@ -76,6 +80,12 @@ public class RedisBattleStateStore : IBattleStateStore
         // Convert Domain state to Infrastructure storage model
         DateTimeOffset deadlineUtc = _clock.UtcNow; // ArenaOpen deadline is meaningless but consistent
         BattleState state = StoredStateMapper.FromDomainState(initialState, deadlineUtc, version: 1);
+
+        // Set participant metadata (infrastructure-level, outside domain state)
+        state.PlayerAName = playerAName;
+        state.PlayerBName = playerBName;
+        state.PlayerAMaxHp = playerAMaxHp;
+        state.PlayerBMaxHp = playerBMaxHp;
 
         // Use SETNX for idempotent initialization
         string json = JsonSerializer.Serialize(state);
@@ -207,20 +217,37 @@ public class RedisBattleStateStore : IBattleStateStore
     }
 
     public async Task<EndBattleCommitResult> EndBattleAndMarkResolvedAsync(
-        Guid battleId, 
-        int turnIndex, 
+        Guid battleId,
+        int turnIndex,
         int noActionStreak,
         int playerAHp,
         int playerBHp,
+        BattleEndOutcome outcome,
         CancellationToken cancellationToken = default)
     {
         var db = _redis.GetDatabase();
         var key = GetStateKey(battleId);
 
+        // Empty string sentinel for "no winner" — the Lua script writes cjson.null for this
+        // case so it round-trips through System.Text.Json as a null Guid on read.
+        var winnerArg = outcome.WinnerPlayerId?.ToString() ?? string.Empty;
+        var endedAtUnixMs = outcome.OccurredAt.ToUnixTimeMilliseconds();
+
         var result = await db.ScriptEvaluateAsync(
             RedisScripts.EndBattleAndMarkResolvedScript,
             new RedisKey[] { key, ActiveBattlesSetKey, DeadlinesZSetKey },
-            new RedisValue[] { turnIndex, noActionStreak, playerAHp, playerBHp, battleId.ToString() });
+            new RedisValue[]
+            {
+                turnIndex,
+                noActionStreak,
+                playerAHp,
+                playerBHp,
+                battleId.ToString(),
+                winnerArg,
+                (int)outcome.Reason,
+                outcome.FinalTurnIndex,
+                endedAtUnixMs
+            });
 
         var resultCode = (int)result;
         var commitResult = (EndBattleCommitResult)resultCode;

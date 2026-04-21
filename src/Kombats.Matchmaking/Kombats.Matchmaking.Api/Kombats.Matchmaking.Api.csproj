@@ -1,27 +1,23 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
-
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <LangVersion>latest</LangVersion>
-        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
-        <ProjectReference Include="..\..\Kombats.Common\Kombats.Infrastructure.Messaging\Kombats.Infrastructure.Messaging.csproj" />
-        <ProjectReference Include="..\Kombats.Matchmaking.Application\Kombats.Matchmaking.Application.csproj"/>
-        <ProjectReference Include="..\Kombats.Matchmaking.Infrastructure\Kombats.Matchmaking.Infrastructure.csproj"/>
+        <InternalsVisibleTo Include="Kombats.Matchmaking.Api.Tests" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
-          <PrivateAssets>all</PrivateAssets>
-          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-        </PackageReference>
-        <PackageReference Include="StackExchange.Redis" Version="2.8.16"/>
-        <PackageReference Include="Serilog.AspNetCore" Version="8.0.3"/>
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Kombats.Matchmaking.Application\Kombats.Matchmaking.Application.csproj" />
+        <ProjectReference Include="..\..\Kombats.Common\Kombats.Abstractions\Kombats.Abstractions.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="FluentValidation" />
+        <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+        <PackageReference Include="Scalar.AspNetCore" />
     </ItemGroup>
 
 </Project>

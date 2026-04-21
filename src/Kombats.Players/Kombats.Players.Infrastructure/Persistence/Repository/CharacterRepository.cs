@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Kombats.Players.Infrastructure.Persistence.Repository;
 
-public sealed class CharacterRepository : ICharacterRepository
+internal sealed class CharacterRepository : ICharacterRepository
 {
     private readonly PlayersDbContext _db;
 

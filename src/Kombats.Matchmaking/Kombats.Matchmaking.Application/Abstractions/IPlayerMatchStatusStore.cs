@@ -5,7 +5,7 @@ namespace Kombats.Matchmaking.Application.Abstractions;
 /// <summary>
 /// Port for player match status read/write operations.
 /// </summary>
-public interface IPlayerMatchStatusStore
+internal interface IPlayerMatchStatusStore
 {
     /// <summary>
     /// Gets the current match status for a player.
@@ -32,7 +32,7 @@ public interface IPlayerMatchStatusStore
 /// <summary>
 /// Player match status enumeration.
 /// </summary>
-public enum PlayerMatchState
+internal enum PlayerMatchState
 {
     Searching = 0,
     Matched = 1
@@ -41,7 +41,7 @@ public enum PlayerMatchState
 /// <summary>
 /// Player match status model.
 /// </summary>
-public class PlayerMatchStatus
+internal sealed class PlayerMatchStatus
 {
     public required PlayerMatchState State { get; init; }
     public Guid? MatchId { get; init; }

@@ -11,7 +11,7 @@ namespace Kombats.Battle.Infrastructure.Rules;
 /// Infrastructure implementation of IRulesetProvider.
 /// Reads rulesets from appsettings configuration.
 /// </summary>
-public class RulesetProvider : IRulesetProvider
+internal sealed class RulesetProvider : IRulesetProvider
 {
     private readonly BattleRulesetsOptions _options;
     private readonly ILogger<RulesetProvider> _logger;

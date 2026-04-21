@@ -1,26 +1,29 @@
-using Kombats.Players.Application;
+using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
-using Kombats.Players.Application.Helpers;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Exceptions;
-using Kombats.Shared.Types;
-using MassTransit;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Players.Application.UseCases.SetCharacterName;
 
-public sealed class SetCharacterNameHandler
+internal sealed class SetCharacterNameHandler
     : ICommandHandler<SetCharacterNameCommand, CharacterStateResult>
 {
     private readonly IUnitOfWork _uow;
     private readonly ICharacterRepository _characters;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ICombatProfilePublisher _profilePublisher;
+    private readonly ILogger<SetCharacterNameHandler> _logger;
 
-    public SetCharacterNameHandler(IUnitOfWork uow, ICharacterRepository characters, IPublishEndpoint publishEndpoint)
+    public SetCharacterNameHandler(
+        IUnitOfWork uow,
+        ICharacterRepository characters,
+        ICombatProfilePublisher profilePublisher,
+        ILogger<SetCharacterNameHandler> logger)
     {
         _uow = uow;
         _characters = characters;
-        _publishEndpoint = publishEndpoint;
+        _profilePublisher = profilePublisher;
+        _logger = logger;
     }
 
     public async Task<Result<CharacterStateResult>> HandleAsync(SetCharacterNameCommand cmd, CancellationToken ct)
@@ -32,7 +35,6 @@ public sealed class SetCharacterNameHandler
                 Error.NotFound("SetCharacterName.NotProvisioned", "Character not provisioned. Call POST /api/me/ensure first."));
         }
 
-        // Pre-check for fast UX feedback; the DB unique index is the real safety net.
         var normalizedName = cmd.Name.Trim().ToLowerInvariant();
         var nameTaken = await _characters.IsNameTakenAsync(normalizedName, character.Id, ct);
         if (nameTaken)
@@ -43,7 +45,7 @@ public sealed class SetCharacterNameHandler
 
         try
         {
-            character.SetNameOnce(cmd.Name);
+            character.SetNameOnce(cmd.Name, DateTimeOffset.UtcNow);
         }
         catch (DomainException ex)
         {
@@ -63,32 +65,33 @@ public sealed class SetCharacterNameHandler
             };
         }
 
+        // Publish before SaveChanges so outbox entries are committed atomically
+        // with domain changes (AD-01). With MassTransit outbox configured,
+        // IPublishEndpoint.Publish() writes to outbox tables in the DbContext.
+        await _profilePublisher.PublishAsync(
+            PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
+
         try
         {
             await _uow.SaveChangesAsync(ct);
 
-            // MVP: direct publish after SaveChanges. Event may be lost if publish fails.
-            await _publishEndpoint.Publish(
-                PlayerCombatProfileChangedFactory.FromCharacter(character), ct);
+            _logger.LogInformation(
+                "Character named for IdentityId={IdentityId}, CharacterId={CharacterId}, OnboardingState={OnboardingState}",
+                cmd.IdentityId, character.Id, character.OnboardingState);
 
             return Result.Success(CharacterStateResult.FromCharacter(character));
         }
-        catch (DbUpdateConcurrencyException)
+        catch (ConcurrencyConflictException)
         {
             return Result.Failure<CharacterStateResult>(
                 Error.Conflict(
                     "SetCharacterName.ConcurrentUpdate",
                     "Character was modified by another request. Reload and retry."));
         }
-        catch (DbUpdateException ex) when (DbConflictHelper.IsUniqueViolation(ex, DbConflictHelper.NameNormalizedUniqueIndex))
+        catch (UniqueConstraintConflictException ex) when (ex.ConflictKind == UniqueConflictKind.CharacterName)
         {
             return Result.Failure<CharacterStateResult>(
                 Error.Conflict("SetCharacterName.NameTaken", "This display name is already taken."));
-        }
-        catch (DbUpdateException ex)
-        {
-            return Result.Failure<CharacterStateResult>(
-                Error.Problem("SetCharacterName.SaveFailed", $"Unexpected database error: {ex.Message}"));
         }
     }
 }

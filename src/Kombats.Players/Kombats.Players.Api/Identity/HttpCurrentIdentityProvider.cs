@@ -1,5 +1,5 @@
 using Kombats.Players.Api.Extensions;
-using Kombats.Shared.Types;
+using Kombats.Abstractions;
 using Microsoft.AspNetCore.Http;
 
 namespace Kombats.Players.Api.Identity;

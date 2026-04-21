@@ -7,7 +7,7 @@ namespace Kombats.Matchmaking.Infrastructure.Redis;
 /// Redis-based lease lock for multi-instance worker safety.
 /// Uses SET NX PX pattern for atomic lock acquisition with TTL.
 /// </summary>
-public class RedisLeaseLock
+internal sealed class RedisLeaseLock
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisLeaseLock> _logger;

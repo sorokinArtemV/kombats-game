@@ -12,7 +12,7 @@ namespace Kombats.Matchmaking.Infrastructure.Messaging.Consumers;
 /// so players are no longer stuck as matched after battle ends.
 /// Uses CAS to ensure idempotent, race-free state transition.
 /// </summary>
-public sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
+internal sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
 {
     private readonly IMatchRepository _matchRepository;
     private readonly IPlayerMatchStatusStore _playerMatchStatusStore;
@@ -40,11 +40,10 @@ public sealed class BattleCompletedConsumer : IConsumer<BattleCompleted>
             ? MatchState.TimedOut
             : MatchState.Completed;
 
-        var updated = await _matchRepository.TryUpdateStateAsync(
+        var updated = await _matchRepository.TryAdvanceToTerminalAsync(
             msg.MatchId,
-            MatchState.BattleCreated,
             terminalState,
-            DateTime.UtcNow,
+            DateTimeOffset.UtcNow,
             context.CancellationToken);
 
         if (updated)

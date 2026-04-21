@@ -14,13 +14,15 @@ namespace Kombats.Battle.Application.UseCases.Turns;
 /// Application service for battle turn operations: submitting actions and resolving turns.
 /// Orchestrates turn resolution with proper idempotency and state machine enforcement.
 /// </summary>
-public class BattleTurnAppService
+public sealed class BattleTurnAppService
 {
     private readonly IBattleStateStore _stateStore;
     private readonly IBattleEngine _battleEngine;
     private readonly IBattleRealtimeNotifier _notifier;
     private readonly IBattleEventPublisher _eventPublisher;
+    private readonly IBattleUnitOfWork _unitOfWork;
     private readonly IActionIntake _actionIntake;
+    private readonly IBattleTurnHistoryStore _turnHistoryStore;
     private readonly IClock _clock;
     private readonly ILogger<BattleTurnAppService> _logger;
 
@@ -29,7 +31,9 @@ public class BattleTurnAppService
         IBattleEngine battleEngine,
         IBattleRealtimeNotifier notifier,
         IBattleEventPublisher eventPublisher,
+        IBattleUnitOfWork unitOfWork,
         IActionIntake actionIntake,
+        IBattleTurnHistoryStore turnHistoryStore,
         IClock clock,
         ILogger<BattleTurnAppService> logger)
     {
@@ -37,7 +41,9 @@ public class BattleTurnAppService
         _battleEngine = battleEngine;
         _notifier = notifier;
         _eventPublisher = eventPublisher;
+        _unitOfWork = unitOfWork;
         _actionIntake = actionIntake;
+        _turnHistoryStore = turnHistoryStore;
         _clock = clock;
         _logger = logger;
     }
@@ -75,13 +81,15 @@ public class BattleTurnAppService
             throw new InvalidOperationException("User is not a participant in this battle");
         }
 
-        // If battle is ended, reject
+        // If battle is already ended, ignore gracefully — this is expected when a concurrent
+        // submission triggers resolution and transitions Phase→Ended before this call loads state.
+        // The client will learn about battle end via the BattleEnded SignalR notification.
         if (state.Phase == BattlePhase.Ended)
         {
-            _logger.LogWarning(
-                "Battle {BattleId} is ended, rejecting action submission from PlayerId: {PlayerId}",
+            _logger.LogDebug(
+                "Battle {BattleId} already ended, ignoring action from PlayerId: {PlayerId}",
                 battleId, playerId);
-            throw new InvalidOperationException("Battle has ended");
+            return;
         }
 
         // Process action through intake pipeline (parses JSON, validates protocol and semantics)
@@ -140,30 +148,41 @@ public class BattleTurnAppService
     /// <summary>
     /// Resolves a turn for a battle.
     /// Idempotent: safe to call multiple times (CAS ensures only one resolution succeeds).
+    /// Also handles stuck-in-Resolving recovery: if a battle is already in Resolving phase
+    /// (e.g., previous resolution attempt failed mid-way), re-attempts resolution directly.
     ///
     /// Flow:
     /// 1. Load and validate state (phase, turn index, idempotency)
-    /// 2. CAS transition to Resolving phase
+    /// 2. CAS transition to Resolving phase (skipped if already Resolving)
     /// 3. Load actions, convert to domain, run engine
     /// 4. Dispatch result (battle ended or turn continues)
     /// </summary>
     public async Task<bool> ResolveTurnAsync(Guid battleId, CancellationToken cancellationToken = default)
     {
         // Phase 1: Load and validate state
-        var state = await LoadAndValidateStateForResolution(battleId, cancellationToken);
+        var (state, alreadyResolving) = await LoadAndValidateStateForResolution(battleId, cancellationToken);
         if (state == null)
             return false;
 
         var turnIndex = state.TurnIndex;
 
-        // Phase 2: Atomic CAS transition to Resolving
-        var markedResolving = await _stateStore.TryMarkTurnResolvingAsync(battleId, turnIndex, cancellationToken);
-        if (!markedResolving)
+        // Phase 2: Atomic CAS transition to Resolving (skip if already in Resolving — recovery path)
+        if (!alreadyResolving)
         {
-            _logger.LogWarning(
-                "Failed to mark turn {TurnIndex} as Resolving for BattleId: {BattleId}. May be duplicate or invalid state.",
-                turnIndex, battleId);
-            return false;
+            var markedResolving = await _stateStore.TryMarkTurnResolvingAsync(battleId, turnIndex, cancellationToken);
+            if (!markedResolving)
+            {
+                _logger.LogWarning(
+                    "Failed to mark turn {TurnIndex} as Resolving for BattleId: {BattleId}. May be duplicate or invalid state.",
+                    turnIndex, battleId);
+                return false;
+            }
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Retrying resolution for BattleId: {BattleId} stuck in Resolving phase at TurnIndex: {TurnIndex}",
+                battleId, turnIndex);
         }
 
         // Phase 3: Load actions and run domain engine
@@ -177,9 +196,11 @@ public class BattleTurnAppService
 
     /// <summary>
     /// Loads battle state and validates preconditions for turn resolution.
-    /// Returns null if resolution should not proceed (idempotent/invalid state).
+    /// Returns (null, false) if resolution should not proceed (idempotent/invalid state).
+    /// Returns (state, true) if the battle is stuck in Resolving and should be retried.
+    /// Returns (state, false) if the battle is in TurnOpen and ready for normal resolution.
     /// </summary>
-    private async Task<BattleSnapshot?> LoadAndValidateStateForResolution(
+    private async Task<(BattleSnapshot? State, bool AlreadyResolving)> LoadAndValidateStateForResolution(
         Guid battleId,
         CancellationToken cancellationToken)
     {
@@ -187,7 +208,7 @@ public class BattleTurnAppService
         if (state == null)
         {
             _logger.LogWarning("Battle state not found for BattleId: {BattleId}", battleId);
-            return null;
+            return (null, false);
         }
 
         var turnIndex = state.TurnIndex;
@@ -198,35 +219,33 @@ public class BattleTurnAppService
             _logger.LogInformation(
                 "Turn {TurnIndex} already resolved (LastResolvedTurnIndex: {LastResolvedTurnIndex}) for BattleId: {BattleId}",
                 turnIndex, state.LastResolvedTurnIndex, battleId);
-            return null;
+            return (null, false);
         }
 
-        // State machine validation: must be TurnOpen and turnIndex must match
-        if (state.Phase != BattlePhase.TurnOpen || state.TurnIndex != turnIndex)
+        if (state.Phase == BattlePhase.Ended)
         {
-            if (state.Phase == BattlePhase.Ended)
-            {
-                _logger.LogInformation(
-                    "Battle {BattleId} already ended, ignoring ResolveTurn for TurnIndex: {TurnIndex}",
-                    battleId, turnIndex);
-                return null;
-            }
+            _logger.LogInformation(
+                "Battle {BattleId} already ended, ignoring ResolveTurn for TurnIndex: {TurnIndex}",
+                battleId, turnIndex);
+            return (null, false);
+        }
 
-            if (state.Phase == BattlePhase.Resolving && state.TurnIndex == turnIndex)
-            {
-                _logger.LogInformation(
-                    "Turn {TurnIndex} already being resolved for BattleId: {BattleId}",
-                    turnIndex, battleId);
-                return null;
-            }
+        // Stuck-in-Resolving recovery: if battle is in Resolving phase, allow retry
+        if (state.Phase == BattlePhase.Resolving && state.TurnIndex == turnIndex)
+        {
+            return (state, true);
+        }
 
+        // Normal path: must be TurnOpen
+        if (state.Phase != BattlePhase.TurnOpen)
+        {
             _logger.LogError(
                 "Invalid state for ResolveTurn: BattleId: {BattleId}, TurnIndex: {TurnIndex}, State.Phase: {Phase}, State.TurnIndex: {StateTurnIndex}",
                 battleId, turnIndex, state.Phase, state.TurnIndex);
-            return null;
+            return (null, false);
         }
 
-        return state;
+        return (state, false);
     }
 
     /// <summary>
@@ -314,17 +333,36 @@ public class BattleTurnAppService
         BattleEndedDomainEvent battleEnded,
         CancellationToken cancellationToken)
     {
-        // Commit battle end atomically (includes HP update)
+        // Commit battle end atomically (includes HP update and terminal outcome snapshot).
+        // The outcome is persisted onto Redis state so recovery can reconstruct a faithful
+        // BattleCompleted if the process crashes before the bus-outbox flush below — without
+        // this, the orphan fallback would republish every crashed battle as a data-less draw.
+        var endOutcome = new BattleEndOutcome(
+            battleEnded.WinnerPlayerId,
+            battleEnded.Reason,
+            battleEnded.FinalTurnIndex,
+            battleEnded.OccurredAt);
+
         var endResult = await _stateStore.EndBattleAndMarkResolvedAsync(
             battleId,
             turnIndex,
             resolutionResult.NewState.NoActionStreakBoth,
             resolutionResult.NewState.PlayerA.CurrentHp,
             resolutionResult.NewState.PlayerB.CurrentHp,
+            endOutcome,
             cancellationToken);
 
         if (endResult == EndBattleCommitResult.EndedNow)
         {
+            // Track final turn in DbContext for atomic commit with outbox
+            if (resolutionResult.TurnLog is not null)
+            {
+                _turnHistoryStore.TrackTurn(
+                    battleId, turnIndex, resolutionResult.TurnLog,
+                    resolutionResult.NewState.PlayerA.CurrentHp,
+                    resolutionResult.NewState.PlayerB.CurrentHp);
+            }
+
             // Only notify/publish if battle ended in this call
             await _notifier.NotifyBattleEndedAsync(
                 battleId,
@@ -334,6 +372,7 @@ public class BattleTurnAppService
                 cancellationToken);
 
             // Publish canonical BattleCompleted (consumed by Players, Matchmaking, and Battle projection)
+            // DurationMs=0: battle CreatedAt is not available in Redis state; deferred to future enhancement
             await _eventPublisher.PublishBattleCompletedAsync(
                 battleId,
                 state.MatchId,
@@ -342,7 +381,16 @@ public class BattleTurnAppService
                 battleEnded.Reason,
                 battleEnded.WinnerPlayerId,
                 battleEnded.OccurredAt,
+                turnCount: battleEnded.FinalTurnIndex,
+                durationMs: 0,
+                rulesetVersion: state.Ruleset.Version,
                 cancellationToken);
+
+            // Flush the bus outbox. UseBusOutbox buffers IPublishEndpoint.Publish calls on the
+            // DbContext change tracker; without SaveChangesAsync the outbox row is never written
+            // and the event never reaches RabbitMQ. Idempotency is protected upstream by the
+            // Redis EndedNow gate, which ensures this branch runs at most once per battle.
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation(
                 "Battle {BattleId} ended. Reason: {Reason}, Winner: {WinnerPlayerId}",
@@ -399,6 +447,26 @@ public class BattleTurnAppService
             return false;
         }
 
+        // Persist turn history (best-effort — must not block battle progression)
+        if (resolutionResult.TurnLog is not null)
+        {
+            try
+            {
+                await _turnHistoryStore.PersistTurnAsync(
+                    battleId, turnIndex, resolutionResult.TurnLog,
+                    resolutionResult.NewState.PlayerA.CurrentHp,
+                    resolutionResult.NewState.PlayerB.CurrentHp,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to persist turn history for BattleId: {BattleId}, Turn: {TurnIndex}. "
+                    + "Battle continues. Post-match feed may have a gap.",
+                    battleId, turnIndex);
+            }
+        }
+
         // Reload state to get authoritative deadline
         var stateAfterTurnOpen = await _stateStore.GetStateAsync(battleId, cancellationToken);
         if (stateAfterTurnOpen == null)
@@ -451,6 +519,10 @@ public class BattleTurnAppService
             stateAfterTurnOpen.Version,
             resolutionResult.NewState.PlayerA.CurrentHp,
             resolutionResult.NewState.PlayerB.CurrentHp,
+            stateAfterTurnOpen.PlayerAName,
+            stateAfterTurnOpen.PlayerBName,
+            stateAfterTurnOpen.PlayerAMaxHp,
+            stateAfterTurnOpen.PlayerBMaxHp,
             cancellationToken);
 
         _logger.LogInformation(

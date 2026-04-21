@@ -1,4 +1,4 @@
-namespace Combats.Battle.Realtime.Contracts;
+namespace Kombats.Battle.Realtime.Contracts;
 
 /// <summary>
 /// Strongly-typed event names for SignalR realtime notifications.

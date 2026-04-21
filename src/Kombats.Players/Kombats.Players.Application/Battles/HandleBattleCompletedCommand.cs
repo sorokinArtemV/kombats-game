@@ -1,8 +1,8 @@
+using Kombats.Abstractions;
 using Kombats.Players.Application.Abstractions;
 using Kombats.Players.Application.IntegrationEvents;
 using Kombats.Players.Domain.Entities;
-using Kombats.Shared.Types;
-using MassTransit;
+using Microsoft.Extensions.Logging;
 
 namespace Kombats.Players.Application.Battles;
 
@@ -12,6 +12,7 @@ namespace Kombats.Players.Application.Battles;
 /// </summary>
 internal sealed record HandleBattleCompletedCommand(
     Guid MessageId,
+    Guid BattleId,
     Guid? WinnerIdentityId,
     Guid? LoserIdentityId,
     string Reason) : ICommand;
@@ -25,26 +26,32 @@ internal sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattl
     private readonly ICharacterRepository _characters;
     private readonly ILevelingConfigProvider _levelingProvider;
     private readonly IUnitOfWork _uow;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ICombatProfilePublisher _profilePublisher;
+    private readonly ILogger<HandleBattleCompletedHandler> _logger;
 
     public HandleBattleCompletedHandler(
         IInboxRepository inbox,
         ICharacterRepository characters,
         ILevelingConfigProvider levelingProvider,
         IUnitOfWork uow,
-        IPublishEndpoint publishEndpoint)
+        ICombatProfilePublisher profilePublisher,
+        ILogger<HandleBattleCompletedHandler> logger)
     {
         _inbox = inbox;
         _characters = characters;
         _levelingProvider = levelingProvider;
         _uow = uow;
-        _publishEndpoint = publishEndpoint;
+        _profilePublisher = profilePublisher;
+        _logger = logger;
     }
 
     public async Task<Result> HandleAsync(HandleBattleCompletedCommand command, CancellationToken cancellationToken)
     {
         if (await _inbox.IsProcessedAsync(command.MessageId, cancellationToken))
         {
+            _logger.LogInformation(
+                "BattleCompleted already processed, skipping: MessageId={MessageId}, BattleId={BattleId}, Idempotent={Idempotent}",
+                command.MessageId, command.BattleId, true);
             return Result.Success();
         }
 
@@ -52,7 +59,6 @@ internal sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattl
         Character? winner = null;
         Character? loser = null;
 
-        // No-winner outcome (e.g. DoubleForfeit, mutual timeout): no XP awarded
         if (command.WinnerIdentityId.HasValue && command.LoserIdentityId.HasValue)
         {
             winner = await _characters.GetByIdentityIdAsync(command.WinnerIdentityId.Value, cancellationToken);
@@ -71,27 +77,46 @@ internal sealed class HandleBattleCompletedHandler : ICommandHandler<HandleBattl
                     $"Character for loser identity {command.LoserIdentityId} not found."));
             }
 
-            winner.AddExperience(WinnerXp, config);
-            winner.RecordWin();
+            var now = DateTimeOffset.UtcNow;
+            winner.AddExperience(WinnerXp, config, now);
+            winner.RecordWin(now);
 
-            loser.AddExperience(LoserXp, config);
-            loser.RecordLoss();
+            loser.AddExperience(LoserXp, config, now);
+            loser.RecordLoss(now);
         }
 
         await _inbox.AddProcessedAsync(command.MessageId, DateTimeOffset.UtcNow, cancellationToken);
-        await _uow.SaveChangesAsync(cancellationToken);
 
-        // MVP: direct publish after SaveChanges. Events may be lost if publish fails.
+        // Publish before SaveChanges so outbox entries are committed atomically
+        // with domain changes (AD-01). With MassTransit outbox configured,
+        // IPublishEndpoint.Publish() writes to outbox tables in the DbContext.
         if (winner is not null)
         {
-            await _publishEndpoint.Publish(
+            await _profilePublisher.PublishAsync(
                 PlayerCombatProfileChangedFactory.FromCharacter(winner), cancellationToken);
         }
 
         if (loser is not null)
         {
-            await _publishEndpoint.Publish(
+            await _profilePublisher.PublishAsync(
                 PlayerCombatProfileChangedFactory.FromCharacter(loser), cancellationToken);
+        }
+
+        await _uow.SaveChangesAsync(cancellationToken);
+
+        if (winner is not null && loser is not null)
+        {
+            _logger.LogInformation(
+                "BattleCompleted applied XP: MessageId={MessageId}, BattleId={BattleId}, Reason={Reason}, Winner={WinnerIdentityId} Level={WinnerLevel} TotalXp={WinnerTotalXp}, Loser={LoserIdentityId} Level={LoserLevel} TotalXp={LoserTotalXp}",
+                command.MessageId, command.BattleId, command.Reason,
+                winner.IdentityId, winner.Level, winner.TotalXp,
+                loser.IdentityId, loser.Level, loser.TotalXp);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "BattleCompleted inbox recorded (no-winner outcome): MessageId={MessageId}, BattleId={BattleId}, Reason={Reason}",
+                command.MessageId, command.BattleId, command.Reason);
         }
 
         return Result.Success();

@@ -3,7 +3,7 @@ namespace Kombats.Matchmaking.Application.Abstractions;
 /// <summary>
 /// Port for Matchmaking-owned player combat profile projection.
 /// </summary>
-public interface IPlayerCombatProfileRepository
+internal interface IPlayerCombatProfileRepository
 {
     /// <summary>
     /// Gets a player combat profile by identity id.
@@ -23,7 +23,7 @@ public interface IPlayerCombatProfileRepository
 /// <summary>
 /// Application-level read model for player combat profile projection.
 /// </summary>
-public class PlayerCombatProfile
+internal sealed class PlayerCombatProfile
 {
     public required Guid IdentityId { get; init; }
     public required Guid CharacterId { get; init; }
@@ -36,4 +36,8 @@ public class PlayerCombatProfile
     public required bool IsReady { get; init; }
     public required int Revision { get; init; }
     public required DateTimeOffset OccurredAt { get; init; }
+
+    // Avatar id projected from the Players integration event. Nullable on the wire
+    // to tolerate older producers; default populated at projection time below.
+    public string? AvatarId { get; init; }
 }

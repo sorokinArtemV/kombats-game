@@ -5,7 +5,7 @@ namespace Kombats.Matchmaking.Infrastructure.Entities;
 /// Projected from Players service integration events.
 /// Used for queue eligibility and future battle handoff.
 /// </summary>
-public class PlayerCombatProfileEntity
+internal sealed class PlayerCombatProfileEntity
 {
     public Guid IdentityId { get; set; }
     public Guid CharacterId { get; set; }
@@ -19,4 +19,13 @@ public class PlayerCombatProfileEntity
     public int Revision { get; set; }
     public DateTimeOffset OccurredAt { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; }
+    public string AvatarId { get; set; } = PlayerCombatProfileEntityDefaults.AvatarId;
+}
+
+internal static class PlayerCombatProfileEntityDefaults
+{
+    // Kept in sync with Kombats.Players.Domain.Entities.AvatarCatalog.Default.
+    // Duplicated here to avoid a cross-service domain dependency — Matchmaking
+    // receives avatar ids through the integration event and treats them as opaque.
+    public const string AvatarId = "default";
 }

@@ -7,7 +7,7 @@ namespace Kombats.Battle.Infrastructure.Rules;
 /// Infrastructure implementation of ISeedGenerator.
 /// Uses cryptographically safe random number generation.
 /// </summary>
-public class SeedGenerator : ISeedGenerator
+internal sealed class SeedGenerator : ISeedGenerator
 {
     public int GenerateSeed()
     {

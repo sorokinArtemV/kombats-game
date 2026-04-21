@@ -10,7 +10,7 @@ namespace Kombats.Matchmaking.Infrastructure.Repositories;
 /// Infrastructure implementation of IPlayerCombatProfileRepository using EF Core.
 /// Enforces revision monotonicity to prevent stale event overwrites.
 /// </summary>
-public sealed class PlayerCombatProfileRepository : IPlayerCombatProfileRepository
+internal sealed class PlayerCombatProfileRepository : IPlayerCombatProfileRepository
 {
     private readonly MatchmakingDbContext _dbContext;
     private readonly ILogger<PlayerCombatProfileRepository> _logger;
@@ -58,6 +58,7 @@ public sealed class PlayerCombatProfileRepository : IPlayerCombatProfileReposito
             existing.IsReady = profile.IsReady;
             existing.Revision = profile.Revision;
             existing.OccurredAt = profile.OccurredAt;
+            existing.AvatarId = profile.AvatarId ?? PlayerCombatProfileEntityDefaults.AvatarId;
             existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
         }
         else
@@ -75,6 +76,7 @@ public sealed class PlayerCombatProfileRepository : IPlayerCombatProfileReposito
                 IsReady = profile.IsReady,
                 Revision = profile.Revision,
                 OccurredAt = profile.OccurredAt,
+                AvatarId = profile.AvatarId ?? PlayerCombatProfileEntityDefaults.AvatarId,
                 UpdatedAtUtc = DateTimeOffset.UtcNow
             });
         }
@@ -102,7 +104,8 @@ public sealed class PlayerCombatProfileRepository : IPlayerCombatProfileReposito
             Vitality = entity.Vitality,
             IsReady = entity.IsReady,
             Revision = entity.Revision,
-            OccurredAt = entity.OccurredAt
+            OccurredAt = entity.OccurredAt,
+            AvatarId = entity.AvatarId
         };
     }
 }

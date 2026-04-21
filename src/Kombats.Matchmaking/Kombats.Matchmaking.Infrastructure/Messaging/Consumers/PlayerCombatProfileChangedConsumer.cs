@@ -9,7 +9,7 @@ namespace Kombats.Matchmaking.Infrastructure.Messaging.Consumers;
 /// Thin integration consumer for player combat profile change events from Players service.
 /// Consumes the canonical PlayerCombatProfileChanged contract from Kombats.Players.Contracts.
 /// </summary>
-public sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerCombatProfileChanged>
+internal sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerCombatProfileChanged>
 {
     private readonly IPlayerCombatProfileRepository _repository;
     private readonly ILogger<PlayerCombatProfileChangedConsumer> _logger;
@@ -26,10 +26,6 @@ public sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerCombatP
     {
         var message = context.Message;
 
-        _logger.LogInformation(
-            "Received player combat profile changed: IdentityId={IdentityId}, CharacterId={CharacterId}, Revision={Revision}, IsReady={IsReady}",
-            message.IdentityId, message.CharacterId, message.Revision, message.IsReady);
-
         var profile = new PlayerCombatProfile
         {
             IdentityId = message.IdentityId,
@@ -42,9 +38,14 @@ public sealed class PlayerCombatProfileChangedConsumer : IConsumer<PlayerCombatP
             Vitality = message.Vitality,
             IsReady = message.IsReady,
             Revision = message.Revision,
-            OccurredAt = message.OccurredAt
+            OccurredAt = message.OccurredAt,
+            AvatarId = message.AvatarId
         };
 
         await _repository.UpsertAsync(profile, context.CancellationToken);
+
+        _logger.LogInformation(
+            "Upserted player combat profile projection: IdentityId={IdentityId}, CharacterId={CharacterId}, Revision={Revision}, IsReady={IsReady}",
+            message.IdentityId, message.CharacterId, message.Revision, message.IsReady);
     }
 }

@@ -1,4 +1,5 @@
 using Kombats.Battle.Domain.Model;
+using Kombats.Battle.Domain.Results;
 using Kombats.Battle.Domain.Rules;
 
 namespace Kombats.Battle.Application.ReadModels;
@@ -21,6 +22,12 @@ public sealed class BattleSnapshot
     public int LastResolvedTurnIndex { get; init; }
     public int Version { get; init; }
     
+    // Participant metadata
+    public string? PlayerAName { get; init; }
+    public string? PlayerBName { get; init; }
+    public int? PlayerAMaxHp { get; init; }
+    public int? PlayerBMaxHp { get; init; }
+
     // Player HP
     public int? PlayerAHp { get; init; }
     public int? PlayerBHp { get; init; }
@@ -34,6 +41,14 @@ public sealed class BattleSnapshot
     public int? PlayerBStamina { get; init; }
     public int? PlayerBAgility { get; init; }
     public int? PlayerBIntuition { get; init; }
+
+    // Terminal outcome (only populated when Phase == Ended and the battle ended under the
+    // enriched end-commit path). Used by BattleRecoveryService to avoid the data-less
+    // OrphanRecovery fallback when Redis already knows the real winner/reason.
+    public Guid? EndWinnerPlayerId { get; init; }
+    public EndBattleReason? EndReason { get; init; }
+    public int? EndFinalTurnIndex { get; init; }
+    public DateTimeOffset? EndedAt { get; init; }
 }
 
 

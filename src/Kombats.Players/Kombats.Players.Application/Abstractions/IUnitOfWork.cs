@@ -1,6 +1,6 @@
 ﻿namespace Kombats.Players.Application.Abstractions;
 
-public interface IUnitOfWork
+internal interface IUnitOfWork
 {
     Task SaveChangesAsync(CancellationToken ct);
 }

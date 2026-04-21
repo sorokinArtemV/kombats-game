@@ -20,6 +20,9 @@ public record BattleCompleted
     public Guid? LoserIdentityId { get; init; }
 
     public BattleEndReason Reason { get; init; }
+    public int TurnCount { get; init; }
+    public int DurationMs { get; init; }
+    public int RulesetVersion { get; init; }
     public DateTimeOffset OccurredAt { get; init; }
     public int Version { get; init; } = 1;
 }

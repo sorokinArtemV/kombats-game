@@ -19,4 +19,9 @@ public record PlayerCombatProfileChanged
     public bool IsReady { get; init; }
     public int Revision { get; init; }
     public DateTimeOffset OccurredAt { get; init; }
+    public int Version { get; init; } = 1;
+
+    // Nullable on the wire so consumers predating this field keep deserializing;
+    // producers populate it from the character's AvatarId.
+    public string? AvatarId { get; init; }
 }

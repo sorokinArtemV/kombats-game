@@ -22,12 +22,16 @@ public sealed class Character
     public int Revision { get; private set; }
     public OnboardingState OnboardingState { get; private set; }
 
+    public string AvatarId { get; private set; } = AvatarCatalog.Default;
+
     public long TotalXp { get; private set; }
     public int Level { get; private set; }
     public int LevelingVersion { get; private set; }
 
     public int Wins { get; private set; }
     public int Losses { get; private set; }
+
+    public bool IsReady => OnboardingState == OnboardingState.Ready;
 
     public DateTimeOffset Created { get; private set; }
     public DateTimeOffset Updated { get; private set; }
@@ -50,12 +54,30 @@ public sealed class Character
             Losses = 0,
             Revision = 1,
             OnboardingState = OnboardingState.Draft,
+            AvatarId = AvatarCatalog.Default,
             Created = occurredAt,
             Updated = occurredAt
         };
     }
 
-    public void SetNameOnce(string displayName)
+    public void ChangeAvatar(string avatarId, DateTimeOffset occurredAt)
+    {
+        if (!AvatarCatalog.IsValid(avatarId))
+        {
+            throw new DomainException("InvalidAvatar", "Avatar id is not in the allowed catalog.");
+        }
+
+        if (AvatarId == avatarId)
+        {
+            return;
+        }
+
+        AvatarId = avatarId;
+        Revision++;
+        Updated = occurredAt;
+    }
+
+    public void SetNameOnce(string displayName, DateTimeOffset occurredAt)
     {
         if (OnboardingState != OnboardingState.Draft)
         {
@@ -76,10 +98,10 @@ public sealed class Character
         Name = name;
         OnboardingState = OnboardingState.Named;
         Revision++;
-        Updated = DateTimeOffset.UtcNow;
+        Updated = occurredAt;
     }
 
-    public void AllocatePoints(int str, int agi, int intuition, int vit)
+    public void AllocatePoints(int str, int agi, int intuition, int vit, DateTimeOffset occurredAt)
     {
         if (OnboardingState != OnboardingState.Named && OnboardingState != OnboardingState.Ready)
         {
@@ -92,6 +114,9 @@ public sealed class Character
         }
 
         var total = str + agi + intuition + vit;
+        if (total == 0)
+            throw new DomainException("ZeroPoints", "Must allocate at least one stat point.");
+
         if (total > UnspentPoints)
             throw new DomainException("NotEnoughPoints", "Insufficient unspent points to allocate.");
 
@@ -108,10 +133,10 @@ public sealed class Character
         }
 
         Revision++;
-        Updated = DateTimeOffset.UtcNow;
+        Updated = occurredAt;
     }
 
-    public void AddExperience(long amount, LevelingConfig config)
+    public void AddExperience(long amount, LevelingConfig config, DateTimeOffset occurredAt)
     {
         if (amount <= 0)
             throw new DomainException("InvalidXp", "Experience amount must be greater than zero.");
@@ -132,20 +157,20 @@ public sealed class Character
         }
 
         Revision++;
-        Updated = DateTimeOffset.UtcNow;
+        Updated = occurredAt;
     }
 
-    public void RecordWin()
+    public void RecordWin(DateTimeOffset occurredAt)
     {
         Wins++;
         Revision++;
-        Updated = DateTimeOffset.UtcNow;
+        Updated = occurredAt;
     }
 
-    public void RecordLoss()
+    public void RecordLoss(DateTimeOffset occurredAt)
     {
         Losses++;
         Revision++;
-        Updated = DateTimeOffset.UtcNow;
+        Updated = occurredAt;
     }
 }

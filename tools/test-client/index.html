@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kombats Test Client</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #121212; --surface: #1e1e1e; --surface2: #2a2a2a; --border: #333;
+    --text: #e0e0e0; --text2: #999; --accent: #5c9eff; --accent-hover: #7ab4ff;
+    --red: #ef5350; --green: #66bb6a; --yellow: #fdd835; --orange: #ffa726;
+    --hp-bar: #66bb6a; --hp-bar-low: #ef5350; --energy-bar: #5c9eff;
+    --radius: 6px; --gap: 12px;
+  }
+  body { font-family: 'Segoe UI', 'Roboto', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+  button { cursor: pointer; border: 1px solid var(--border); background: var(--surface2); color: var(--text); padding: 8px 16px; border-radius: var(--radius); font-size: 13px; transition: background .15s; }
+  button:hover { background: #363636; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+  button.primary:hover { background: var(--accent-hover); }
+  button.primary:disabled { background: #3a5a8a; border-color: #3a5a8a; color: #666; }
+  button.danger { border-color: var(--red); color: var(--red); }
+  button.danger:hover { background: rgba(239,83,80,.15); }
+  input, select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: var(--radius); font-size: 13px; }
+  input:focus, select:focus { outline: none; border-color: var(--accent); }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--gap); }
+  .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); margin-bottom: 8px; font-weight: 600; }
+
+  .app { display: flex; flex-direction: column; height: 100vh; padding: var(--gap); gap: var(--gap); }
+  .top-bar { display: flex; align-items: center; gap: var(--gap); flex-shrink: 0; }
+  .top-bar .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .top-bar .status-dot.connected { background: var(--green); }
+  .top-bar .status-dot.disconnected { background: var(--red); }
+  .top-bar .status-dot.connecting { background: var(--yellow); }
+
+  .main-area { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: var(--gap); flex: 1; min-height: 0; }
+
+  .player-panel { display: flex; flex-direction: column; gap: var(--gap); }
+  .avatar-placeholder { width: 100%; aspect-ratio: 1; background: var(--surface2); border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 48px; color: var(--text2); border: 1px solid var(--border); }
+  .stat-row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+  .stat-label { color: var(--text2); }
+  .hp-bar-container { background: var(--surface2); border-radius: 3px; height: 18px; overflow: hidden; position: relative; border: 1px solid var(--border); }
+  .hp-bar-fill { height: 100%; transition: width .4s ease; border-radius: 2px; }
+  .hp-bar-text { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; }
+
+  .center-panel { display: flex; flex-direction: column; gap: var(--gap); }
+
+  .zone-selector { display: flex; flex-direction: column; gap: 4px; }
+  .zone-option { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--radius); cursor: pointer; font-size: 13px; border: 1px solid transparent; transition: all .15s; }
+  .zone-option:hover { background: var(--surface2); }
+  .zone-option.selected { border-color: var(--accent); background: rgba(92,158,255,.1); }
+  .zone-option input[type="radio"] { accent-color: var(--accent); }
+
+  .block-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .block-option { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--radius); cursor: pointer; font-size: 12px; border: 1px solid transparent; transition: all .15s; }
+  .block-option:hover { background: var(--surface2); }
+  .block-option.selected { border-color: var(--accent); background: rgba(92,158,255,.1); }
+  .block-option input[type="radio"] { accent-color: var(--accent); }
+
+  .action-summary { font-size: 12px; color: var(--text2); padding: 8px; background: var(--surface2); border-radius: var(--radius); }
+  .action-summary span { color: var(--text); font-weight: 500; }
+
+  .log-panel { flex-shrink: 0; height: 200px; display: flex; flex-direction: column; }
+  .log-panel .log-content { flex: 1; overflow-y: auto; font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 12px; line-height: 1.5; padding: 8px; background: var(--surface2); border-radius: var(--radius); }
+  .log-entry { padding: 1px 0; }
+  .log-entry .timestamp { color: var(--text2); margin-right: 8px; }
+  .log-entry.event { color: var(--green); }
+  .log-entry.error { color: var(--red); }
+  .log-entry.info { color: var(--accent); }
+  .log-entry.response { color: var(--orange); }
+  .log-entry.warn { color: var(--yellow); }
+
+  .auth-section { display: flex; gap: 8px; align-items: center; flex: 1; }
+  .auth-section input { flex: 1; min-width: 120px; }
+
+  .queue-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .stats-panel { display: flex; gap: var(--gap); align-items: flex-start; flex-wrap: wrap; }
+  .stats-current { display: grid; grid-template-columns: auto auto; gap: 2px 12px; font-size: 13px; align-items: center; }
+  .stats-current .stat-label { color: var(--text2); }
+  .stats-current .stat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stats-alloc { display: grid; grid-template-columns: auto 60px; gap: 4px 8px; font-size: 13px; align-items: center; }
+  .stats-alloc label { color: var(--text2); }
+  .stats-alloc input[type="number"] { width: 60px; text-align: center; padding: 4px 6px; }
+  .stats-alloc input[type="number"]::-webkit-inner-spin-button { opacity: 1; }
+  .stats-unspent { font-size: 13px; padding: 4px 10px; border-radius: var(--radius); font-weight: 600; }
+  .stats-unspent.has-points { background: rgba(92,158,255,.15); color: var(--accent); }
+  .stats-unspent.no-points { background: var(--surface2); color: var(--text2); }
+
+  .config-row { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+  .config-row label { color: var(--text2); white-space: nowrap; }
+  .config-row input { width: 200px; }
+
+  .tab-bar { display: flex; gap: 2px; }
+  .tab-bar button { border-radius: var(--radius) var(--radius) 0 0; border-bottom: none; font-size: 12px; padding: 5px 12px; }
+  .tab-bar button.active { background: var(--surface2); color: var(--accent); }
+
+  .debug-json { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto; padding: 8px; background: #161616; border-radius: var(--radius); color: var(--text2); border: 1px solid var(--border); }
+
+  .feed-content { flex: 1; overflow-y: auto; padding: 8px; background: var(--surface2); border-radius: var(--radius); display: flex; flex-direction: column; gap: 2px; }
+  .feed-entry { padding: 4px 8px; border-radius: 4px; font-size: 13px; line-height: 1.5; }
+  .feed-entry.severity-normal { }
+  .feed-entry.severity-important { font-weight: 600; }
+  .feed-entry.severity-critical { font-weight: 700; }
+  .feed-entry.tone-neutral { color: var(--text); }
+  .feed-entry.tone-aggressive { color: var(--red); }
+  .feed-entry.tone-defensive { color: var(--accent); }
+  .feed-entry.tone-dramatic { color: var(--yellow); }
+  .feed-entry.tone-system { color: var(--text2); font-style: italic; }
+  .feed-entry.tone-flavor { color: var(--orange); font-style: italic; }
+  .feed-turn-header { padding: 6px 8px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text2); font-weight: 600; border-top: 1px solid var(--border); margin-top: 4px; }
+  .feed-turn-header:first-child { border-top: none; margin-top: 0; }
+  .feed-empty { color: var(--text2); font-size: 13px; padding: 20px; text-align: center; }
+
+  .phase-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  .phase-badge.ArenaOpen { background: rgba(92,158,255,.2); color: var(--accent); }
+  .phase-badge.TurnOpen { background: rgba(102,187,106,.2); color: var(--green); }
+  .phase-badge.Resolving { background: rgba(255,167,38,.2); color: var(--orange); }
+  .phase-badge.Ended { background: rgba(239,83,80,.2); color: var(--red); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+const ZONES = ['Head', 'Chest', 'Belly', 'Waist', 'Legs'];
+const VALID_BLOCKS = [
+  ['Head','Chest'], ['Chest','Belly'], ['Belly','Waist'], ['Waist','Legs'], ['Legs','Head']
+];
+
+function blockLabel(pair) { return `${pair[0]} + ${pair[1]}`; }
+
+function App() {
+  const [bffUrl, setBffUrl] = useState('http://localhost:5000');
+  const [token, setToken] = useState('');
+  const [keycloakUrl, setKeycloakUrl] = useState('http://localhost:8080');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  // Game state
+  const [gameState, setGameState] = useState(null);
+  const [queueStatus, setQueueStatus] = useState(null);
+
+  // Battle state
+  const [battleState, setBattleState] = useState(null);
+  const [hubConnection, setHubConnection] = useState(null);
+  const [hubStatus, setHubStatus] = useState('disconnected'); // disconnected | connecting | connected
+
+  // Stat allocation
+  const [statAlloc, setStatAlloc] = useState({ strength: 0, agility: 0, intuition: 0, vitality: 0 });
+  const [showStats, setShowStats] = useState(false);
+
+  // Turn actions
+  const [attackZone, setAttackZone] = useState(null);
+  const [blockPair, setBlockPair] = useState(null);
+
+  // Logs
+  const [logs, setLogs] = useState([]);
+  const logEndRef = useRef(null);
+
+  // Battle Feed (commentary)
+  const [feedEntries, setFeedEntries] = useState([]);
+  const feedEndRef = useRef(null);
+
+  // Debug panel
+  const [debugTab, setDebugTab] = useState('feed');
+  const [lastResponse, setLastResponse] = useState(null);
+
+  // --- Chat state (Kombats Chat v1 via BFF /chathub + /api/v1/chat/*) ---
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatConnection, setChatConnection] = useState(null);
+  const [chatStatus, setChatStatus] = useState('disconnected'); // disconnected | connecting | connected
+  const [chatJoinedGlobal, setChatJoinedGlobal] = useState(false);
+  const [chatTab, setChatTab] = useState('global'); // global | dm | online | card
+  const [chatGlobalMessages, setChatGlobalMessages] = useState([]); // {messageId, sender:{playerId,displayName}, content, sentAt}
+  const [chatGlobalConversationId, setChatGlobalConversationId] = useState(null);
+  const [chatGlobalInput, setChatGlobalInput] = useState('');
+  const [chatOnlinePlayers, setChatOnlinePlayers] = useState([]);
+  const [chatOnlineTotal, setChatOnlineTotal] = useState(0);
+  const [chatConversations, setChatConversations] = useState([]);
+  const [chatDmSelectedPlayerId, setChatDmSelectedPlayerId] = useState('');
+  const [chatDmMessagesByPlayer, setChatDmMessagesByPlayer] = useState({}); // otherPlayerId -> messages[]
+  const [chatDmInput, setChatDmInput] = useState('');
+  const [chatPlayerCard, setChatPlayerCard] = useState(null);
+  const [chatCardLookupId, setChatCardLookupId] = useState('');
+  const [chatLastError, setChatLastError] = useState(null); // {code, message, source} — ChatError or ChatConnectionLost
+  const chatGlobalEndRef = useRef(null);
+  const chatDmEndRef = useRef(null);
+
+  const addLog = useCallback((type, msg) => {
+    const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setLogs(prev => [...prev.slice(-200), { type, msg, ts }]);
+  }, []);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  useEffect(() => {
+    feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [feedEntries]);
+
+  // --- Auth ---
+  async function doLogin() {
+    if (!username || !password) { addLog('error', 'Username and password required'); return; }
+    try {
+      addLog('info', `Logging in as ${username}...`);
+      const body = new URLSearchParams({
+        grant_type: 'password',
+        client_id: 'account',
+        username,
+        password,
+      });
+      const res = await fetch(`${keycloakUrl}/realms/kombats/protocol/openid-connect/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+      const data = await res.json();
+      if (data.access_token) {
+        setToken(data.access_token);
+        addLog('event', `Login successful (expires in ${data.expires_in}s)`);
+      } else {
+        addLog('error', `Login failed: ${JSON.stringify(data)}`);
+      }
+    } catch (e) {
+      addLog('error', `Login error: ${e.message}`);
+    }
+  }
+
+  function authHeaders() {
+    return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+  }
+
+  // --- BFF API calls ---
+  async function apiCall(method, path, body = null, label = path) {
+    try {
+      addLog('info', `${method} ${path}`);
+      const opts = { method, headers: authHeaders() };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(`${bffUrl}/${path}`, opts);
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = text; }
+      setLastResponse({ status: res.status, url: path, data });
+      if (res.ok) {
+        addLog('response', `${res.status} ${label}: ${typeof data === 'string' ? data : JSON.stringify(data).slice(0, 200)}`);
+      } else {
+        addLog('error', `${res.status} ${label}: ${typeof data === 'string' ? data : JSON.stringify(data).slice(0, 200)}`);
+      }
+      return { ok: res.ok, status: res.status, data };
+    } catch (e) {
+      addLog('error', `${label} failed: ${e.message}`);
+      return { ok: false, error: e.message };
+    }
+  }
+
+  async function onboard() {
+    const r = await apiCall('POST', 'api/v1/game/onboard', null, 'Onboard');
+    if (r.ok) setGameState(r.data);
+  }
+
+  async function getGameState() {
+    const r = await apiCall('GET', 'api/v1/game/state', null, 'GameState');
+    if (r.ok) setGameState(r.data);
+  }
+
+  async function setCharacterName() {
+    const name = prompt('Character name:');
+    if (!name) return;
+    const r = await apiCall('POST', 'api/v1/character/name', { name }, 'SetName');
+    if (r.ok) getGameState();
+  }
+
+  function setAllocField(field, val) {
+    const n = Math.max(0, parseInt(val) || 0);
+    setStatAlloc(prev => ({ ...prev, [field]: n }));
+  }
+
+  const allocTotal = statAlloc.strength + statAlloc.agility + statAlloc.intuition + statAlloc.vitality;
+  const charUnspent = gameState?.character?.unspentPoints ?? 0;
+  const allocValid = allocTotal > 0 && allocTotal <= charUnspent;
+
+  async function allocateStats() {
+    if (!char) { addLog('error', 'No character loaded — get game state first'); return; }
+    const body = {
+      expectedRevision: char.revision,
+      strength: statAlloc.strength,
+      agility: statAlloc.agility,
+      intuition: statAlloc.intuition,
+      vitality: statAlloc.vitality,
+    };
+    const r = await apiCall('POST', 'api/v1/character/stats', body, 'AllocateStats');
+    if (r.ok) {
+      addLog('event', `Stats allocated. New revision: ${r.data.revision}, Unspent: ${r.data.unspentPoints}`);
+      setStatAlloc({ strength: 0, agility: 0, intuition: 0, vitality: 0 });
+      getGameState();
+    }
+  }
+
+  async function joinQueue() {
+    const r = await apiCall('POST', 'api/v1/queue/join', null, 'JoinQueue');
+    if (r.ok) setQueueStatus(r.data);
+  }
+
+  async function getQueueStatus() {
+    const r = await apiCall('GET', 'api/v1/queue/status', null, 'QueueStatus');
+    if (r.ok) setQueueStatus(r.data);
+  }
+
+  async function leaveQueue() {
+    const r = await apiCall('POST', 'api/v1/queue/leave', null, 'LeaveQueue');
+    if (r.ok) { setQueueStatus(null); }
+  }
+
+  // --- SignalR Battle Hub ---
+  async function connectBattleHub(battleId) {
+    if (hubConnection) {
+      await hubConnection.stop();
+    }
+    setHubStatus('connecting');
+    addLog('info', `Connecting to BattleHub for battle ${battleId}...`);
+
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl(`${bffUrl}/battlehub`, { accessTokenFactory: () => token })
+      .withAutomaticReconnect()
+      .configureLogging(signalR.LogLevel.Information)
+      .build();
+
+    // Register event handlers
+    const events = ['BattleReady', 'TurnOpened', 'TurnResolved', 'PlayerDamaged', 'BattleStateUpdated', 'BattleEnded', 'BattleConnectionLost'];
+    events.forEach(evt => {
+      conn.on(evt, (payload) => {
+        addLog('event', `${evt}: ${JSON.stringify(payload).slice(0, 300)}`);
+        if (evt === 'BattleStateUpdated') {
+          setBattleState(prev => ({ ...prev, ...payload }));
+        } else if (evt === 'TurnOpened') {
+          setBattleState(prev => prev ? { ...prev, phase: 1, turnIndex: payload.turnIndex, deadlineUtc: payload.deadlineUtc } : prev);
+          setAttackZone(null);
+          setBlockPair(null);
+        } else if (evt === 'TurnResolved') {
+          setBattleState(prev => prev ? { ...prev, phase: 2, lastResolvedTurnIndex: payload.turnIndex } : prev);
+          setLastResponse({ event: evt, data: payload });
+        } else if (evt === 'PlayerDamaged') {
+          setBattleState(prev => {
+            if (!prev) return prev;
+            const updated = { ...prev };
+            if (payload.playerId === prev.playerAId) updated.playerAHp = payload.remainingHp;
+            if (payload.playerId === prev.playerBId) updated.playerBHp = payload.remainingHp;
+            return updated;
+          });
+        } else if (evt === 'BattleEnded') {
+          setBattleState(prev => prev ? { ...prev, phase: 3, endedReason: payload.reason, winnerPlayerId: payload.winnerPlayerId } : prev);
+        } else if (evt === 'BattleConnectionLost') {
+          addLog('warn', 'Downstream battle connection lost');
+          setHubStatus('disconnected');
+        }
+      });
+    });
+
+    // Battle Feed (commentary narration)
+    conn.on('BattleFeedUpdated', (payload) => {
+      addLog('event', `BattleFeedUpdated: ${payload?.entries?.length ?? 0} entries`);
+      if (payload && payload.entries && payload.entries.length > 0) {
+        setFeedEntries(prev => [...prev, ...payload.entries]);
+      }
+    });
+
+    conn.onclose(() => { setHubStatus('disconnected'); addLog('warn', 'Hub connection closed'); });
+    conn.onreconnecting(() => { setHubStatus('connecting'); addLog('warn', 'Hub reconnecting...'); });
+    conn.onreconnected(() => { setHubStatus('connected'); addLog('event', 'Hub reconnected'); });
+
+    try {
+      await conn.start();
+      setHubStatus('connected');
+      setHubConnection(conn);
+      addLog('event', 'Hub connected, joining battle...');
+
+      const snapshot = await conn.invoke('JoinBattle', battleId);
+      addLog('event', `JoinBattle snapshot: ${JSON.stringify(snapshot).slice(0, 400)}`);
+      setBattleState(snapshot);
+      setLastResponse({ event: 'JoinBattle', data: snapshot });
+    } catch (e) {
+      addLog('error', `Hub connection failed: ${e.message}`);
+      setHubStatus('disconnected');
+    }
+  }
+
+  async function submitTurn() {
+    if (!hubConnection || !battleState) return;
+    if (attackZone === null || blockPair === null) {
+      addLog('error', 'Select attack zone and block zones first');
+      return;
+    }
+    const pair = VALID_BLOCKS[blockPair];
+    const payload = JSON.stringify({
+      attackZone: ZONES[attackZone],
+      blockZonePrimary: pair[0],
+      blockZoneSecondary: pair[1],
+    });
+    addLog('info', `Submitting turn ${battleState.turnIndex}: ${payload}`);
+    try {
+      await hubConnection.invoke('SubmitTurnAction', battleState.battleId, battleState.turnIndex, payload);
+      addLog('event', 'Turn submitted');
+    } catch (e) {
+      addLog('error', `SubmitTurn failed: ${e.message}`);
+    }
+  }
+
+  async function disconnectHub() {
+    if (hubConnection) {
+      await hubConnection.stop();
+      setHubConnection(null);
+      setBattleState(null);
+      setHubStatus('disconnected');
+      setFeedEntries([]);
+    }
+  }
+
+  // --- Chat Hub (BFF /chathub) ---
+  useEffect(() => {
+    chatGlobalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatGlobalMessages]);
+  useEffect(() => {
+    chatDmEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatDmMessagesByPlayer, chatDmSelectedPlayerId]);
+
+  async function connectChatHub() {
+    if (!token) { addLog('error', 'Chat: login first'); return; }
+    if (chatConnection) { await chatConnection.stop(); }
+    setChatStatus('connecting');
+    setChatLastError(null);
+    addLog('info', 'Connecting to BFF /chathub...');
+
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl(`${bffUrl}/chathub`, { accessTokenFactory: () => token })
+      .withAutomaticReconnect()
+      .configureLogging(signalR.LogLevel.Information)
+      .build();
+
+    conn.on('GlobalMessageReceived', (payload) => {
+      addLog('event', `GlobalMessageReceived: ${payload?.sender?.displayName}: ${payload?.content}`);
+      setChatGlobalMessages(prev => [...prev, payload]);
+    });
+    conn.on('DirectMessageReceived', (payload) => {
+      addLog('event', `DirectMessageReceived from ${payload?.sender?.displayName}: ${payload?.content}`);
+      const otherId = payload?.sender?.playerId;
+      if (!otherId) return;
+      setChatDmMessagesByPlayer(prev => ({
+        ...prev,
+        [otherId]: [...(prev[otherId] || []), payload],
+      }));
+    });
+    conn.on('PlayerOnline', (payload) => {
+      addLog('event', `PlayerOnline: ${payload?.displayName} (${payload?.playerId})`);
+      setChatOnlinePlayers(prev => {
+        if (prev.some(p => p.playerId === payload.playerId)) return prev;
+        return [...prev, payload];
+      });
+      setChatOnlineTotal(t => t + 1);
+    });
+    conn.on('PlayerOffline', (payload) => {
+      addLog('event', `PlayerOffline: ${payload?.playerId}`);
+      setChatOnlinePlayers(prev => prev.filter(p => p.playerId !== payload.playerId));
+      setChatOnlineTotal(t => Math.max(0, t - 1));
+    });
+    conn.on('ChatError', (payload) => {
+      addLog('error', `ChatError: ${payload?.code} — ${payload?.message}`);
+      setChatLastError({ source: 'ChatError', code: payload?.code, message: payload?.message, retryAfterMs: payload?.retryAfterMs, at: new Date().toISOString() });
+    });
+    conn.on('ChatConnectionLost', (payload) => {
+      addLog('error', `ChatConnectionLost: ${JSON.stringify(payload || {})}`);
+      setChatLastError({ source: 'ChatConnectionLost', code: payload?.code || 'ConnectionLost', message: payload?.message || 'Downstream chat connection lost', at: new Date().toISOString() });
+    });
+
+    conn.onclose(err => { setChatStatus('disconnected'); setChatJoinedGlobal(false); addLog('warn', `Chat hub closed${err ? ': ' + err.message : ''}`); });
+    conn.onreconnecting(err => { setChatStatus('connecting'); addLog('warn', `Chat hub reconnecting${err ? ': ' + err.message : ''}`); });
+    conn.onreconnected(() => { setChatStatus('connected'); addLog('event', 'Chat hub reconnected'); });
+
+    try {
+      await conn.start();
+      setChatConnection(conn);
+      setChatStatus('connected');
+      addLog('event', 'Chat hub connected');
+    } catch (e) {
+      addLog('error', `Chat hub connect failed: ${e.message}`);
+      setChatStatus('disconnected');
+      setChatLastError({ source: 'ConnectFailed', code: 'ConnectFailed', message: e.message, at: new Date().toISOString() });
+    }
+  }
+
+  async function disconnectChatHub() {
+    if (chatConnection) {
+      try { await chatConnection.stop(); } catch { /* swallow */ }
+      setChatConnection(null);
+    }
+    setChatStatus('disconnected');
+    setChatJoinedGlobal(false);
+  }
+
+  async function chatJoinGlobal() {
+    if (!chatConnection) return;
+    try {
+      addLog('info', 'Invoking JoinGlobalChat...');
+      const snap = await chatConnection.invoke('JoinGlobalChat');
+      addLog('event', `JoinGlobalChat: conv=${snap?.conversationId} recent=${snap?.recentMessages?.length} online=${snap?.totalOnline}`);
+      setLastResponse({ event: 'JoinGlobalChat', data: snap });
+      setChatJoinedGlobal(true);
+      if (snap?.conversationId) setChatGlobalConversationId(snap.conversationId);
+      if (Array.isArray(snap?.recentMessages)) {
+        // RecentMessages are MessageDto shape {messageId, sender, content, sentAt}; prepend to state.
+        setChatGlobalMessages(prev => {
+          const seen = new Set(prev.map(m => m.messageId));
+          const incoming = snap.recentMessages.filter(m => !seen.has(m.messageId));
+          return [...incoming, ...prev];
+        });
+      }
+      if (Array.isArray(snap?.onlinePlayers)) {
+        setChatOnlinePlayers(snap.onlinePlayers);
+        setChatOnlineTotal(snap.totalOnline ?? snap.onlinePlayers.length);
+      }
+    } catch (e) {
+      addLog('error', `JoinGlobalChat failed: ${e.message}`);
+      setChatLastError({ source: 'InvokeFailed', code: 'JoinGlobalChatFailed', message: e.message, at: new Date().toISOString() });
+    }
+  }
+
+  async function chatLeaveGlobal() {
+    if (!chatConnection) return;
+    try {
+      await chatConnection.invoke('LeaveGlobalChat');
+      addLog('event', 'LeaveGlobalChat OK');
+      setChatJoinedGlobal(false);
+    } catch (e) {
+      addLog('error', `LeaveGlobalChat failed: ${e.message}`);
+    }
+  }
+
+  async function chatSendGlobal() {
+    if (!chatConnection || !chatGlobalInput.trim()) return;
+    const content = chatGlobalInput;
+    try {
+      await chatConnection.invoke('SendGlobalMessage', content);
+      addLog('info', `SendGlobalMessage sent (${content.length} chars)`);
+      setChatGlobalInput('');
+    } catch (e) {
+      addLog('error', `SendGlobalMessage failed: ${e.message}`);
+    }
+  }
+
+  async function chatSendDm() {
+    if (!chatConnection || !chatDmSelectedPlayerId || !chatDmInput.trim()) return;
+    const content = chatDmInput;
+    const recipient = chatDmSelectedPlayerId;
+    try {
+      const res = await chatConnection.invoke('SendDirectMessage', recipient, content);
+      addLog('event', `SendDirectMessage OK: ${JSON.stringify(res)}`);
+      setLastResponse({ event: 'SendDirectMessage', data: res });
+      // Optimistic local echo — server will NOT fan back to sender in v1 (DirectMessageReceived goes to recipient only).
+      if (res && res.messageId) {
+        setChatDmMessagesByPlayer(prev => ({
+          ...prev,
+          [recipient]: [...(prev[recipient] || []), {
+            messageId: res.messageId,
+            conversationId: res.conversationId,
+            sender: { playerId: '(me)', displayName: '(me)' },
+            content,
+            sentAt: res.sentAt || new Date().toISOString(),
+          }],
+        }));
+      }
+      setChatDmInput('');
+    } catch (e) {
+      addLog('error', `SendDirectMessage failed: ${e.message}`);
+    }
+  }
+
+  async function chatLoadConversations() {
+    const r = await apiCall('GET', 'api/v1/chat/conversations', null, 'Conversations');
+    if (r.ok) setChatConversations(r.data?.conversations || []);
+  }
+
+  async function chatLoadDmHistory(otherPlayerId) {
+    if (!otherPlayerId) return;
+    const r = await apiCall('GET', `api/v1/chat/direct/${otherPlayerId}/messages?limit=50`, null, 'DM History');
+    if (r.ok) {
+      const msgs = r.data?.messages || [];
+      setChatDmMessagesByPlayer(prev => ({ ...prev, [otherPlayerId]: msgs }));
+    }
+  }
+
+  async function chatLoadConversationMessages(conversationId) {
+    if (!conversationId) return;
+    const r = await apiCall('GET', `api/v1/chat/conversations/${conversationId}/messages?limit=50`, null, 'Conv Messages');
+    if (r.ok && conversationId === chatGlobalConversationId) {
+      const msgs = r.data?.messages || [];
+      setChatGlobalMessages(msgs);
+    }
+  }
+
+  async function chatLoadOnline() {
+    const r = await apiCall('GET', 'api/v1/chat/presence/online?limit=100', null, 'Online Players');
+    if (r.ok) {
+      setChatOnlinePlayers(r.data?.players || []);
+      setChatOnlineTotal(r.data?.totalOnline || 0);
+    }
+  }
+
+  async function chatLoadPlayerCard(playerId) {
+    const id = playerId || chatCardLookupId;
+    if (!id) { addLog('error', 'Player card: id required'); return; }
+    const r = await apiCall('GET', `api/v1/players/${id}/card`, null, 'Player Card');
+    if (r.ok) { setChatPlayerCard(r.data); setChatTab('card'); }
+  }
+
+  function chatPickDmTarget(playerId, displayName) {
+    setChatDmSelectedPlayerId(playerId);
+    setChatTab('dm');
+    if (!chatDmMessagesByPlayer[playerId]) chatLoadDmHistory(playerId);
+    addLog('info', `DM target set: ${displayName || playerId}`);
+  }
+
+  // --- Derived state ---
+  const char = gameState?.character;
+  const phaseNames = ['ArenaOpen', 'TurnOpen', 'Resolving', 'Ended'];
+  // Battle's SignalR hub uses JsonStringEnumConverter, so Phase arrives as a string
+  // (e.g. "TurnOpen") in the JoinBattle snapshot and BattleStateUpdated events. The
+  // local TurnOpened/TurnResolved/BattleEnded handlers set phase numerically. Accept both.
+  const phaseIndex = battleState
+    ? (typeof battleState.phase === 'number' ? battleState.phase : phaseNames.indexOf(battleState.phase))
+    : -1;
+  const currentPhase = battleState
+    ? (phaseIndex >= 0 ? phaseNames[phaseIndex] : `Unknown(${battleState.phase})`)
+    : null;
+  const isTurnOpen = phaseIndex === 1;
+  const hasBattle = queueStatus?.battleId || battleState;
+  const battleId = battleState?.battleId || queueStatus?.battleId;
+
+  // Determine which player is "me" vs "enemy" — we don't know our player ID from the hub,
+  // so we show both panels with IDs and let the developer identify themselves
+  const playerA = battleState ? { id: battleState.playerAId, hp: battleState.playerAHp, label: 'Player A' } : null;
+  const playerB = battleState ? { id: battleState.playerBId, hp: battleState.playerBHp, label: 'Player B' } : null;
+
+  function renderHpBar(hp, maxHp) {
+    const pct = maxHp > 0 ? Math.max(0, Math.min(100, (hp / maxHp) * 100)) : 0;
+    const color = pct > 30 ? 'var(--hp-bar)' : 'var(--hp-bar-low)';
+    return (
+      <div className="hp-bar-container">
+        <div className="hp-bar-fill" style={{ width: `${pct}%`, background: color }} />
+        <div className="hp-bar-text">{hp != null ? `${hp} HP` : '? HP'}</div>
+      </div>
+    );
+  }
+
+  function renderPlayerPanel(player, side) {
+    if (!player) {
+      return (
+        <div className="panel player-panel">
+          <div className="panel-title">{side === 'left' ? 'Player A' : 'Player B'}</div>
+          <div className="avatar-placeholder">?</div>
+          <div style={{ color: 'var(--text2)', fontSize: 13, textAlign: 'center' }}>Waiting for battle...</div>
+        </div>
+      );
+    }
+    return (
+      <div className="panel player-panel">
+        <div className="panel-title">{player.label}</div>
+        <div className="avatar-placeholder">{side === 'left' ? 'A' : 'B'}</div>
+        {renderHpBar(player.hp, player.hp != null ? Math.max(player.hp, 100) : 100)}
+        <div className="stat-row"><span className="stat-label">ID</span><span style={{ fontSize: 11, fontFamily: 'monospace' }}>{player.id?.slice(0, 8)}...</span></div>
+        {battleState?.winnerPlayerId && (
+          <div className="stat-row">
+            <span className="stat-label">Result</span>
+            <span style={{ color: battleState.winnerPlayerId === player.id ? 'var(--green)' : 'var(--red)', fontWeight: 600 }}>
+              {battleState.winnerPlayerId === player.id ? 'WINNER' : 'DEFEATED'}
+            </span>
+          </div>
+        )}
+        {battleState?.endedReason != null && !battleState?.winnerPlayerId && (
+          <div className="stat-row"><span className="stat-label">Result</span><span style={{ color: 'var(--yellow)' }}>DRAW</span></div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      {/* Top Bar */}
+      <div className="top-bar panel" style={{ flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginRight: 8 }}>KOMBATS</div>
+        <div className={`status-dot ${hubStatus}`} title={`Hub: ${hubStatus}`} />
+        <span style={{ fontSize: 12, color: 'var(--text2)', marginRight: 'auto' }}>{hubStatus}</span>
+
+        <div className="config-row">
+          <label>BFF:</label>
+          <input value={bffUrl} onChange={e => setBffUrl(e.target.value)} style={{ width: 180 }} />
+        </div>
+        <div className="config-row">
+          <label>Keycloak:</label>
+          <input value={keycloakUrl} onChange={e => setKeycloakUrl(e.target.value)} style={{ width: 220 }} />
+        </div>
+      </div>
+
+      {/* Auth Row */}
+      <div className="top-bar panel">
+        <div className="auth-section">
+          <input placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} style={{ width: 120 }} />
+          <input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ width: 120 }}
+            onKeyDown={e => e.key === 'Enter' && doLogin()} />
+          <button className="primary" onClick={doLogin}>Login</button>
+          <span style={{ fontSize: 11, color: token ? 'var(--green)' : 'var(--text2)' }}>{token ? `Token: ...${token.slice(-12)}` : 'No token'}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onboard} disabled={!token}>Onboard</button>
+          <button onClick={getGameState} disabled={!token}>Game State</button>
+          <button onClick={setCharacterName} disabled={!token}>Set Name</button>
+        </div>
+      </div>
+
+      {/* Character Stats Row */}
+      <div className="panel" style={{ flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setShowStats(s => !s)}>
+          <div className="panel-title" style={{ margin: 0 }}>Character Stats</div>
+          {char && (
+            <span className={`stats-unspent ${charUnspent > 0 ? 'has-points' : 'no-points'}`}>
+              {charUnspent} unspent
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: 'var(--text2)', marginLeft: 'auto' }}>{showStats ? '\u25B2' : '\u25BC'}</span>
+        </div>
+        {showStats && (
+          <div className="stats-panel" style={{ marginTop: 10 }}>
+            {/* Current stats */}
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4, fontWeight: 600 }}>CURRENT</div>
+              {char ? (
+                <div className="stats-current">
+                  <span className="stat-label">STR</span><span className="stat-value">{char.strength}</span>
+                  <span className="stat-label">AGI</span><span className="stat-value">{char.agility}</span>
+                  <span className="stat-label">INT</span><span className="stat-value">{char.intuition}</span>
+                  <span className="stat-label">VIT</span><span className="stat-value">{char.vitality}</span>
+                  <span className="stat-label">Level</span><span className="stat-value">{char.level}</span>
+                  <span className="stat-label">Rev</span><span className="stat-value">{char.revision}</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text2)' }}>No character — onboard first</div>
+              )}
+            </div>
+
+            {/* Allocation inputs */}
+            <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: 'var(--gap)' }}>
+              <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 4, fontWeight: 600 }}>ALLOCATE POINTS</div>
+              <div className="stats-alloc">
+                <label>STR +</label>
+                <input type="number" min="0" value={statAlloc.strength} onChange={e => setAllocField('strength', e.target.value)} />
+                <label>AGI +</label>
+                <input type="number" min="0" value={statAlloc.agility} onChange={e => setAllocField('agility', e.target.value)} />
+                <label>INT +</label>
+                <input type="number" min="0" value={statAlloc.intuition} onChange={e => setAllocField('intuition', e.target.value)} />
+                <label>VIT +</label>
+                <input type="number" min="0" value={statAlloc.vitality} onChange={e => setAllocField('vitality', e.target.value)} />
+              </div>
+            </div>
+
+            {/* Summary + submit */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'flex-end' }}>
+              <div style={{ fontSize: 12, color: allocTotal > charUnspent ? 'var(--red)' : 'var(--text2)' }}>
+                Spending: {allocTotal} / {charUnspent} available
+              </div>
+              <button className="primary" onClick={allocateStats} disabled={!token || !char || !allocValid}>
+                Allocate Stats
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Queue Row */}
+      <div className="top-bar panel">
+        <span style={{ fontSize: 12, color: 'var(--text2)', marginRight: 8 }}>Queue:</span>
+        <div className="queue-controls">
+          <button className="primary" onClick={joinQueue} disabled={!token}>Join Queue</button>
+          <button onClick={getQueueStatus} disabled={!token}>Status</button>
+          <button className="danger" onClick={leaveQueue} disabled={!token}>Leave</button>
+        </div>
+        {queueStatus && (
+          <span style={{ fontSize: 12, marginLeft: 8 }}>
+            Status: <b>{queueStatus.status}</b>
+            {queueStatus.matchId && <> | Match: <code>{queueStatus.matchId.slice(0, 8)}</code></>}
+            {queueStatus.battleId && <> | Battle: <code>{queueStatus.battleId.slice(0, 8)}</code></>}
+          </span>
+        )}
+        {battleId && hubStatus === 'disconnected' && (
+          <button className="primary" onClick={() => connectBattleHub(battleId)} style={{ marginLeft: 8 }}>Connect Battle</button>
+        )}
+        {hubStatus !== 'disconnected' && (
+          <button className="danger" onClick={disconnectHub} style={{ marginLeft: 8 }}>Disconnect</button>
+        )}
+      </div>
+
+      {/* Chat Panel — Kombats Chat v1 via BFF /chathub + /api/v1/chat/* */}
+      <div className="panel" style={{ flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => setChatOpen(o => !o)}>
+          <div className="panel-title" style={{ margin: 0 }}>Chat (v1)</div>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: chatStatus === 'connected' ? 'var(--green)' : chatStatus === 'connecting' ? 'var(--yellow)' : 'var(--red)' }} title={`Chat hub: ${chatStatus}`} />
+          <span style={{ fontSize: 11, color: 'var(--text2)' }}>{chatStatus}{chatJoinedGlobal ? ' · global joined' : ''}</span>
+          {chatLastError && (
+            <span style={{ fontSize: 11, color: 'var(--red)', marginLeft: 8 }}>
+              ⚠ {chatLastError.source}: {chatLastError.code}{chatLastError.message ? ' — ' + chatLastError.message : ''}
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: 'var(--text2)', marginLeft: 'auto' }}>{chatOpen ? '\u25B2' : '\u25BC'}</span>
+        </div>
+        {chatOpen && (
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Controls row */}
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              {chatStatus === 'disconnected' && (
+                <button className="primary" onClick={connectChatHub} disabled={!token}>Connect Chat</button>
+              )}
+              {chatStatus !== 'disconnected' && (
+                <button className="danger" onClick={disconnectChatHub}>Disconnect</button>
+              )}
+              <button onClick={chatJoinGlobal} disabled={chatStatus !== 'connected' || chatJoinedGlobal}>Join Global</button>
+              <button onClick={chatLeaveGlobal} disabled={chatStatus !== 'connected' || !chatJoinedGlobal}>Leave Global</button>
+              <button onClick={chatLoadConversations} disabled={!token}>Load Conversations</button>
+              <button onClick={chatLoadOnline} disabled={!token}>Load Online</button>
+              {chatLastError && (
+                <button onClick={() => setChatLastError(null)} style={{ fontSize: 11 }}>Clear Error</button>
+              )}
+            </div>
+
+            {/* Error banner */}
+            {chatLastError && (
+              <div style={{ padding: 8, background: 'rgba(239,83,80,.12)', border: '1px solid var(--red)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--red)' }}>
+                <b>{chatLastError.source}</b> · {chatLastError.code}
+                {chatLastError.message ? ` — ${chatLastError.message}` : ''}
+                {chatLastError.retryAfterMs ? ` (retry after ${chatLastError.retryAfterMs}ms)` : ''}
+                <span style={{ color: 'var(--text2)', marginLeft: 8 }}>{chatLastError.at}</span>
+              </div>
+            )}
+
+            {/* Tab bar */}
+            <div className="tab-bar">
+              <button className={chatTab === 'global' ? 'active' : ''} onClick={() => setChatTab('global')}>Global ({chatGlobalMessages.length})</button>
+              <button className={chatTab === 'dm' ? 'active' : ''} onClick={() => setChatTab('dm')}>DMs</button>
+              <button className={chatTab === 'online' ? 'active' : ''} onClick={() => setChatTab('online')}>Online ({chatOnlineTotal})</button>
+              <button className={chatTab === 'conversations' ? 'active' : ''} onClick={() => setChatTab('conversations')}>Conversations ({chatConversations.length})</button>
+              <button className={chatTab === 'card' ? 'active' : ''} onClick={() => setChatTab('card')}>Player Card</button>
+            </div>
+
+            {/* Global tab */}
+            {chatTab === 'global' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="feed-content" style={{ maxHeight: 220, minHeight: 120 }}>
+                  {chatGlobalMessages.length === 0 && <div className="feed-empty">No global messages. Join global chat to receive a recent snapshot.</div>}
+                  {chatGlobalMessages.map((m, i) => (
+                    <div key={m.messageId || i} className="feed-entry tone-neutral">
+                      <span style={{ color: 'var(--text2)', fontSize: 11, marginRight: 6 }}>{m.sentAt ? new Date(m.sentAt).toLocaleTimeString() : ''}</span>
+                      <b style={{ color: 'var(--accent)' }}>{m.sender?.displayName || '?'}</b>: {m.content}
+                    </div>
+                  ))}
+                  <div ref={chatGlobalEndRef} />
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input style={{ flex: 1 }} placeholder="Global message..." value={chatGlobalInput}
+                    onChange={e => setChatGlobalInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && chatSendGlobal()} />
+                  <button className="primary" onClick={chatSendGlobal} disabled={!chatJoinedGlobal || !chatGlobalInput.trim()}>Send</button>
+                </div>
+                {chatGlobalConversationId && (
+                  <div style={{ fontSize: 11, color: 'var(--text2)' }}>
+                    Global conv id: <code>{chatGlobalConversationId}</code>
+                    <button style={{ marginLeft: 8, fontSize: 11, padding: '3px 8px' }} onClick={() => chatLoadConversationMessages(chatGlobalConversationId)}>Reload history via HTTP</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DM tab */}
+            {chatTab === 'dm' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <label style={{ fontSize: 12, color: 'var(--text2)' }}>Other player id:</label>
+                  <input style={{ flex: 1, minWidth: 240, fontFamily: 'monospace', fontSize: 12 }}
+                    placeholder="<guid>" value={chatDmSelectedPlayerId}
+                    onChange={e => setChatDmSelectedPlayerId(e.target.value.trim())} />
+                  <button onClick={() => chatLoadDmHistory(chatDmSelectedPlayerId)} disabled={!chatDmSelectedPlayerId}>Load history</button>
+                </div>
+                <div className="feed-content" style={{ maxHeight: 220, minHeight: 120 }}>
+                  {(!chatDmSelectedPlayerId || !(chatDmMessagesByPlayer[chatDmSelectedPlayerId] || []).length) && (
+                    <div className="feed-empty">{chatDmSelectedPlayerId ? 'No DM history loaded.' : 'Paste another player id, or pick from Online / Conversations tab.'}</div>
+                  )}
+                  {(chatDmMessagesByPlayer[chatDmSelectedPlayerId] || []).map((m, i) => (
+                    <div key={m.messageId || i} className="feed-entry tone-neutral">
+                      <span style={{ color: 'var(--text2)', fontSize: 11, marginRight: 6 }}>{m.sentAt ? new Date(m.sentAt).toLocaleTimeString() : ''}</span>
+                      <b style={{ color: m.sender?.playerId === '(me)' ? 'var(--green)' : 'var(--accent)' }}>{m.sender?.displayName || '?'}</b>: {m.content}
+                    </div>
+                  ))}
+                  <div ref={chatDmEndRef} />
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input style={{ flex: 1 }} placeholder="Direct message..." value={chatDmInput}
+                    onChange={e => setChatDmInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && chatSendDm()} />
+                  <button className="primary" onClick={chatSendDm} disabled={chatStatus !== 'connected' || !chatDmSelectedPlayerId || !chatDmInput.trim()}>Send DM</button>
+                </div>
+              </div>
+            )}
+
+            {/* Online tab */}
+            {chatTab === 'online' && (
+              <div className="feed-content" style={{ maxHeight: 240, minHeight: 120 }}>
+                {chatOnlinePlayers.length === 0 && <div className="feed-empty">No online players loaded. Click "Load Online" or "Join Global".</div>}
+                {chatOnlinePlayers.map((p) => (
+                  <div key={p.playerId} className="feed-entry tone-neutral" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1 }}>
+                      <b style={{ color: 'var(--accent)' }}>{p.displayName || '?'}</b>{' '}
+                      <code style={{ fontSize: 11, color: 'var(--text2)' }}>{p.playerId}</code>
+                    </span>
+                    <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatPickDmTarget(p.playerId, p.displayName)}>DM</button>
+                    <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatLoadPlayerCard(p.playerId)}>Card</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Conversations tab */}
+            {chatTab === 'conversations' && (
+              <div className="feed-content" style={{ maxHeight: 240, minHeight: 120 }}>
+                {chatConversations.length === 0 && <div className="feed-empty">No conversations loaded. Click "Load Conversations".</div>}
+                {chatConversations.map((c) => (
+                  <div key={c.conversationId} className="feed-entry tone-neutral" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ flex: 1 }}>
+                      <b style={{ color: 'var(--accent)' }}>{c.type}</b>{' '}
+                      {c.otherPlayer ? <>with <b>{c.otherPlayer.displayName}</b> <code style={{ fontSize: 11, color: 'var(--text2)' }}>{c.otherPlayer.playerId}</code></> : <code style={{ fontSize: 11, color: 'var(--text2)' }}>{c.conversationId}</code>}
+                      {c.lastMessageAt && <span style={{ color: 'var(--text2)', fontSize: 11, marginLeft: 6 }}>last: {new Date(c.lastMessageAt).toLocaleString()}</span>}
+                    </span>
+                    <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatLoadConversationMessages(c.conversationId)}>Load msgs</button>
+                    {c.otherPlayer && <button style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => chatPickDmTarget(c.otherPlayer.playerId, c.otherPlayer.displayName)}>Open DM</button>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Player Card tab */}
+            {chatTab === 'card' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <label style={{ fontSize: 12, color: 'var(--text2)' }}>Player id:</label>
+                  <input style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }} placeholder="<guid>"
+                    value={chatCardLookupId} onChange={e => setChatCardLookupId(e.target.value.trim())} />
+                  <button className="primary" onClick={() => chatLoadPlayerCard()} disabled={!chatCardLookupId}>Load card</button>
+                </div>
+                {!chatPlayerCard && <div className="feed-empty">No card loaded.</div>}
+                {chatPlayerCard && (
+                  <div className="panel" style={{ background: 'var(--surface2)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{chatPlayerCard.displayName}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}>
+                      <code>{chatPlayerCard.playerId}</code> · Level {chatPlayerCard.level}
+                    </div>
+                    <div className="stats-current">
+                      <span className="stat-label">STR</span><span className="stat-value">{chatPlayerCard.strength}</span>
+                      <span className="stat-label">AGI</span><span className="stat-value">{chatPlayerCard.agility}</span>
+                      <span className="stat-label">INT</span><span className="stat-value">{chatPlayerCard.intuition}</span>
+                      <span className="stat-label">VIT</span><span className="stat-value">{chatPlayerCard.vitality}</span>
+                      <span className="stat-label">Wins</span><span className="stat-value" style={{ color: 'var(--green)' }}>{chatPlayerCard.wins}</span>
+                      <span className="stat-label">Losses</span><span className="stat-value" style={{ color: 'var(--red)' }}>{chatPlayerCard.losses}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Main Battle Area */}
+      <div className="main-area">
+        {/* Left: Player A */}
+        {renderPlayerPanel(playerA, 'left')}
+
+        {/* Center: Action Panel */}
+        <div className="center-panel">
+          <div className="panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="panel-title" style={{ margin: 0 }}>Battle Actions</div>
+              {currentPhase && <span className={`phase-badge ${currentPhase}`}>{currentPhase}</span>}
+            </div>
+            {battleState && (
+              <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                Turn {battleState.turnIndex} | Deadline: {battleState.deadlineUtc ? new Date(battleState.deadlineUtc).toLocaleTimeString() : '-'}
+                {battleState.ruleset && <> | {battleState.ruleset.turnSeconds}s/turn</>}
+              </div>
+            )}
+
+            <div>
+              <div className="panel-title">Attack Zone</div>
+              <div className="zone-selector">
+                {ZONES.map((z, i) => (
+                  <label key={z} className={`zone-option ${attackZone === i ? 'selected' : ''}`}>
+                    <input type="radio" name="attack" checked={attackZone === i} onChange={() => setAttackZone(i)} disabled={!isTurnOpen} />
+                    {z}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="panel-title">Block Zones (adjacent pair)</div>
+              <div className="block-grid">
+                {VALID_BLOCKS.map((pair, i) => (
+                  <label key={i} className={`block-option ${blockPair === i ? 'selected' : ''}`}>
+                    <input type="radio" name="block" checked={blockPair === i} onChange={() => setBlockPair(i)} disabled={!isTurnOpen} />
+                    {blockLabel(pair)}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="action-summary">
+              Attack: <span>{attackZone !== null ? ZONES[attackZone] : '-'}</span> | Block: <span>{blockPair !== null ? blockLabel(VALID_BLOCKS[blockPair]) : '-'}</span>
+            </div>
+
+            <button className="primary" onClick={submitTurn} disabled={!isTurnOpen || attackZone === null || blockPair === null}
+              style={{ marginTop: 'auto' }}>
+              Confirm Turn
+            </button>
+          </div>
+        </div>
+
+        {/* Right: Player B */}
+        {renderPlayerPanel(playerB, 'right')}
+      </div>
+
+      {/* Bottom: Log Panel */}
+      <div className="log-panel panel">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <div className="panel-title" style={{ margin: 0 }}>{debugTab === 'feed' ? 'Battle Feed' : 'Event Log'}</div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <div className="tab-bar">
+              <button className={debugTab === 'feed' ? 'active' : ''} onClick={() => setDebugTab('feed')}>Battle Feed</button>
+              <button className={debugTab === 'log' ? 'active' : ''} onClick={() => setDebugTab('log')}>Log</button>
+              <button className={debugTab === 'state' ? 'active' : ''} onClick={() => setDebugTab('state')}>State</button>
+              <button className={debugTab === 'response' ? 'active' : ''} onClick={() => setDebugTab('response')}>Last Response</button>
+            </div>
+            {debugTab === 'feed' && <button onClick={() => setFeedEntries([])} style={{ fontSize: 11, padding: '3px 8px' }}>Clear</button>}
+            {debugTab !== 'feed' && <button onClick={() => setLogs([])} style={{ fontSize: 11, padding: '3px 8px' }}>Clear</button>}
+          </div>
+        </div>
+        {debugTab === 'feed' && (
+          <div className="feed-content">
+            {feedEntries.length === 0 && (
+              <div className="feed-empty">Waiting for battle to begin...</div>
+            )}
+            {(() => {
+              let lastTurn = -1;
+              const TONE_NAMES = ['neutral','aggressive','defensive','dramatic','system','flavor'];
+              const SEV_NAMES = ['normal','important','critical'];
+              return feedEntries.map((e, i) => {
+                const toneName = typeof e.tone === 'number' ? (TONE_NAMES[e.tone] || 'neutral') : String(e.tone || 'Neutral').toLowerCase();
+                const sevName = typeof e.severity === 'number' ? (SEV_NAMES[e.severity] || 'normal') : String(e.severity || 'Normal').toLowerCase();
+                const toneClass = 'tone-' + toneName;
+                const sevClass = 'severity-' + sevName;
+                const showTurnHeader = e.turnIndex !== lastTurn && e.turnIndex < 2147483647;
+                lastTurn = e.turnIndex;
+                return React.createElement(React.Fragment, { key: e.key || i },
+                  showTurnHeader && React.createElement('div', { className: 'feed-turn-header' }, `Round ${e.turnIndex + 1}`),
+                  React.createElement('div', { className: `feed-entry ${toneClass} ${sevClass}` }, e.text)
+                );
+              });
+            })()}
+            <div ref={feedEndRef} />
+          </div>
+        )}
+        {debugTab === 'log' && (
+          <div className="log-content">
+            {logs.map((l, i) => (
+              <div key={i} className={`log-entry ${l.type}`}>
+                <span className="timestamp">{l.ts}</span>{l.msg}
+              </div>
+            ))}
+            <div ref={logEndRef} />
+          </div>
+        )}
+        {debugTab === 'state' && (
+          <div className="debug-json">{JSON.stringify({ gameState, queueStatus, battleState, hubStatus }, null, 2)}</div>
+        )}
+        {debugTab === 'response' && (
+          <div className="debug-json">{lastResponse ? JSON.stringify(lastResponse, null, 2) : 'No response yet'}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

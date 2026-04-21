@@ -7,7 +7,7 @@ namespace Kombats.Battle.Application.UseCases.Turns;
 /// Converts canonical action commands to domain PlayerAction objects.
 /// This is the boundary between Application and Domain layers.
 /// </summary>
-public static class PlayerActionConverter
+internal static class PlayerActionConverter
 {
     /// <summary>
     /// Converts a canonical action command to a domain PlayerAction.
