@@ -20,7 +20,9 @@
       "Bash(npx -y typescript@latest tsc --noEmit --jsx react-jsx --esModuleInterop --skipLibCheck --moduleResolution bundler --module esnext --target es2020 --strict src/app/components/BodyZoneSelector.tsx)",
       "Bash(pip install *)",
       "Bash(python scripts/analyze_silhouette.py)",
-      "Bash(PYTHONIOENCODING=utf-8 python scripts/analyze_silhouette.py)"
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/analyze_silhouette.py)",
+      "Bash(git diff *)",
+      "Read(//tmp/**)"
     ]
   }
 }

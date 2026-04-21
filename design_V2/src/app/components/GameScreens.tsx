@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Trophy, Heart, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PrimaryButton, SecondaryButton, GhostButton, GamePanel } from './KombatsUI';
+import {
+  Button as DSButton,
+  Panel as DSPanel,
+} from '../../design-system/primitives';
+import { accent, radius, space, surface, typography } from '../../design-system/tokens';
 import {
   RewardRow,
   QueueCard,
@@ -51,6 +56,36 @@ const FIGHTER_IMAGE_BASE_FILTER = 'drop-shadow(0 25px 50px rgba(0,0,0,0.9))';
 const FIGHTER_IMAGE_MARGIN_BOTTOM = '-17vh';
 const FIGHTER_COLUMN_LEFT_CLASSNAME = 'absolute left-0 bottom-0 flex flex-col items-center';
 const FIGHTER_COLUMN_RIGHT_CLASSNAME = 'absolute right-0 bottom-0 flex flex-col items-center';
+
+// Combat panel's YOUR TURN status indicator. Quiet filled badge — reads
+// as state, not a CTA competitor with LOCK IN.
+const YOUR_TURN_BADGE_STYLE = {
+  background: surface.glassSubtle,
+  color: accent.text,
+  padding: '4px 12px',
+  borderRadius: radius.sm,
+  fontSize: typography.labelDisplay.fontSize,
+  letterSpacing: typography.labelDisplay.letterSpacing,
+  textTransform: typography.labelDisplay.textTransform,
+  fontWeight: typography.labelDisplay.fontWeight,
+} as const;
+
+// Section heading sized between PanelHeader's 11px label scale and an
+// 18–22px ceremonial display. Cinzel at 14px reads as a workflow section
+// header that is still visibly louder than the 13px labelLarge tabs
+// below it. text-shadow follows the OnboardingCard TITLE_STYLE
+// precedent for gold-on-glass headings.
+const SECTION_TITLE_STYLE: CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+  fontWeight: 500,
+  letterSpacing: '0.24em',
+  textTransform: 'uppercase',
+  color: accent.primary,
+  textShadow: '0 2px 12px rgba(201, 162, 90, 0.25)',
+  lineHeight: 1.2,
+};
 
 // ==================== MAIN HUB / LOBBY ====================
 
@@ -442,43 +477,49 @@ export function BattleScreen({
           className="absolute top-1/2 left-1/2 w-[400px]"
           style={{ transform: 'translate(-50%, -62%)' }}
         >
-          <div className="bg-[var(--kombats-panel)]/55 backdrop-blur-md border border-[var(--kombats-panel-border)] shadow-[0_12px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)] rounded-md overflow-hidden">
-            {/* Battle meta row — round / timer / turn state */}
-            <div className="px-4 py-2 border-b border-[var(--kombats-panel-border)] flex items-center justify-between gap-3 bg-[var(--kombats-panel)]/45">
-              <span className="text-[11px] text-[var(--kombats-gold)] uppercase tracking-widest">Round 2</span>
-              <span className="flex items-center gap-1.5 text-[var(--kombats-text-primary)] text-xs">
-                <Clock className="w-3 h-3 text-[var(--kombats-moon-silver)]" />
-                <span className="tabular-nums">28</span>
-              </span>
-              <span className="px-2 py-0.5 bg-[var(--kombats-gold)]/20 border border-[var(--kombats-gold)] text-[var(--kombats-gold)] text-[10px] uppercase tracking-widest rounded-sm">
-                Your Turn
-              </span>
-            </div>
+          <DSPanel variant="glass" radius="md" elevation="panel" bordered>
+            <div style={{ padding: space.lg }}>
+              {/* Battle meta row — round / timer / turn state */}
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[11px] text-[var(--kombats-gold)] uppercase tracking-widest">Round 2</span>
+                <span className="flex items-center gap-1.5 text-[var(--kombats-text-primary)] text-xs">
+                  <Clock className="w-3 h-3 text-[var(--kombats-moon-silver)]" />
+                  <span className="tabular-nums">28</span>
+                </span>
+                <span style={YOUR_TURN_BADGE_STYLE}>Your Turn</span>
+              </div>
 
-            {/* Section header */}
-            <div className="px-4 py-2 border-b border-[var(--kombats-panel-border)] flex items-center justify-center">
-              <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--kombats-gold)]">Select Attack &amp; Block</span>
-            </div>
+              <div
+                style={{
+                  textAlign: 'center',
+                  marginTop: space.md,
+                  marginBottom: space.md,
+                }}
+              >
+                <h2 style={SECTION_TITLE_STYLE}>SELECT ATTACK &amp; BLOCK</h2>
+              </div>
 
-            <div className="px-5 pt-4 pb-4">
-              <BodyZoneSelector
-                attack={selectedAttack}
-                block={selectedDefense}
-                onAttackChange={setSelectedAttack}
-                onBlockChange={setSelectedDefense}
-                width={160}
-                layout="split"
-                action={
-                  <PrimaryButton
-                    size="large"
-                    disabled={!selectedAttack || !selectedDefense}
-                  >
-                    Lock In
-                  </PrimaryButton>
-                }
-              />
+              <div>
+                <BodyZoneSelector
+                  attack={selectedAttack}
+                  block={selectedDefense}
+                  onAttackChange={setSelectedAttack}
+                  onBlockChange={setSelectedDefense}
+                  width={160}
+                  layout="split"
+                  action={
+                    <DSButton
+                      variant="primary"
+                      size="lg"
+                      disabled={!selectedAttack || !selectedDefense}
+                    >
+                      LOCK IN
+                    </DSButton>
+                  }
+                />
+              </div>
             </div>
-          </div>
+          </DSPanel>
 
           {(onVictory || onDefeat) && (
             <div className="flex gap-2 justify-center mt-2">
