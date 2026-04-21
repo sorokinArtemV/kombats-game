@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Trophy, Heart, ChevronDown, ChevronUp } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { PrimaryButton, SecondaryButton, GhostButton, GamePanel } from './KombatsUI';
-import { RewardRow, QueueCard } from '../../design-system/composed';
+import {
+  RewardRow,
+  QueueCard,
+  FighterStatsPopover,
+  type FighterAttribute,
+  type FighterRecord,
+} from '../../design-system/composed';
 import {
   GameShell,
   LobbyHeader,
@@ -47,20 +53,6 @@ const FIGHTER_COLUMN_LEFT_CLASSNAME = 'absolute left-0 bottom-0 flex flex-col it
 const FIGHTER_COLUMN_RIGHT_CLASSNAME = 'absolute right-0 bottom-0 flex flex-col items-center';
 
 // ==================== MAIN HUB / LOBBY ====================
-
-type FighterAttribute = {
-  icon: React.ElementType;
-  color: 'crimson' | 'gold' | 'jade' | 'silver';
-  label: string;
-  value: number;
-};
-
-type FighterRecord = {
-  wins: number;
-  losses: number;
-  winrate?: string;
-  streak?: string;
-};
 
 // ==================== HP BAR ====================
 // Tactical fighting-game HP bar: parallelogram silhouette via clip-path.
@@ -144,37 +136,6 @@ function HpBar({
   );
 }
 
-function LobbyStatRow({
-  icon: Icon,
-  color,
-  label,
-  value,
-  mirror = false
-}: {
-  icon: React.ElementType;
-  color: 'crimson' | 'gold' | 'jade' | 'silver';
-  label: string;
-  value: number;
-  mirror?: boolean;
-}) {
-  const colorClass = {
-    crimson: 'text-[var(--kombats-crimson)]',
-    gold: 'text-[var(--kombats-gold)]',
-    jade: 'text-[var(--kombats-jade)]',
-    silver: 'text-[var(--kombats-moon-silver)]'
-  }[color];
-
-  return (
-    <div className={`flex items-center justify-between ${mirror ? 'flex-row-reverse' : ''}`}>
-      <div className={`flex items-center gap-2 ${mirror ? 'flex-row-reverse' : ''}`}>
-        <Icon className={`w-3.5 h-3.5 ${colorClass}`} />
-        <span className="text-xs text-[var(--kombats-text-secondary)]">{label}</span>
-      </div>
-      <span className="text-xs text-[var(--kombats-text-primary)] font-medium tabular-nums">{value}</span>
-    </div>
-  );
-}
-
 function FighterNameplate({
   name,
   rank,
@@ -208,7 +169,6 @@ function FighterNameplate({
   width?: number;
 }) {
   const row = mirror ? 'flex-row-reverse' : '';
-  const panelHeaderRow = mirror ? 'flex-row-reverse' : '';
   const barMirror = hpBarMirror ?? mirror;
 
   return (
@@ -216,83 +176,14 @@ function FighterNameplate({
       className="relative z-20 mb-3"
       style={{ width: `${width}px` }}
     >
-      <AnimatePresence>
-        {showStats && (attributes || record) && (
-          <motion.div
-            key="fighter-stats"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2 }}
-            className="absolute left-0 right-0 bottom-full mb-3 bg-[var(--kombats-panel)]/55 backdrop-blur-md border border-[var(--kombats-panel-border)] shadow-[0_12px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.04)] rounded-md overflow-hidden"
-          >
-            <div className={`px-4 py-2 border-b border-[var(--kombats-panel-border)] flex items-center justify-between ${panelHeaderRow}`}>
-              <span className="text-[10px] text-[var(--kombats-text-muted)] uppercase tracking-[0.22em]">
-                {profileTitle}
-              </span>
-              {rank && (
-                <span className="text-[10px] text-[var(--kombats-gold)] uppercase tracking-[0.22em]">
-                  {rank}
-                </span>
-              )}
-            </div>
-
-            <div className={`px-4 py-3 grid gap-x-6 gap-y-3 ${record && attributes ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              {attributes && (
-                <div>
-                  <div className={`text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mb-2 ${mirror ? 'text-right' : ''}`}>
-                    Attributes
-                  </div>
-                  <div className="space-y-1.5">
-                    {attributes.map(a => (
-                      <LobbyStatRow
-                        key={a.label}
-                        icon={a.icon}
-                        color={a.color}
-                        label={a.label}
-                        value={a.value}
-                        mirror={mirror}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {record && (
-                <div>
-                  <div className="text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mb-2">
-                    Record
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="text-center py-1.5 bg-[var(--kombats-jade)]/10 border border-[var(--kombats-jade)]/30 rounded-sm">
-                      <div className="text-lg text-[var(--kombats-jade)] leading-none tabular-nums">{record.wins}</div>
-                      <div className="text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mt-1">Wins</div>
-                    </div>
-                    <div className="text-center py-1.5 bg-[var(--kombats-crimson)]/10 border border-[var(--kombats-crimson)]/30 rounded-sm">
-                      <div className="text-lg text-[var(--kombats-crimson)] leading-none tabular-nums">{record.losses}</div>
-                      <div className="text-[9px] text-[var(--kombats-text-muted)] uppercase tracking-wider mt-1">Losses</div>
-                    </div>
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    {record.winrate && (
-                      <div className="flex justify-between text-[10px] uppercase tracking-wider">
-                        <span className="text-[var(--kombats-text-muted)]">Winrate</span>
-                        <span className="text-[var(--kombats-gold)] tabular-nums">{record.winrate}</span>
-                      </div>
-                    )}
-                    {record.streak && (
-                      <div className="flex justify-between text-[10px] uppercase tracking-wider">
-                        <span className="text-[var(--kombats-text-muted)]">Streak</span>
-                        <span className="text-[var(--kombats-jade)] tabular-nums">{record.streak}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <FighterStatsPopover
+        open={showStats}
+        profileTitle={profileTitle}
+        rank={rank}
+        mirror={mirror}
+        attributes={attributes}
+        record={record}
+      />
 
       <div className="relative">
         <div

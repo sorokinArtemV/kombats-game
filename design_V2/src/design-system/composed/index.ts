@@ -14,3 +14,10 @@ export {
   type ChatTabDef,
   type ChatPlayer,
 } from './ChatDock';
+export {
+  FighterStatsPopover,
+  type FighterStatsPopoverProps,
+  type FighterAttribute,
+  type FighterRecord,
+  type AttributeColor,
+} from './FighterStatsPopover';
