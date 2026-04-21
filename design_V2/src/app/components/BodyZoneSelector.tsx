@@ -15,27 +15,23 @@ import mitsudomoeSrc from '../../assets/icons/mitsudomoe.png';
 //   1. Soft backdrop             — faint warm radial glow behind the body.
 //   2. Tactical grid             — gold dot-grid tiled at 12×12, vignette-
 //                                   masked so it fades at the container
-//                                   edges. Reads as HUD texture.
-//   3. Tactical scan lines       — two horizontal sweeps (1 px, gold,
-//                                   soft side-fade), 8s ease-in-out loop,
-//                                   the second offset by -4s so they
-//                                   stagger.
-//   4. Base silhouette           — dark fill, warm edge glow.
-//   5. Per-zone FILL overlays    — silhouette-masked, clipped to each
+//                                   edges. Reads as HUD texture / depth.
+//   3. Base silhouette           — dark fill, warm edge glow.
+//   4. Per-zone FILL overlays    — silhouette-masked, clipped to each
 //                                   zone's y-band, radial gradient, pulse.
 //                                   Only the current mode's selections.
-//   6. SVG outline+glow layer    — feMorphology-derived outline + outer
+//   5. SVG outline+glow layer    — feMorphology-derived outline + outer
 //                                   glow on selected zones, hairline-only
 //                                   on hover preview.
-//   7. Hover tooltip label
-//   8. Gutter reminder icons     — cross-tab memory:
+//   6. Hover tooltip label
+//   7. Gutter reminder icons     — cross-tab memory:
 //                                     ATTACK tab → mitsudomoe icons on
 //                                                  LEFT (existing block
 //                                                  pair, if any)
 //                                     BLOCK tab  → kunai icon on RIGHT
 //                                                  (existing attack, if
 //                                                  any)
-//   9. Hit areas                 — full-width rectangles per zone y-band.
+//   8. Hit areas                 — full-width rectangles per zone y-band.
 //
 //   STACKED  (default <520px, or layout="stacked")
 //   SPLIT    (≥520px with layout="auto", or layout="split")
@@ -323,60 +319,6 @@ export function BodyZoneSelector({
             'radial-gradient(ellipse at center, black 50%, transparent 90%)',
         }}
       />
-
-      {/* Tactical scan lines — two 1 px horizontal sweeps. Each track
-          is a full-height transparent box containing a 1 px gold
-          gradient line at top:0, and the box itself translates with
-          `kombats-tactical-scan` — starts 100% below (line is at
-          container bottom edge), sweeps through, ends 100% above
-          (line exits past top). 8s ease-in-out infinite; second line
-          offsets by -4s for stagger. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none overflow-hidden"
-      >
-        <div
-          className="absolute left-0 right-0 top-0"
-          style={{
-            height: '100%',
-            animation:
-              'kombats-tactical-scan 8s ease-in-out infinite',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 1,
-              background:
-                'linear-gradient(to right, transparent 0%, rgba(201,162,90,0.4) 50%, transparent 100%)',
-            }}
-          />
-        </div>
-        <div
-          className="absolute left-0 right-0 top-0"
-          style={{
-            height: '100%',
-            animation:
-              'kombats-tactical-scan 8s ease-in-out infinite',
-            animationDelay: '-4s',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 1,
-              background:
-                'linear-gradient(to right, transparent 0%, rgba(201,162,90,0.4) 50%, transparent 100%)',
-            }}
-          />
-        </div>
-      </div>
 
       {/* Base silhouette — dark fill with a subtle warm edge glow. */}
       <div
@@ -847,10 +789,6 @@ const ZONE_ANIMATION_CSS = `
   @keyframes kombats-zone-outline-in {
     from { opacity: 0; }
     to   { opacity: 1; }
-  }
-  @keyframes kombats-tactical-scan {
-    from { transform: translateY(100%); }
-    to   { transform: translateY(-100%); }
   }
 `;
 
