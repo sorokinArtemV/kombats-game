@@ -1,34 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { Sword, Shield } from 'lucide-react';
-import silhouetteSrc from '../../assets/silhouette.png';
+import silhouetteSrc from '../../assets/fighters/silhouette.png';
 import { NinjaSmokeOverlay } from './NinjaSmokeOverlay.jsx';
 
 // ---------- Layout modes ----------
 //
-// Two presentations of the selector, identical silhouette stack in
-// both — only the summary+action placement differs.
-//
-// Silhouette stack (inside the 190×height wrapper, bottom → top):
+// Silhouette stack (inside the width × width*1.5 wrapper, bottom → top):
 //   1. Soft backdrop
-//   2. Base silhouette
+//   2. Base silhouette (dark fill, warm edge glow)
 //   3. NinjaSmokeOverlay
-//   4. Per-zone fills
-//   5. Separator hairlines
-//   6. Side markers           (outside wrapper, 2px from silhouette edge)
-//   7. Hit areas              (transparent buttons, topmost)
+//   4. Per-zone FILL overlays   — silhouette-masked divs, vertically clipped
+//                                 to each zone's y-band, radial-gradient bg,
+//                                 pulse. Only the current mode's selected
+//                                 zones render.
+//   5. Hover OUTLINE overlay    — silhouette-masked div, same clip as
+//                                 hovered zone, thin ring via drop-shadow
+//                                 filter. Mode-coloured.
+//   6. Hover tooltip label
+//   7. Side markers             (outside wrapper, sword/shield)
+//   8. Hit areas                (full-width rectangles per zone y-band)
 //
 //   STACKED  (default <520px, or layout="stacked")
-//     Segmented toggle (centered)
-//     Silhouette wrapper (centered)
-//     Summary grid: [Attack | Block]
-//     action slot (optional, centered row below)
-//
-//   SPLIT  (≥520px with layout="auto", or layout="split")
-//     Segmented toggle (centered)
-//     Two-column flex row:
-//       Left column  (width + 32 px, just fits the silhouette with
-//                     tight side-marker gutters)
-//       Right column (flex 1) — Attack summary / Block summary / action
+//   SPLIT    (≥520px with layout="auto", or layout="split")
 
 const SPLIT_THRESHOLD_PX = 520;
 
@@ -67,8 +60,9 @@ const PAIR_ZONES: Record<BlockPair, [BodyZone, BodyZone]> = {
   'Legs & Head': ['Legs', 'Head'],
 };
 
-// Clicking a zone in block mode anchors the pair at that zone (downward neighbor).
-// Legs wraps back to Head to match the existing game contract.
+// Clicking a zone in block mode anchors the pair at that zone
+// (downward neighbor). Legs wraps back to Head to match the existing
+// game contract.
 const ZONE_TO_BLOCK_PAIR: Record<BodyZone, BlockPair> = {
   Head: 'Head & Chest',
   Chest: 'Chest & Stomach',
@@ -81,25 +75,118 @@ export function blockPairZones(pair: BlockPair): [BodyZone, BodyZone] {
   return PAIR_ZONES[pair];
 }
 
-// Y-band boundaries (% of container height) tuned to the silhouette anatomy.
-// Head = head only (no shoulders). Chest = shoulders + pecs.
-// Stomach = abdomen. Waist = hip / pelvis / belt. Legs = full leg region.
-const ZONE_BANDS: Record<BodyZone, { top: number; bottom: number }> = {
-  Head: { top: 6, bottom: 22 },
-  Chest: { top: 22, bottom: 38 },
-  Stomach: { top: 38, bottom: 48 },
-  Waist: { top: 48, bottom: 60 },
-  Legs: { top: 60, bottom: 96 },
+// ---------- Zone geometry (silhouette-layered architecture) ----------
+//
+// Zones are NOT polygons any more. Each zone is described as:
+//   - a vertical y-band (top%, bottom%) that `clip-path: inset(...)`
+//     applies to a silhouette-masked <div>. The mask makes the fill
+//     body-shaped automatically, for any silhouette.
+//   - an optional horizontal inset (hInset%) applied on both sides of
+//     that clip-path, used ONLY by Waist to keep the fill inside the
+//     blade-free corridor (x 32..68 per the contour analysis — blades
+//     extend outward from hands at y 50..62).
+//
+// Values below are percentages of container height / width.
+//   inset top    = top%
+//   inset bottom = (100 - bottom%)                         → see zoneInsetString()
+//   inset left/right = hInset% (0 except for Waist)
+
+interface ZoneBand {
+  top: number;
+  bottom: number;
+  hInset: number;
+}
+
+const ZONE_BANDS: Record<BodyZone, ZoneBand> = {
+  // Hood/face. Figure top (hood peak) sits at y ≈ 4 per the contour
+  // analysis; shoulders flare in at y 20.
+  Head: { top: 4, bottom: 20, hInset: 0 },
+
+  // Pauldrons + upper torso. Arms detach from torso in y 35..45 but
+  // the silhouette mask handles that automatically — fill only shows
+  // where there are body pixels.
+  Chest: { top: 20, bottom: 40, hInset: 0 },
+
+  // Mid-torso abdomen, above the blade band.
+  Stomach: { top: 40, bottom: 49, hInset: 0 },
+
+  // Belt + hip armor + coat/skirt. Crosses the blade band (y 48..62),
+  // so some minor blade tinting is unavoidable without rectangular
+  // cutoffs — accepted in exchange for a clean body outline. Extends
+  // down to y 73 so the armor skirt between belt and the top of the
+  // legs is covered (no dead-band between Waist and Legs).
+  Waist: { top: 49, bottom: 73, hInset: 0 },
+
+  // Legs — starts at y 73 (directly meeting Waist bottom), covers
+  // actual legs + boots only. The between-legs gap is transparent
+  // in the silhouette PNG, so the mask carves it out automatically.
+  Legs: { top: 73, bottom: 91, hInset: 0 },
 };
 
-// Hit areas extend past the art so the edge bands stay easy to click.
-const HIT_BANDS: Record<BodyZone, { top: number; bottom: number }> = {
-  Head: { top: 0, bottom: 22 },
-  Chest: { top: 22, bottom: 38 },
-  Stomach: { top: 38, bottom: 48 },
-  Waist: { top: 48, bottom: 60 },
-  Legs: { top: 60, bottom: 100 },
+function zoneInsetString(z: BodyZone): string {
+  const { top, bottom, hInset } = ZONE_BANDS[z];
+  // clip-path: inset(top% right% bottom% left%)
+  return `inset(${top}% ${hInset}% ${100 - bottom}% ${hInset}%)`;
+}
+
+// Y-center of each zone — used to position the sword/shield side
+// markers in the gutter.
+const ZONE_CENTER_Y: Record<BodyZone, number> = {
+  Head: 12,
+  Chest: 30,
+  Stomach: 45,
+  Waist: 61,
+  Legs: 82,
 };
+
+// Y-anchor for the hover tooltip — bottom of the pill sits ~4px above
+// this row.
+const ZONE_TOP_Y: Record<BodyZone, number> = {
+  Head: 4,
+  Chest: 20,
+  Stomach: 40,
+  Waist: 49,
+  Legs: 73,
+};
+
+// Colors mirror the tokens used elsewhere in this file (rgba literals)
+// so token migration (step 7d) is a single-file edit later.
+const ATTACK_RGB = '192, 55, 68';
+const BLOCK_RGB = '90, 138, 122';
+
+const silhouetteMaskStyle: React.CSSProperties = {
+  WebkitMaskImage: `url(${silhouetteSrc})`,
+  maskImage: `url(${silhouetteSrc})`,
+  WebkitMaskSize: '100% 100%',
+  maskSize: '100% 100%',
+  WebkitMaskRepeat: 'no-repeat',
+  maskRepeat: 'no-repeat',
+  WebkitMaskPosition: 'center',
+  maskPosition: 'center',
+};
+
+function zoneFillBackground(rgb: string): string {
+  return (
+    `radial-gradient(ellipse at center, rgba(${rgb}, 0.7) 0%, ` +
+    `rgba(${rgb}, 0.3) 60%, rgba(${rgb}, 0) 100%)`
+  );
+}
+
+// Clip-path rect for the SVG outline layer. Head's rect extends 10
+// units above the silhouette top and Legs' rect extends 10 units
+// below the silhouette bottom so the outer glow has room to bleed
+// past the container's vertical extremes without being clipped by
+// clipPath. No extra padding between adjacent zones — their bands
+// stay discrete.
+function zoneOutlineClipRect(z: BodyZone): { y: number; height: number } {
+  const { top, bottom } = ZONE_BANDS[z];
+  const topExtra = z === 'Head' ? 10 : 0;
+  const bottomExtra = z === 'Legs' ? 10 : 0;
+  return {
+    y: top - topExtra,
+    height: bottom - top + topExtra + bottomExtra,
+  };
+}
 
 type Mode = 'attack' | 'block';
 
@@ -162,14 +249,28 @@ export function BodyZoneSelector({
   const blockZones = block ? blockPairZones(block) : null;
   const height = Math.round(width * 1.5);
 
-  // Only the current mode drives body overlays.
-  const isZoneActive = (z: BodyZone) =>
-    mode === 'attack' ? attack === z : blockZones?.includes(z) ?? false;
-
   const handleClick = (z: BodyZone) => {
     if (mode === 'attack') onAttackChange(z);
     else onBlockChange(ZONE_TO_BLOCK_PAIR[z]);
   };
+
+  // Zones visible in the current mode. Both attack and block selections
+  // persist in props; mode filtering decides which render.
+  const visibleFilledZones: BodyZone[] =
+    mode === 'attack'
+      ? attack
+        ? [attack]
+        : []
+      : blockZones
+        ? [...blockZones]
+        : [];
+
+  const modeRgb = mode === 'attack' ? ATTACK_RGB : BLOCK_RGB;
+
+  // Hover overlay is suppressed when the hovered zone is already
+  // selected in the current mode — the fill owns that visual.
+  const showHoverOutline =
+    hover !== null && !visibleFilledZones.includes(hover);
 
   // Lower silhouette layers — painted first, below the smoke overlay
   // in stacked mode.
@@ -186,133 +287,337 @@ export function BodyZoneSelector({
         }}
       />
 
-      {/* Base silhouette — dark fill */}
+      {/* Base silhouette — dark fill with a subtle warm edge glow. */}
       <div
         aria-hidden
         className="absolute inset-0"
         style={{
-          WebkitMaskImage: `url(${silhouetteSrc})`,
-          maskImage: `url(${silhouetteSrc})`,
-          WebkitMaskSize: '100% 100%',
-          maskSize: '100% 100%',
-          WebkitMaskRepeat: 'no-repeat',
-          maskRepeat: 'no-repeat',
-          WebkitMaskPosition: 'center',
-          maskPosition: 'center',
-          background:
-            'linear-gradient(180deg, #1d1f25 0%, #14161b 55%, #0f1115 100%)',
-          filter: 'drop-shadow(0 10px 24px rgba(0,0,0,0.6))',
+          ...silhouetteMaskStyle,
+          background: 'rgb(10, 14, 22)',
+          filter:
+            'drop-shadow(0 0 2px rgba(201, 162, 90, 0.15)) drop-shadow(0 10px 24px rgba(0,0,0,0.6))',
         }}
       />
     </>
   );
 
-  // Upper silhouette layers — painted above the smoke overlay so
-  // active zone highlights, separator hairlines, side markers, and
-  // (crucially) the invisible hit-area buttons stay on top.
+  // Upper silhouette layers — zone fills, hover outline, tooltip,
+  // side markers, hit areas.
   const silhouetteOverlays = (
     <>
-      {/* Per-zone fill — only the active mode's selection/hover is shown */}
-      {BODY_ZONES.map((z) => {
-        const active = isZoneActive(z);
-        const isHover = hover === z;
-        const band = ZONE_BANDS[z];
-
-        let bg: string | null = null;
-        if (mode === 'attack') {
-          if (active) {
-            bg =
-              'linear-gradient(180deg, rgba(208,70,84,0.95) 0%, rgba(160,40,53,0.95) 100%)';
-          } else if (isHover) {
-            bg = 'rgba(192,55,68,0.5)';
-          }
-        } else {
-          if (active) {
-            bg =
-              'linear-gradient(180deg, rgba(106,154,138,0.75) 0%, rgba(74,122,106,0.75) 100%)';
-          } else if (isHover) {
-            bg = 'rgba(106,154,138,0.4)';
-          }
-        }
-
-        if (!bg) return null;
-
-        const maskImage = `url(${silhouetteSrc}), linear-gradient(to bottom, transparent 0%, transparent ${band.top}%, #000 ${band.top}%, #000 ${band.bottom}%, transparent ${band.bottom}%, transparent 100%)`;
-
+      {/* Per-zone FILL — silhouette-masked div with the mode-coloured
+          radial gradient, clipped to the zone's y-band and pulsing. */}
+      {visibleFilledZones.map((z) => {
+        const clip = zoneInsetString(z);
         return (
           <div
-            key={`${z}-fill`}
+            key={`fill-${z}`}
             aria-hidden
-            className="absolute inset-0 pointer-events-none transition-opacity duration-150"
+            className="absolute inset-0 pointer-events-none"
             style={{
-              background: bg,
-              WebkitMaskImage: maskImage,
-              maskImage,
-              WebkitMaskSize: '100% 100%, 100% 100%',
-              maskSize: '100% 100%, 100% 100%',
-              WebkitMaskRepeat: 'no-repeat, no-repeat',
-              maskRepeat: 'no-repeat, no-repeat',
-              WebkitMaskPosition: 'center, center',
-              maskPosition: 'center, center',
-              WebkitMaskComposite: 'source-in',
-              maskComposite: 'intersect',
+              ...silhouetteMaskStyle,
+              clipPath: clip,
+              WebkitClipPath: clip,
+              background: zoneFillBackground(modeRgb),
+              animation:
+                'kombats-zone-pulse 2.5s ease-in-out infinite',
             }}
           />
         );
       })}
 
-      {/* Subtle separator hairlines between bands */}
-      {BODY_ZONES.slice(0, -1).map((z) => {
-        const y = ZONE_BANDS[z].bottom;
-        return (
-          <div
-            key={`sep-${z}`}
-            aria-hidden
-            className="absolute pointer-events-none"
-            style={{
-              left: '10%',
-              right: '10%',
-              top: `${y}%`,
-              height: 1,
-              background:
-                'linear-gradient(90deg, transparent 0%, rgba(201,169,97,0.22) 50%, transparent 100%)',
-            }}
-          />
-        );
-      })}
+      {/* OUTLINE layer (SVG) — handles both the selected-zone full
+          outline+glow+pulse AND the weaker hover-preview outline, on
+          top of the radial fills. The filter dilates the silhouette
+          alpha by 1 unit, subtracts the original to get a hairline
+          ring, colours it via feFlood + feComposite, then the
+          "outline" filters add a softer stdDeviation=4 blur and
+          feMerge for an outer glow. The "hover" filters stop before
+          the glow and use floodOpacity=0.5 for a weaker preview.
 
-      {/* Left gutter, outer column — sword marker at the attack zone.
-          Offset 22 leaves a clear gap between the sword and the shield
-          markers when both render at the same Y band. */}
+          clipPath per zone trims the filter output to the zone's
+          y-band. Head and Legs clipPaths are extended 10 units past
+          the silhouette container's outer edge (see
+          zoneOutlineClipRect) so the outer glow at the top of the
+          hood and bottom of the boots isn't cut off by the clip.
+
+          NOTE: filter reads SourceAlpha BEFORE clip-path is applied
+          (per SVG effect order: filter → clip-path → mask → opacity),
+          so outlines are derived from the FULL silhouette edge and
+          only then trimmed to the zone band — no horizontal rules
+          across the torso at zone seams. */}
+      {(visibleFilledZones.length > 0 ||
+        (showHoverOutline && hover)) && (
+        <svg
+          aria-hidden
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ overflow: 'visible' }}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            {/* Selected-state filters (outline + outer glow). */}
+            <filter
+              id="kombats-zone-outline-attack"
+              x="-20%"
+              y="-20%"
+              width="140%"
+              height="140%"
+            >
+              <feMorphology
+                in="SourceAlpha"
+                operator="dilate"
+                radius="1"
+                result="dilated"
+              />
+              <feComposite
+                in="dilated"
+                in2="SourceAlpha"
+                operator="out"
+                result="outline"
+              />
+              <feGaussianBlur
+                in="outline"
+                stdDeviation="0.5"
+                result="outlineBlurred"
+              />
+              <feFlood floodColor="rgb(192, 55, 68)" result="flood" />
+              <feComposite
+                in="flood"
+                in2="outlineBlurred"
+                operator="in"
+                result="coloredOutline"
+              />
+              <feGaussianBlur
+                in="coloredOutline"
+                stdDeviation="4"
+                result="glow"
+              />
+              <feMerge>
+                <feMergeNode in="glow" />
+                <feMergeNode in="coloredOutline" />
+              </feMerge>
+            </filter>
+            <filter
+              id="kombats-zone-outline-block"
+              x="-20%"
+              y="-20%"
+              width="140%"
+              height="140%"
+            >
+              <feMorphology
+                in="SourceAlpha"
+                operator="dilate"
+                radius="1"
+                result="dilated"
+              />
+              <feComposite
+                in="dilated"
+                in2="SourceAlpha"
+                operator="out"
+                result="outline"
+              />
+              <feGaussianBlur
+                in="outline"
+                stdDeviation="0.5"
+                result="outlineBlurred"
+              />
+              <feFlood floodColor="rgb(90, 138, 122)" result="flood" />
+              <feComposite
+                in="flood"
+                in2="outlineBlurred"
+                operator="in"
+                result="coloredOutline"
+              />
+              <feGaussianBlur
+                in="coloredOutline"
+                stdDeviation="4"
+                result="glow"
+              />
+              <feMerge>
+                <feMergeNode in="glow" />
+                <feMergeNode in="coloredOutline" />
+              </feMerge>
+            </filter>
+            {/* Hover-state filters — same hairline ring, no outer
+                glow, floodOpacity 0.5 for a weaker preview. */}
+            <filter
+              id="kombats-zone-hover-attack"
+              x="-20%"
+              y="-20%"
+              width="140%"
+              height="140%"
+            >
+              <feMorphology
+                in="SourceAlpha"
+                operator="dilate"
+                radius="1"
+                result="dilated"
+              />
+              <feComposite
+                in="dilated"
+                in2="SourceAlpha"
+                operator="out"
+                result="outline"
+              />
+              <feGaussianBlur
+                in="outline"
+                stdDeviation="0.5"
+                result="outlineBlurred"
+              />
+              <feFlood
+                floodColor="rgb(192, 55, 68)"
+                floodOpacity="0.5"
+                result="flood"
+              />
+              <feComposite
+                in="flood"
+                in2="outlineBlurred"
+                operator="in"
+                result="coloredOutline"
+              />
+            </filter>
+            <filter
+              id="kombats-zone-hover-block"
+              x="-20%"
+              y="-20%"
+              width="140%"
+              height="140%"
+            >
+              <feMorphology
+                in="SourceAlpha"
+                operator="dilate"
+                radius="1"
+                result="dilated"
+              />
+              <feComposite
+                in="dilated"
+                in2="SourceAlpha"
+                operator="out"
+                result="outline"
+              />
+              <feGaussianBlur
+                in="outline"
+                stdDeviation="0.5"
+                result="outlineBlurred"
+              />
+              <feFlood
+                floodColor="rgb(90, 138, 122)"
+                floodOpacity="0.5"
+                result="flood"
+              />
+              <feComposite
+                in="flood"
+                in2="outlineBlurred"
+                operator="in"
+                result="coloredOutline"
+              />
+            </filter>
+            {BODY_ZONES.map((z) => {
+              const { y, height } = zoneOutlineClipRect(z);
+              return (
+                <clipPath
+                  key={`clip-${z}`}
+                  id={`kombats-zone-clip-${z}`}
+                  clipPathUnits="userSpaceOnUse"
+                >
+                  <rect x="0" y={y} width="100" height={height} />
+                </clipPath>
+              );
+            })}
+          </defs>
+          {/* Selected zones — full outline + outer glow + pulse. */}
+          {visibleFilledZones.map((z) => (
+            <image
+              key={`outline-${z}`}
+              href={silhouetteSrc}
+              x="0"
+              y="0"
+              width="100"
+              height="100"
+              preserveAspectRatio="none"
+              clipPath={`url(#kombats-zone-clip-${z})`}
+              filter={`url(#kombats-zone-outline-${mode})`}
+              style={{
+                animation:
+                  'kombats-zone-pulse 2.5s ease-in-out infinite',
+              }}
+            />
+          ))}
+          {/* Hovered zone — hairline preview, no glow, no pulse. */}
+          {showHoverOutline && hover && (
+            <image
+              key={`hover-${hover}`}
+              href={silhouetteSrc}
+              x="0"
+              y="0"
+              width="100"
+              height="100"
+              preserveAspectRatio="none"
+              clipPath={`url(#kombats-zone-clip-${hover})`}
+              filter={`url(#kombats-zone-hover-${mode})`}
+              style={{
+                animation: 'kombats-zone-outline-in 150ms ease-out',
+              }}
+            />
+          )}
+        </svg>
+      )}
+
+      {/* Hover tooltip — pill above the hovered zone. */}
+      {hover && (
+        <div
+          aria-hidden
+          className="absolute pointer-events-none"
+          style={{
+            top: `${ZONE_TOP_Y[hover]}%`,
+            left: '50%',
+            transform: 'translate(-50%, calc(-100% - 4px))',
+            background: 'rgba(15, 20, 25, 0.85)',
+            color: 'var(--kombats-text-muted)',
+            padding: '2px 8px',
+            borderRadius: 999,
+            fontSize: 11,
+            letterSpacing: '0.14em',
+            whiteSpace: 'nowrap',
+            animation: 'kombats-zone-outline-in 150ms ease-out',
+          }}
+        >
+          {hover.toUpperCase()}
+        </div>
+      )}
+
+      {/* Left gutter, outer column — sword marker at the attack zone. */}
       {attack && (
         <SideMarker
           side="left"
           offset={-5}
-          top={(ZONE_BANDS[attack].top + ZONE_BANDS[attack].bottom) / 2}
+          top={ZONE_CENTER_Y[attack]}
           tone="crimson"
         >
           <Sword className="w-3 h-3" />
         </SideMarker>
       )}
 
-      {/* Left gutter, inner column — shield markers at the block zones.
-          Offset 0 places them flush against the silhouette edge, on a
-          different axis from the swords so the two kinds never collide. */}
+      {/* Left gutter, inner column — shield markers at the block zones. */}
       {blockZones?.map((z) => (
         <SideMarker
           key={`${z}-block-mark`}
           side="left"
           offset={-30}
-          top={(ZONE_BANDS[z].top + ZONE_BANDS[z].bottom) / 2}
+          top={ZONE_CENTER_Y[z]}
           tone="jade"
         >
           <Shield className="w-3 h-3" />
         </SideMarker>
       ))}
 
-      {/* Hit areas */}
+      {/* Hit areas — full-width rectangles per zone y-band. No polygon
+          clipping; click accuracy is good enough without it because
+          the silhouette visually indicates where the body is. */}
       {BODY_ZONES.map((z) => {
-        const band = HIT_BANDS[z];
+        const { top, bottom } = ZONE_BANDS[z];
         return (
           <button
             key={`${z}-hit`}
@@ -325,9 +630,11 @@ export function BodyZoneSelector({
             aria-label={`${mode === 'attack' ? 'Attack' : 'Block'} ${z}`}
             className="absolute left-0 right-0 cursor-pointer focus:outline-none"
             style={{
-              top: `${band.top}%`,
-              height: `${band.bottom - band.top}%`,
+              top: `${top}%`,
+              height: `${bottom - top}%`,
               background: 'transparent',
+              border: 'none',
+              padding: 0,
             }}
           />
         );
@@ -357,6 +664,11 @@ export function BodyZoneSelector({
 
   return (
     <div ref={rootRef} className={className}>
+      {/* Component-local keyframes. A single <style> tag at the
+          component root is fine — keyframes are global in scope and
+          duplicate definitions across instances are harmless. */}
+      <style>{ZONE_ANIMATION_CSS}</style>
+
       {/* Segmented Attack / Block mode control */}
       <div className="mx-auto mb-4 flex w-fit rounded-sm border border-[var(--kombats-panel-border)] overflow-hidden">
         <ModeSegment
@@ -379,11 +691,6 @@ export function BodyZoneSelector({
       {isSplit ? (
         // ---- SPLIT: silhouette left, actions right ----
         <div className="flex items-stretch gap-4">
-          {/* Left column — 45% of free space. All markers (sword outer
-              at offset 14, shield inner at offset 0) now stack on the
-              LEFT of the silhouette, so we nudge the silhouette itself
-              slightly right via translateX to give the outer sword
-              column room without clipping at the card's left edge. */}
           <div
             className="flex items-center justify-center"
             style={{ flex: '45 1 0', minWidth: 0 }}
@@ -402,8 +709,6 @@ export function BodyZoneSelector({
             </div>
           </div>
 
-          {/* Right column — 55% of free space. Wider share for the two
-              summary blocks and the action slot (LOCK IN). */}
           <div
             className="flex flex-col justify-center gap-4"
             style={{ flex: '55 1 0', minWidth: 0 }}
@@ -444,6 +749,17 @@ export function BodyZoneSelector({
 }
 
 // ---------- Internal ----------
+
+const ZONE_ANIMATION_CSS = `
+  @keyframes kombats-zone-pulse {
+    0%, 100% { opacity: 0.8; }
+    50%      { opacity: 1; }
+  }
+  @keyframes kombats-zone-outline-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+`;
 
 interface SideMarkerProps {
   side: 'left' | 'right';
@@ -559,4 +875,3 @@ function SummaryBlock({
     </div>
   );
 }
-

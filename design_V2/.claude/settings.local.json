@@ -11,7 +11,16 @@
       "Bash(npm run *)",
       "Bash(npx tsc *)",
       "Bash(./node_modules/.bin/esbuild --bundle src/design-system/primitives/index.ts --outfile=/dev/null --format=esm --jsx=automatic --loader:.tsx=tsx --external:react --target=es2020)",
-      "Bash(./node_modules/.bin/esbuild --bundle src/design-system/composed/index.ts --outfile=/dev/null --format=esm --jsx=automatic --loader:.tsx=tsx --external:react --external:react-dom --external:motion/react --external:lucide-react --target=es2020)"
+      "Bash(./node_modules/.bin/esbuild --bundle src/design-system/composed/index.ts --outfile=/dev/null --format=esm --jsx=automatic --loader:.tsx=tsx --external:react --external:react-dom --external:motion/react --external:lucide-react --target=es2020)",
+      "Read(//d/1/tmp/kombats-game/**)",
+      "Bash(python -c \"from PIL import Image; i=Image.open\\(r'D:/1/tmp/kombats-game/design_V2/src/assets/fighters/silhouette.png'\\); print\\(i.size, i.mode\\)\")",
+      "Bash(node -e \"const{createCanvas,loadImage}=require\\('canvas'\\);loadImage\\('D:/1/tmp/kombats-game/design_V2/src/assets/fighters/silhouette.png'\\).then\\(i=>console.log\\(i.width,i.height\\)\\)\")",
+      "Bash(identify D:/1/tmp/kombats-game/design_V2/src/assets/fighters/silhouette.png)",
+      "Bash(node *)",
+      "Bash(npx -y typescript@latest tsc --noEmit --jsx react-jsx --esModuleInterop --skipLibCheck --moduleResolution bundler --module esnext --target es2020 --strict src/app/components/BodyZoneSelector.tsx)",
+      "Bash(pip install *)",
+      "Bash(python scripts/analyze_silhouette.py)",
+      "Bash(PYTHONIOENCODING=utf-8 python scripts/analyze_silhouette.py)"
     ]
   }
 }
