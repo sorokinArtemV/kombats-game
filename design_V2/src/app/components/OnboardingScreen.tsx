@@ -124,8 +124,12 @@ function AvatarCard({
 
 export function OnboardingScreen({
   onComplete,
+  onGameInfo,
+  onLeaderboard,
 }: {
   onComplete: (result: OnboardingResult) => void;
+  onGameInfo?: () => void;
+  onLeaderboard?: () => void;
 }) {
   const [name, setName] = useState('');
   const [touched, setTouched] = useState(false);
@@ -149,7 +153,7 @@ export function OnboardingScreen({
   };
 
   return (
-    <GameShell header={<LobbyHeader />}>
+    <GameShell header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}>
       {/* Background — same moonlit scene as the rest of the app */}
       <div
         className="absolute inset-0 bg-cover bg-center"

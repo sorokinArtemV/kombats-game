@@ -296,12 +296,21 @@ const OPPONENT_ATTRIBUTES: FighterAttribute[] = [
   { icon: Heart, color: 'silver', label: 'Endurance', value: 82 }
 ];
 
-function LobbyScene({ centerCard }: { centerCard: React.ReactNode }) {
+interface HeaderNavProps {
+  onGameInfo?: () => void;
+  onLeaderboard?: () => void;
+}
+
+function LobbyScene({
+  centerCard,
+  onGameInfo,
+  onLeaderboard,
+}: { centerCard: React.ReactNode } & HeaderNavProps) {
   const [showStats, setShowStats] = useState(false);
 
   return (
     <GameShell
-      header={<LobbyHeader />}
+      header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
     >
       {/* Background */}
@@ -362,9 +371,15 @@ function LobbyCenterCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function MainHub({ onJoinQueue }: { onJoinQueue: () => void }) {
+export function MainHub({
+  onJoinQueue,
+  onGameInfo,
+  onLeaderboard,
+}: { onJoinQueue: () => void } & HeaderNavProps) {
   return (
     <LobbyScene
+      onGameInfo={onGameInfo}
+      onLeaderboard={onLeaderboard}
       centerCard={
         <LobbyCenterCard>
           <QueueCard
@@ -383,9 +398,16 @@ export function MainHub({ onJoinQueue }: { onJoinQueue: () => void }) {
 
 // ==================== QUEUE / SEARCHING ====================
 
-export function QueueScreen({ onCancel, elapsedTime }: { onCancel: () => void; elapsedTime: number }) {
+export function QueueScreen({
+  onCancel,
+  elapsedTime,
+  onGameInfo,
+  onLeaderboard,
+}: { onCancel: () => void; elapsedTime: number } & HeaderNavProps) {
   return (
     <LobbyScene
+      onGameInfo={onGameInfo}
+      onLeaderboard={onLeaderboard}
       centerCard={
         <LobbyCenterCard>
           <QueueCard
@@ -409,13 +431,16 @@ export function BattleScreen({
   onVictory,
   onDefeat,
   battleLog = [],
+  onGameInfo,
+  onLeaderboard,
 }: {
   onVictory?: () => void;
   onDefeat?: () => void;
   battleLog?: BattleLogEntry[];
-}) {
-  const [selectedAttack, setSelectedAttack] = useState<BodyZone | null>(null);
-  const [selectedDefense, setSelectedDefense] = useState<BlockPair | null>(null);
+} & HeaderNavProps) {
+  // TEMP: seeded for headless screenshot capture. Revert to null/null.
+  const [selectedAttack, setSelectedAttack] = useState<BodyZone | null>('Stomach');
+  const [selectedDefense, setSelectedDefense] = useState<BlockPair | null>('Waist & Legs');
   const [showPlayerStats, setShowPlayerStats] = useState(false);
   const [showOpponentStats, setShowOpponentStats] = useState(false);
   // Waiting phase — flipped when the player commits their picks. In a
@@ -433,7 +458,7 @@ export function BattleScreen({
 
   return (
     <GameShell
-      header={<LobbyHeader />}
+      header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={
         <LobbyChatDock
           messages={mockChatMessages}
@@ -620,14 +645,16 @@ export function VictoryScreen({
   onReturnToLobby,
   onQueueAgain,
   finalEntry,
+  onGameInfo,
+  onLeaderboard,
 }: {
   onReturnToLobby: () => void;
   onQueueAgain: () => void;
   finalEntry?: BattleLogEntry;
-}) {
+} & HeaderNavProps) {
   return (
     <GameShell
-      header={<LobbyHeader />}
+      header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
     >
       {/* Background */}
@@ -742,14 +769,16 @@ export function DefeatScreen({
   onReturnToLobby,
   onQueueAgain,
   finalEntry,
+  onGameInfo,
+  onLeaderboard,
 }: {
   onReturnToLobby: () => void;
   onQueueAgain: () => void;
   finalEntry?: BattleLogEntry;
-}) {
+} & HeaderNavProps) {
   return (
     <GameShell
-      header={<LobbyHeader />}
+      header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
     >
       {/* Background */}

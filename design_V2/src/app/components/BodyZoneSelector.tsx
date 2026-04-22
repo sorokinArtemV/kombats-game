@@ -88,6 +88,36 @@ export function blockPairZones(pair: BlockPair): [BodyZone, BodyZone] {
 }
 
 // ---------- Zone geometry (silhouette-layered architecture) ----------
+//
+// Zone boundary map (all values are percentages of the silhouette CONTAINER
+// height — at default width=200 the container is 300px tall, so 1% ≈ 3px).
+//
+//   Zone     top    bottom   height   feather (15% of height)
+//   Head       4%     20%     16%      2.4%   (top special-cased: black 0%)
+//   Chest     20%     36%     16%      2.4%
+//   Stomach   36%     49%     13%      1.95%
+//   Waist     49%     73%     24%      3.6%
+//   Legs      73%     91%     18%      2.7%   (bottom special-cased: black 100%)
+//
+// Boundary topology:
+//   Head.bottom   == Chest.top    (20%) — shared edge, bands abut exactly
+//   Chest.bottom  == Stomach.top  (36%) — shared edge, bands abut exactly
+//   Stomach.bottom== Waist.top    (49%) — shared edge, bands abut exactly
+//   Waist.bottom  == Legs.top     (73%) — shared edge, bands abut exactly
+//
+// Feather geometry — OVERLAPPING (centered on the boundary, not inward):
+// the feather ramp on each edge spans `feather` percent TOTAL, with half
+// sitting in this zone's territory and half in the neighbour's territory.
+// For an interior zone (top=T, bottom=B, feather=f):
+//   fadeInStart  = T - f/2   (α=0, extends into upper neighbour)
+//   fadeInEnd    = T + f/2   (α=1, opaque starts inside this zone)
+//   fadeOutStart = B - f/2   (α=1, opaque ends inside this zone)
+//   fadeOutEnd   = B + f/2   (α=0, extends into lower neighbour)
+// At the shared boundary line itself every interior edge is at α≈0.5, so
+// two adjacent fills' contributions sum to ≈1 and no transparent stripe
+// can form. Head keeps its top edge at α=1 (silhouette defines the head
+// contour); Legs keeps its bottom edge at α=1 (silhouette defines the
+// boot contour) — only their INNER edges follow the overlap rule.
 
 interface ZoneBand {
   top: number;
@@ -96,8 +126,8 @@ interface ZoneBand {
 
 const ZONE_BANDS: Record<BodyZone, ZoneBand> = {
   Head: { top: 4, bottom: 20 },
-  Chest: { top: 20, bottom: 40 },
-  Stomach: { top: 40, bottom: 49 },
+  Chest: { top: 20, bottom: 36 },
+  Stomach: { top: 36, bottom: 49 },
   Waist: { top: 49, bottom: 73 },
   Legs: { top: 73, bottom: 91 },
 };
@@ -146,19 +176,38 @@ interface HardEdges {
   bottom?: boolean;
 }
 
-// Per-side feather distance of the ADJACENT selected zone, shifted past
-// the band boundary so the hover fill overlaps the selection's feather
-// ramp on the other side of the shared boundary. The selection's own
-// feather then fades smoothly under a fully-opaque hover fill — no gap.
+// Per-side feather distance of the ADJACENT selected zone. With the
+// overlap-feather geometry, a selected neighbour is fully opaque up to
+// (boundary - feather/2) and fades to α=0 by (boundary + feather/2).
+// When a hover fill uses a hard edge against that neighbour, the edge is
+// extended by HALF the neighbour's feather (neighbourFeather/2) past the
+// boundary so the hover becomes fully opaque at the same position where
+// the selection's own opaque region ends — the two fills meet flush
+// instead of leaving a faded band between them.
 interface NeighbourFeathers {
   top?: number;
   bottom?: number;
+}
+
+// Clamp a gradient stop offset to the [0, 100] percentage range. The
+// overlap geometry can push Head's top edge below 0 or Legs' bottom edge
+// above 100 if their special-case short-circuits ever change; clamping
+// keeps browser parsers happy and makes the math obvious at call sites.
+function clampPct(v: number): number {
+  if (v < 0) return 0;
+  if (v > 100) return 100;
+  return v;
 }
 
 // Vertical mask gradient for a zone. Stops are in container-% space (0% =
 // top of silhouette container, 100% = bottom) so a single full-container
 // linear-gradient can be composited with the silhouette PNG mask via
 // mask-composite: intersect.
+//
+// Feather geometry is OVERLAPPING (see zone-geometry block above): each
+// edge's ramp spans `feather` percent centered on the boundary, with half
+// extending into the neighbouring zone's territory. At the boundary line
+// itself α≈0.5, so two adjacent fills sum to full coverage.
 function zoneFeatherGradient(
   z: BodyZone,
   hardEdges: HardEdges = {},
@@ -166,28 +215,44 @@ function zoneFeatherGradient(
 ): string {
   const { top, bottom } = ZONE_BANDS[z];
   const feather = (bottom - top) * ZONE_FEATHER_FRACTION;
+  const half = feather / 2;
+  const fadeInStart = clampPct(top - half);
+  const fadeInEnd = clampPct(top + half);
+  const fadeOutStart = clampPct(bottom - half);
+  const fadeOutEnd = clampPct(bottom + half);
   const stops: string[] = [];
 
-  // Top edge: silhouette head-contour, band-internal hard jump, or feather.
+  // Top edge: silhouette head-contour, band-internal hard jump, or overlap-feather.
   if (z === 'Head') {
     // Silhouette edge — no fade off the top of the head.
     stops.push('black 0%');
   } else if (hardEdges.top) {
-    const cut = top - (neighbourFeathers.top ?? 0);
+    // Hard edge extended by half the adjacent selected neighbour's
+    // feather — that's where the neighbour's opaque region ends under the
+    // new overlap geometry.
+    const cut = clampPct(top - (neighbourFeathers.top ?? 0) / 2);
     stops.push('transparent 0%', `transparent ${cut}%`, `black ${cut}%`);
   } else {
-    stops.push('transparent 0%', `transparent ${top}%`, `black ${top + feather}%`);
+    stops.push(
+      'transparent 0%',
+      `transparent ${fadeInStart}%`,
+      `black ${fadeInEnd}%`,
+    );
   }
 
-  // Bottom edge: silhouette boot-contour, band-internal hard jump, or feather.
+  // Bottom edge: silhouette boot-contour, band-internal hard jump, or overlap-feather.
   if (z === 'Legs') {
     // Silhouette edge — no fade off the boots.
     stops.push('black 100%');
   } else if (hardEdges.bottom) {
-    const cut = bottom + (neighbourFeathers.bottom ?? 0);
+    const cut = clampPct(bottom + (neighbourFeathers.bottom ?? 0) / 2);
     stops.push(`black ${cut}%`, `transparent ${cut}%`, 'transparent 100%');
   } else {
-    stops.push(`black ${bottom - feather}%`, `transparent ${bottom}%`, 'transparent 100%');
+    stops.push(
+      `black ${fadeOutStart}%`,
+      `transparent ${fadeOutEnd}%`,
+      'transparent 100%',
+    );
   }
 
   return `linear-gradient(to bottom, ${stops.join(', ')})`;
@@ -225,28 +290,33 @@ interface GradStop {
 function zoneFeatherSvgStops(z: BodyZone): GradStop[] {
   const { top, bottom } = ZONE_BANDS[z];
   const feather = (bottom - top) * ZONE_FEATHER_FRACTION;
+  const half = feather / 2;
+  const fadeInStart = clampPct(top - half);
+  const fadeInEnd = clampPct(top + half);
+  const fadeOutStart = clampPct(bottom - half);
+  const fadeOutEnd = clampPct(bottom + half);
   if (z === 'Head') {
     return [
       { offset: '0%', color: 'white' },
-      { offset: `${bottom - feather}%`, color: 'white' },
-      { offset: `${bottom}%`, color: 'black' },
+      { offset: `${fadeOutStart}%`, color: 'white' },
+      { offset: `${fadeOutEnd}%`, color: 'black' },
       { offset: '100%', color: 'black' },
     ];
   }
   if (z === 'Legs') {
     return [
       { offset: '0%', color: 'black' },
-      { offset: `${top}%`, color: 'black' },
-      { offset: `${top + feather}%`, color: 'white' },
+      { offset: `${fadeInStart}%`, color: 'black' },
+      { offset: `${fadeInEnd}%`, color: 'white' },
       { offset: '100%', color: 'white' },
     ];
   }
   return [
     { offset: '0%', color: 'black' },
-    { offset: `${top}%`, color: 'black' },
-    { offset: `${top + feather}%`, color: 'white' },
-    { offset: `${bottom - feather}%`, color: 'white' },
-    { offset: `${bottom}%`, color: 'black' },
+    { offset: `${fadeInStart}%`, color: 'black' },
+    { offset: `${fadeInEnd}%`, color: 'white' },
+    { offset: `${fadeOutStart}%`, color: 'white' },
+    { offset: `${fadeOutEnd}%`, color: 'black' },
     { offset: '100%', color: 'black' },
   ];
 }
@@ -298,11 +368,11 @@ function zoneFeatherAmount(z: BodyZone): number {
 }
 
 // Pair mask. Interior boundary between upper and lower stays feather-less
-// (continuous black). `hardEdges.top` applies to the pair's outer TOP
-// (top of the upper zone); `hardEdges.bottom` applies to the pair's outer
-// BOTTOM (bottom of the lower zone). `neighbourFeathers` supplies the
-// feather amount of the selected zone sitting on the other side of each
-// outer edge so the hard edge overlaps that feather and closes the gap.
+// (continuous black) — paired zones render as one seamless fill. Outer
+// edges follow the same overlap-feather geometry as the single-zone mask:
+// the ramp is centered on the band boundary with half extending into the
+// neighbouring (non-pair) zone's territory. `hardEdges` + `neighbourFeathers`
+// apply only to the pair's outer edges and use the /2 extension rule.
 function pairFeatherGradient(
   { upper, lower }: ZonePair,
   hardEdges: HardEdges = {},
@@ -312,30 +382,36 @@ function pairFeatherGradient(
   const lb = ZONE_BANDS[lower];
   const upperFeather = (ub.bottom - ub.top) * ZONE_FEATHER_FRACTION;
   const lowerFeather = (lb.bottom - lb.top) * ZONE_FEATHER_FRACTION;
+  const upperHalf = upperFeather / 2;
+  const lowerHalf = lowerFeather / 2;
+  const topFadeStart = clampPct(ub.top - upperHalf);
+  const topFadeEnd = clampPct(ub.top + upperHalf);
+  const bottomFadeStart = clampPct(lb.bottom - lowerHalf);
+  const bottomFadeEnd = clampPct(lb.bottom + lowerHalf);
   const stops: string[] = [];
 
   if (upper === 'Head') {
     stops.push('black 0%');
   } else if (hardEdges.top) {
-    const cut = ub.top - (neighbourFeathers.top ?? 0);
+    const cut = clampPct(ub.top - (neighbourFeathers.top ?? 0) / 2);
     stops.push('transparent 0%', `transparent ${cut}%`, `black ${cut}%`);
   } else {
     stops.push(
       'transparent 0%',
-      `transparent ${ub.top}%`,
-      `black ${ub.top + upperFeather}%`,
+      `transparent ${topFadeStart}%`,
+      `black ${topFadeEnd}%`,
     );
   }
 
   if (lower === 'Legs') {
     stops.push('black 100%');
   } else if (hardEdges.bottom) {
-    const cut = lb.bottom + (neighbourFeathers.bottom ?? 0);
+    const cut = clampPct(lb.bottom + (neighbourFeathers.bottom ?? 0) / 2);
     stops.push(`black ${cut}%`, `transparent ${cut}%`, 'transparent 100%');
   } else {
     stops.push(
-      `black ${lb.bottom - lowerFeather}%`,
-      `transparent ${lb.bottom}%`,
+      `black ${bottomFadeStart}%`,
+      `transparent ${bottomFadeEnd}%`,
       'transparent 100%',
     );
   }
@@ -367,22 +443,28 @@ function pairFeatherSvgStops({ upper, lower }: ZonePair): GradStop[] {
   const lb = ZONE_BANDS[lower];
   const upperFeather = (ub.bottom - ub.top) * ZONE_FEATHER_FRACTION;
   const lowerFeather = (lb.bottom - lb.top) * ZONE_FEATHER_FRACTION;
+  const upperHalf = upperFeather / 2;
+  const lowerHalf = lowerFeather / 2;
+  const topFadeStart = clampPct(ub.top - upperHalf);
+  const topFadeEnd = clampPct(ub.top + upperHalf);
+  const bottomFadeStart = clampPct(lb.bottom - lowerHalf);
+  const bottomFadeEnd = clampPct(lb.bottom + lowerHalf);
   const stops: GradStop[] = [];
   if (upper === 'Head') {
     stops.push({ offset: '0%', color: 'white' });
   } else {
     stops.push(
       { offset: '0%', color: 'black' },
-      { offset: `${ub.top}%`, color: 'black' },
-      { offset: `${ub.top + upperFeather}%`, color: 'white' },
+      { offset: `${topFadeStart}%`, color: 'black' },
+      { offset: `${topFadeEnd}%`, color: 'white' },
     );
   }
   if (lower === 'Legs') {
     stops.push({ offset: '100%', color: 'white' });
   } else {
     stops.push(
-      { offset: `${lb.bottom - lowerFeather}%`, color: 'white' },
-      { offset: `${lb.bottom}%`, color: 'black' },
+      { offset: `${bottomFadeStart}%`, color: 'white' },
+      { offset: `${bottomFadeEnd}%`, color: 'black' },
       { offset: '100%', color: 'black' },
     );
   }
@@ -562,6 +644,84 @@ const WAITING_ICON_STYLE: CSSProperties = {
   mixBlendMode: 'screen',
   pointerEvents: 'none',
 };
+
+// ---------- Debug (zone boundary diagnostic) ----------
+//
+// TEMPORARY diagnostic overlay. When DEBUG_ZONES !== 'off', the normal
+// selection / hover / outline overlays are suppressed and all five zones
+// are rendered simultaneously in distinct solid colours so zone boundaries,
+// gaps, and the effect of feathering can be inspected visually.
+//
+//   'off'       — production rendering (no debug overlay).
+//   'solid'     — each zone filled with its debug colour, clipped to the
+//                 silhouette via a HARD-EDGE band mask (no feather). Reveals
+//                 the raw zone topology: are bands tiling, or is there a
+//                 gap/overlap at each boundary?
+//   'feathered' — each zone filled with its debug colour, using the
+//                 production `zoneFeatherMaskStyle` (silhouette × feather
+//                 gradient). Compared to 'solid' this shows the coverage
+//                 loss introduced by feathering.
+//
+// Flip this flag to capture screenshots; set back to 'off' when done.
+type DebugZoneMode = 'off' | 'solid' | 'feathered';
+const DEBUG_ZONES: DebugZoneMode = 'off';
+
+const DEBUG_ZONE_COLORS: Record<BodyZone, string> = {
+  Head: 'rgba(255,   0,   0, 0.6)', // red
+  Chest: 'rgba(  0, 255,   0, 0.6)', // green
+  Stomach: 'rgba(  0,   0, 255, 0.6)', // blue
+  Waist: 'rgba(255, 255,   0, 0.6)', // yellow
+  Legs: 'rgba(255,   0, 255, 0.6)', // magenta
+};
+
+// Hard-edge band mask: silhouette PNG × vertical linear-gradient with
+// instant transparent→black→transparent transitions at the band's top
+// and bottom. Used by the 'solid' debug mode — no feather, no fade.
+function zoneSolidMaskStyle(z: BodyZone): CSSProperties {
+  const { top, bottom } = ZONE_BANDS[z];
+  const gradient =
+    `linear-gradient(to bottom, ` +
+    `transparent 0%, transparent ${top}%, ` +
+    `black ${top}%, black ${bottom}%, ` +
+    `transparent ${bottom}%, transparent 100%)`;
+  return {
+    WebkitMaskImage: `url(${silhouetteSrc}), ${gradient}`,
+    maskImage: `url(${silhouetteSrc}), ${gradient}`,
+    WebkitMaskSize: '100% 100%, 100% 100%',
+    maskSize: '100% 100%, 100% 100%',
+    WebkitMaskRepeat: 'no-repeat, no-repeat',
+    maskRepeat: 'no-repeat, no-repeat',
+    WebkitMaskPosition: 'center, center',
+    maskPosition: 'center, center',
+    WebkitMaskComposite: 'source-in',
+    maskComposite: 'intersect',
+  };
+}
+
+function DebugZoneOverlay({ mode }: { mode: 'solid' | 'feathered' }) {
+  return (
+    <>
+      {BODY_ZONES.map((z) => {
+        const color = DEBUG_ZONE_COLORS[z];
+        const style =
+          mode === 'feathered'
+            ? zoneFeatherMaskStyle(z)
+            : zoneSolidMaskStyle(z);
+        return (
+          <div
+            key={`debug-${mode}-${z}`}
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              ...style,
+              background: color,
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
 
 // ---------- Component ----------
 
@@ -970,8 +1130,14 @@ function SilhouetteStage(props: SilhouetteStageProps) {
         }}
       />
 
+      {/* Debug overlay (diagnostic only) — shows all five zones in distinct
+          colours so boundary topology and feather coverage are visible at a
+          glance. Selection / hover / outline rendering is suppressed while
+          the debug overlay is active; see DEBUG_ZONES flag above. */}
+      {DEBUG_ZONES !== 'off' && <DebugZoneOverlay mode={DEBUG_ZONES} />}
+
       {/* Selection fill overlays */}
-      {filledItems.map((item) => {
+      {DEBUG_ZONES === 'off' && filledItems.map((item) => {
         if (item.kind === 'single') {
           return (
             <div
@@ -1008,7 +1174,7 @@ function SilhouetteStage(props: SilhouetteStageProps) {
           `hoverZones` / `hoverPair`; others are at opacity 0. Opacity
           transitions provide symmetric 150ms fade in/out even when
           switching between hovered zones. */}
-      {BODY_ZONES.map((z) => {
+      {DEBUG_ZONES === 'off' && BODY_ZONES.map((z) => {
         const show = hoverZones.includes(z);
         const hardEdges = hoverZoneHardEdges[z] ?? {};
         const neighbourFeathers = hoverZoneNeighbourFeathers[z] ?? {};
@@ -1026,7 +1192,7 @@ function SilhouetteStage(props: SilhouetteStageProps) {
           />
         );
       })}
-      {ADJACENT_PAIRS.map((p) => {
+      {DEBUG_ZONES === 'off' && ADJACENT_PAIRS.map((p) => {
         const show =
           hoverPair !== null &&
           hoverPair.upper === p.upper &&
@@ -1051,7 +1217,7 @@ function SilhouetteStage(props: SilhouetteStageProps) {
         );
       })}
 
-      {(visibleFilledZones.length > 0 || hoverOutlineTargets !== null) && (
+      {DEBUG_ZONES === 'off' && (visibleFilledZones.length > 0 || hoverOutlineTargets !== null) && (
         <svg
           aria-hidden
           className="absolute inset-0 w-full h-full pointer-events-none"

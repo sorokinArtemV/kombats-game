@@ -27,7 +27,12 @@
       "Bash(grep -E \"^tsc$|^vite$|^tsc\\\\.cmd\")",
       "Bash(npx --no-install vite build)",
       "mcp__ide__getDiagnostics",
-      "Bash(curl *)"
+      "Bash(curl *)",
+      "Bash(python -c \"from PIL import Image; im = Image.open\\('src/assets/fighters/silhouette.png'\\); print\\(im.size, im.mode\\)\")",
+      "Bash(mkdir -p /tmp/zone-debug)",
+      "Bash(echo \"started PID $!\")",
+      "Bash(python *)",
+      "Bash(rm -f /tmp/zone-debug/vite2.log)"
     ]
   }
 }
