@@ -25,7 +25,9 @@
       "Read(//tmp/**)",
       "Bash(git ls-tree *)",
       "Bash(grep -E \"^tsc$|^vite$|^tsc\\\\.cmd\")",
-      "Bash(npx --no-install vite build)"
+      "Bash(npx --no-install vite build)",
+      "mcp__ide__getDiagnostics",
+      "Bash(curl *)"
     ]
   }
 }

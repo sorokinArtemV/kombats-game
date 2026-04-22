@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Trophy, Heart, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
 import { PrimaryButton, SecondaryButton, GhostButton, GamePanel } from './KombatsUI';
 import {
   Button as DSButton,
+  Divider as DSDivider,
+  Label as DSLabel,
   Panel as DSPanel,
 } from '../../design-system/primitives';
-import { accent, radius, space, surface, typography } from '../../design-system/tokens';
+import { accent, space, text } from '../../design-system/tokens';
 import {
   RewardRow,
   QueueCard,
@@ -57,18 +59,47 @@ const FIGHTER_IMAGE_MARGIN_BOTTOM = '-17vh';
 const FIGHTER_COLUMN_LEFT_CLASSNAME = 'absolute left-0 bottom-0 flex flex-col items-center';
 const FIGHTER_COLUMN_RIGHT_CLASSNAME = 'absolute right-0 bottom-0 flex flex-col items-center';
 
-// Combat panel's YOUR TURN status indicator. Quiet filled badge — reads
-// as state, not a CTA competitor with LOCK IN.
-const YOUR_TURN_BADGE_STYLE = {
-  background: surface.glassSubtle,
-  color: accent.text,
-  padding: '4px 12px',
-  borderRadius: radius.sm,
-  fontSize: typography.labelDisplay.fontSize,
-  letterSpacing: typography.labelDisplay.letterSpacing,
-  textTransform: typography.labelDisplay.textTransform,
-  fontWeight: typography.labelDisplay.fontWeight,
-} as const;
+// Combat panel title — Cinzel gold heading anchoring the diptych. Same
+// serif family as the onboarding card title but smaller and tighter so
+// it sits as a section header rather than a screen-level headline.
+const COMBAT_PANEL_TITLE_STYLE: CSSProperties = {
+  margin: 0,
+  fontSize: 15,
+  fontWeight: 600,
+  letterSpacing: '0.24em',
+  textTransform: 'uppercase',
+  color: accent.primary,
+  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+  textShadow: '0 2px 12px rgba(201, 162, 90, 0.3)',
+  textAlign: 'center',
+  lineHeight: 1,
+};
+
+// Meta row: 3-column grid locks the timer to dead-center regardless of
+// how wide ROUND N or YOUR TURN become. Earlier flex + justify-between
+// drifted the timer off-axis as panel width changed.
+const COMBAT_META_ROW_STYLE: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr auto 1fr',
+  alignItems: 'center',
+  padding: `${space.xs} ${space.md}`,
+};
+
+// Quiet status indicator on the right edge of the meta row. Dot + label,
+// no bordered box — a box would compete visually with the LOCK IN CTA.
+const TURN_INDICATOR_STYLE: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: space.xs,
+};
+
+const TURN_INDICATOR_DOT_STYLE: CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: 9999,
+  background: accent.primary,
+  boxShadow: '0 0 8px rgba(201, 162, 90, 0.55)',
+};
 
 // ==================== MAIN HUB / LOBBY ====================
 
@@ -461,35 +492,57 @@ export function BattleScreen({
           style={{ transform: 'translate(-50%, -62%)' }}
         >
           <DSPanel variant="glass" radius="md" elevation="panel" bordered>
-            <div style={{ padding: space.lg }}>
-              {/* Battle meta row — round / timer / turn state */}
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-[var(--kombats-gold)] uppercase tracking-widest">Round 2</span>
-                <span className="flex items-center gap-1.5 text-[var(--kombats-text-primary)] text-xs">
-                  <Clock className="w-3 h-3 text-[var(--kombats-moon-silver)]" />
-                  <span className="tabular-nums">28</span>
-                </span>
-                <span style={YOUR_TURN_BADGE_STYLE}>Your Turn</span>
+            <div style={{ paddingTop: space.md, paddingBottom: space.sm }}>
+              {/* Panel title — anchors the diptych as a named section. */}
+              <div style={{ padding: `${space.sm} ${space.md}` }}>
+                <h3 style={COMBAT_PANEL_TITLE_STYLE}>Select Attack &amp; Block</h3>
               </div>
 
-              <div style={{ marginTop: space.md }}>
-                <BodyZoneSelector
-                  attack={selectedAttack}
-                  block={selectedDefense}
-                  onAttackChange={setSelectedAttack}
-                  onBlockChange={setSelectedDefense}
-                  width={160}
-                  action={
-                    <DSButton
-                      variant="primary"
-                      size="lg"
-                      disabled={!selectedAttack || !selectedDefense}
-                    >
-                      LOCK IN
-                    </DSButton>
-                  }
-                />
+              <DSDivider marginY="xs" />
+
+              {/* Battle meta row — round / timer / turn state */}
+              <div style={COMBAT_META_ROW_STYLE}>
+                <div style={{ textAlign: 'left' }}>
+                  <DSLabel tone="accent">Round 2</DSLabel>
+                </div>
+                <div
+                  style={{
+                    textAlign: 'center',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: space.xs,
+                    color: text.primary,
+                    fontSize: 12,
+                  }}
+                >
+                  <Clock style={{ width: 12, height: 12, color: text.muted }} />
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>28</span>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={TURN_INDICATOR_STYLE}>
+                    <span aria-hidden style={TURN_INDICATOR_DOT_STYLE} />
+                    <DSLabel tone="accent">Your Turn</DSLabel>
+                  </span>
+                </div>
               </div>
+
+              <BodyZoneSelector
+                attack={selectedAttack}
+                block={selectedDefense}
+                onAttackChange={setSelectedAttack}
+                onBlockChange={setSelectedDefense}
+                width={210}
+                action={
+                  <DSButton
+                    variant="primary"
+                    size="md"
+                    disabled={!selectedAttack || !selectedDefense}
+                  >
+                    LOCK IN
+                  </DSButton>
+                }
+              />
             </div>
           </DSPanel>
 
