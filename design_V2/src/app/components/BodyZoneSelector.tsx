@@ -1,7 +1,9 @@
 import { useState, type CSSProperties } from 'react';
+import { motion } from 'motion/react';
 import silhouetteSrc from '../../assets/fighters/silhouette.png';
-import { Divider } from '../../design-system/primitives';
-import { border, radius, semantic, space, surface, text } from '../../design-system/tokens';
+import mitsudamoeSrc from '../../assets/icons/mitsudamoe.png';
+import { Button } from '../../design-system/primitives';
+import { accent, border, radius, semantic, space, surface, text } from '../../design-system/tokens';
 
 // Diptych: two independent silhouettes side-by-side, one for ATTACK
 // (opponent) and one for BLOCK (you). Each silhouette is a
@@ -435,18 +437,6 @@ const SELECTION_VALUE_STYLE_BLOCK: CSSProperties = {
   color: semantic.block.text,
 };
 
-// Small instructional subtitle under each ATTACK / BLOCK column header.
-// Gives new players a one-line cue about what the column expects.
-const COLUMN_SUBTITLE_STYLE: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 500,
-  letterSpacing: '0.18em',
-  textTransform: 'uppercase',
-  color: text.muted,
-  marginTop: space.xs,
-  textAlign: 'center',
-};
-
 // Small right-angle corner marks that claim each silhouette column's
 // territory. Attack column gets red marks on its left side; block
 // column gets green marks on its right side. ~0.35 opacity so they
@@ -521,6 +511,57 @@ const BLOCK_HEADER_STYLE: CSSProperties = {
   textShadow: '0 2px 14px rgba(90, 138, 122, 0.35)',
 };
 
+// ---------- Waiting state ----------
+//
+// After LOCK IN, the player can no longer interact with the silhouettes
+// and must wait for the opponent to commit. The panel chrome (title,
+// meta row, timer) stays visible so the opponent's remaining time is
+// legible. Only the combat zone's children and the footer action swap.
+//
+// The mitsudomoe (gold triple-comma) is a quiet ceremonial centerpiece —
+// rendered with mix-blend-mode: screen so the PNG's dark background
+// drops into the glassSubtle surface and only the gold figure reads.
+
+const MITSUDOMOE_SIZE_PX = 68;
+const MITSUDOMOE_GLOW_SIZE_PX = 140;
+
+const WAITING_ICON_WRAPPER_STYLE: CSSProperties = {
+  position: 'relative',
+  width: MITSUDOMOE_GLOW_SIZE_PX,
+  height: MITSUDOMOE_GLOW_SIZE_PX,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
+
+const WAITING_ICON_GLOW_STYLE: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  borderRadius: '50%',
+  background:
+    'radial-gradient(circle, rgba(201, 162, 90, 0.18) 0%, rgba(201, 162, 90, 0.06) 45%, rgba(201, 162, 90, 0) 72%)',
+  pointerEvents: 'none',
+};
+
+const WAITING_ICON_STYLE: CSSProperties = {
+  width: MITSUDOMOE_SIZE_PX,
+  height: MITSUDOMOE_SIZE_PX,
+  opacity: 0.5,
+  mixBlendMode: 'screen',
+  pointerEvents: 'none',
+};
+
+const WAITING_LABEL_STYLE: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  letterSpacing: '0.24em',
+  textTransform: 'uppercase',
+  color: accent.muted,
+  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+  textAlign: 'center',
+  lineHeight: 1,
+};
+
 // ---------- Component ----------
 
 interface BodyZoneSelectorProps {
@@ -533,9 +574,19 @@ interface BodyZoneSelectorProps {
   width?: number;
   /**
    * Optional node rendered below the diptych — typically the LOCK IN
-   * button. Centered horizontally; no width stretching.
+   * button. Centered horizontally; no width stretching. Ignored when
+   * `isWaiting` is true — the component renders its own confirmation
+   * button instead.
    */
   action?: React.ReactNode;
+  /**
+   * When true, the panel enters its post-lock-in waiting state: the
+   * silhouette columns are replaced with a quiet mitsudomoe centerpiece
+   * and the footer swaps to a "LOCKED IN ✓" confirmation. The outer
+   * glassSubtle container dimensions are preserved so the parent panel
+   * does not jump size between phases.
+   */
+  isWaiting?: boolean;
 }
 
 export function BodyZoneSelector({
@@ -546,10 +597,11 @@ export function BodyZoneSelector({
   className,
   width = 200,
   action,
+  isWaiting = false,
 }: BodyZoneSelectorProps) {
   // Column wrapper — pack content to the top so the silhouette sits
-  // directly under its header/subtitle and the selection readout nests
-  // flush beneath it, with no dead vertical gap above the header.
+  // directly under its header and the selection readout nests flush
+  // beneath it, with no dead vertical gap above the header.
   const columnWrapperStyle: CSSProperties = {
     position: 'relative',
     display: 'flex',
@@ -561,76 +613,128 @@ export function BodyZoneSelector({
     paddingBottom: space.sm,
   };
 
+  // Silhouette column's rendered height, derived so the waiting state
+  // can match it exactly and the panel never jumps size between phases.
+  //   pt(4) + header(18) + gap(8) + silhouette(width*1.5) + gap(8)
+  //   + selection label wrapper(marginTop 8 + ~16px text) + pb(8)
+  const silhouetteHeightPx = Math.round(width * 1.5);
+  const columnContentHeightPx = 4 + 18 + 8 + silhouetteHeightPx + 8 + 24 + 8;
+
+  const combatZoneStyle: CSSProperties = {
+    background: surface.glassSubtle,
+    borderRadius: radius.sm,
+    border: border.subtle,
+    padding: `${space.sm} ${space.md}`,
+    display: 'flex',
+    justifyContent: 'center',
+    gap: space.md,
+  };
+
   return (
     <div className={className}>
       <style>{ZONE_ANIMATION_CSS}</style>
 
       {/* Glass-in-glass combat zone — a subtle inset surface behind the
-          two silhouettes that visually separates the "combat" band from
-          the panel's header/action zones. Corner accents remain on the
-          individual column wrappers inside; this container is purely a
-          backdrop and must not disturb column layout. */}
-      <div
-        style={{
-          background: surface.glassSubtle,
-          borderRadius: radius.sm,
-          border: border.subtle,
-          padding: `${space.sm} ${space.md}`,
-          display: 'flex',
-          justifyContent: 'center',
-          gap: space.md,
-        }}
-      >
-        <div style={{ ...columnWrapperStyle, flex: 1 }}>
-          <CornerMark color={ATTACK_CORNER_COLOR} position="tl" />
-          <CornerMark color={ATTACK_CORNER_COLOR} position="bl" />
-          <h3 style={ATTACK_HEADER_STYLE}>ATTACK</h3>
-          <div style={COLUMN_SUBTITLE_STYLE}>Pick one zone on your foe</div>
-          <SilhouetteStage
-            mode="attack"
-            attack={attack}
-            onAttackChange={onAttackChange}
-            width={width}
-          />
-          {attack ? (
-            <div style={SELECTION_VALUE_STYLE_ATTACK}>{attack}</div>
-          ) : (
-            <div style={SELECTION_PLACEHOLDER_STYLE}>Select zone</div>
-          )}
-        </div>
-
-        <div style={{ ...columnWrapperStyle, flex: 1 }}>
-          <CornerMark color={BLOCK_CORNER_COLOR} position="tr" />
-          <CornerMark color={BLOCK_CORNER_COLOR} position="br" />
-          <h3 style={BLOCK_HEADER_STYLE}>BLOCK</h3>
-          <div style={COLUMN_SUBTITLE_STYLE}>One pair, two zones covered</div>
-          <SilhouetteStage
-            mode="block"
-            block={block}
-            onBlockChange={onBlockChange}
-            width={width}
-          />
-          {block ? (
-            <div style={SELECTION_VALUE_STYLE_BLOCK}>{block}</div>
-          ) : (
-            <div style={SELECTION_PLACEHOLDER_STYLE}>Select pair</div>
-          )}
-        </div>
-      </div>
-
-      {action && (
-        <>
-          <Divider marginY="sm" />
+          two silhouettes (or the waiting centerpiece, post-lock-in).
+          Container dimensions stay identical across both states so the
+          panel never jumps size when the turn phase switches. */}
+      <div style={combatZoneStyle}>
+        {isWaiting ? (
           <div
             style={{
+              flex: 1,
+              minHeight: columnContentHeightPx,
               display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
               justifyContent: 'center',
-              paddingBottom: space.sm,
+              gap: space.md,
             }}
           >
-            {action}
+            <div style={WAITING_ICON_WRAPPER_STYLE}>
+              <div aria-hidden style={WAITING_ICON_GLOW_STYLE} />
+              <motion.img
+                src={mitsudamoeSrc}
+                alt=""
+                aria-hidden
+                style={WAITING_ICON_STYLE}
+                animate={{ rotate: 360 }}
+                transition={{
+                  duration: 12,
+                  repeat: Infinity,
+                  ease: 'linear',
+                }}
+              />
+            </div>
+            <motion.div
+              style={WAITING_LABEL_STYLE}
+              animate={{ opacity: [0.6, 1, 0.6] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              Awaiting Opponent
+            </motion.div>
           </div>
-        </>
+        ) : (
+          <>
+            <div style={{ ...columnWrapperStyle, flex: 1 }}>
+              <CornerMark color={ATTACK_CORNER_COLOR} position="tl" />
+              <CornerMark color={ATTACK_CORNER_COLOR} position="bl" />
+              <h3 style={ATTACK_HEADER_STYLE}>ATTACK</h3>
+              <SilhouetteStage
+                mode="attack"
+                attack={attack}
+                onAttackChange={onAttackChange}
+                width={width}
+              />
+              {attack ? (
+                <div style={SELECTION_VALUE_STYLE_ATTACK}>{attack}</div>
+              ) : (
+                <div style={SELECTION_PLACEHOLDER_STYLE}>Select zone</div>
+              )}
+            </div>
+
+            <div style={{ ...columnWrapperStyle, flex: 1 }}>
+              <CornerMark color={BLOCK_CORNER_COLOR} position="tr" />
+              <CornerMark color={BLOCK_CORNER_COLOR} position="br" />
+              <h3 style={BLOCK_HEADER_STYLE}>BLOCK</h3>
+              <SilhouetteStage
+                mode="block"
+                block={block}
+                onBlockChange={onBlockChange}
+                width={width}
+              />
+              {block ? (
+                <div style={SELECTION_VALUE_STYLE_BLOCK}>{block}</div>
+              ) : (
+                <div style={SELECTION_PLACEHOLDER_STYLE}>Select pair</div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {(action || isWaiting) && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            paddingTop: space.sm,
+            paddingBottom: space.sm,
+          }}
+        >
+          {isWaiting ? (
+            <Button
+              variant="ghost"
+              size="md"
+              disabled
+              style={{ cursor: 'default' }}
+            >
+              Locked In ✓
+            </Button>
+          ) : (
+            action
+          )}
+        </div>
       )}
     </div>
   );

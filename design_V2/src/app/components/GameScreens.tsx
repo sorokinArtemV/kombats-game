@@ -409,6 +409,18 @@ export function BattleScreen({
   const [selectedDefense, setSelectedDefense] = useState<BlockPair | null>(null);
   const [showPlayerStats, setShowPlayerStats] = useState(false);
   const [showOpponentStats, setShowOpponentStats] = useState(false);
+  // Waiting phase — flipped when the player commits their picks. In a
+  // real round, server-side resolution would clear this via a new turn.
+  const [isWaiting, setIsWaiting] = useState(false);
+  const canLockIn = selectedAttack !== null && selectedDefense !== null;
+  const handleLockIn = () => {
+    if (canLockIn) setIsWaiting(true);
+  };
+  const handleResetTurn = () => {
+    setIsWaiting(false);
+    setSelectedAttack(null);
+    setSelectedDefense(null);
+  };
 
   return (
     <GameShell
@@ -488,7 +500,7 @@ export function BattleScreen({
 
         {/* Center Action Panel — battle-control unit (status + selector + lock in) */}
         <div
-          className="absolute top-1/2 left-1/2 w-[640px]"
+          className="absolute top-1/2 left-1/2 w-[540px]"
           style={{ transform: 'translate(-50%, -62%)' }}
         >
           <DSPanel variant="glass" radius="md" elevation="panel" bordered>
@@ -537,12 +549,14 @@ export function BattleScreen({
                   block={selectedDefense}
                   onAttackChange={setSelectedAttack}
                   onBlockChange={setSelectedDefense}
-                  width={210}
+                  width={175}
+                  isWaiting={isWaiting}
                   action={
                     <DSButton
                       variant="primary"
                       size="md"
-                      disabled={!selectedAttack || !selectedDefense}
+                      disabled={!canLockIn}
+                      onClick={handleLockIn}
                     >
                       LOCK IN
                     </DSButton>
@@ -552,8 +566,13 @@ export function BattleScreen({
             </div>
           </DSPanel>
 
-          {(onVictory || onDefeat) && (
+          {(onVictory || onDefeat || isWaiting) && (
             <div className="flex gap-2 justify-center mt-2">
+              {isWaiting && (
+                <button onClick={handleResetTurn} className="text-xs text-[var(--kombats-text-muted)] hover:text-[var(--kombats-text-primary)]">
+                  [Reset Turn]
+                </button>
+              )}
               {onVictory && (
                 <button onClick={onVictory} className="text-xs text-[var(--kombats-text-muted)] hover:text-[var(--kombats-text-primary)]">
                   [Test Victory]

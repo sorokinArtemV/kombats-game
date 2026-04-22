@@ -25,6 +25,8 @@ const YOUR_TURN_BADGE_STYLE = {
 export function MockBattle() {
   const [selectedAttack, setSelectedAttack] = useState<BodyZone | null>(null);
   const [selectedDefense, setSelectedDefense] = useState<BlockPair | null>(null);
+  const [isWaiting, setIsWaiting] = useState(false);
+  const canLockIn = selectedAttack !== null && selectedDefense !== null;
 
   return (
     <div className="relative w-full h-screen overflow-hidden bg-[var(--kombats-ink-navy)]">
@@ -200,11 +202,13 @@ export function MockBattle() {
                         onAttackChange={setSelectedAttack}
                         onBlockChange={setSelectedDefense}
                         width={190}
+                        isWaiting={isWaiting}
                         action={
                           <DSButton
                             variant="primary"
                             size="lg"
-                            disabled={!selectedAttack || !selectedDefense}
+                            disabled={!canLockIn}
+                            onClick={() => canLockIn && setIsWaiting(true)}
                           >
                             LOCK IN
                           </DSButton>
@@ -220,6 +224,21 @@ export function MockBattle() {
             <div className="flex justify-center mt-4">
               <span style={YOUR_TURN_BADGE_STYLE}>Your Turn</span>
             </div>
+
+            {isWaiting && (
+              <div className="flex justify-center mt-2">
+                <button
+                  onClick={() => {
+                    setIsWaiting(false);
+                    setSelectedAttack(null);
+                    setSelectedDefense(null);
+                  }}
+                  className="text-xs text-[var(--kombats-text-muted)] hover:text-[var(--kombats-text-primary)]"
+                >
+                  [Reset Turn]
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
