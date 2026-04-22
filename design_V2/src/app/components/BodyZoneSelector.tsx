@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import silhouetteSrc from '../../assets/fighters/silhouette.png';
-import { Divider, Label } from '../../design-system/primitives';
-import { semantic, space, text } from '../../design-system/tokens';
+import { Divider } from '../../design-system/primitives';
+import { border, radius, semantic, space, surface, text } from '../../design-system/tokens';
 
 // Diptych: two independent silhouettes side-by-side, one for ATTACK
 // (opponent) and one for BLOCK (you). Each silhouette is a
@@ -401,35 +401,37 @@ function zoneHoverFillColor(m: Mode): string {
     : `rgba(${BLOCK_FILL_RGB}, 0.25)`;
 }
 
-// Footer selection text — two visually distinct states so the empty
-// placeholder never reads as a committed selection:
+// Per-column selection readout — rendered directly under the silhouette
+// image inside each column wrapper. Two states, visually distinct so the
+// empty placeholder never reads as a committed choice:
 //   - PLACEHOLDER: muted, italic, 400 weight — clearly "nothing chosen"
 //   - SELECTED:    semantic tone (attack / block), 600 weight, uppercase
-// Spec: see Fix 5 in combat-panel-redesign-prompt.md.
-const PLACEHOLDER_VALUE_STYLE: CSSProperties = {
-  fontSize: 14,
+const SELECTION_PLACEHOLDER_STYLE: CSSProperties = {
+  fontSize: 13,
   color: text.muted,
   fontStyle: 'italic',
   fontWeight: 400,
   letterSpacing: '0.04em',
   textAlign: 'center',
+  marginTop: space.sm,
 };
 
-const SELECTED_VALUE_STYLE_BASE: CSSProperties = {
-  fontSize: 14,
+const SELECTION_VALUE_STYLE_BASE: CSSProperties = {
+  fontSize: 13,
   fontWeight: 600,
   letterSpacing: '0.08em',
   textTransform: 'uppercase',
   textAlign: 'center',
+  marginTop: space.sm,
 };
 
-const ATTACK_SELECTED_VALUE_STYLE: CSSProperties = {
-  ...SELECTED_VALUE_STYLE_BASE,
+const SELECTION_VALUE_STYLE_ATTACK: CSSProperties = {
+  ...SELECTION_VALUE_STYLE_BASE,
   color: semantic.attack.text,
 };
 
-const BLOCK_SELECTED_VALUE_STYLE: CSSProperties = {
-  ...SELECTED_VALUE_STYLE_BASE,
+const SELECTION_VALUE_STYLE_BLOCK: CSSProperties = {
+  ...SELECTION_VALUE_STYLE_BASE,
   color: semantic.block.text,
 };
 
@@ -545,13 +547,17 @@ export function BodyZoneSelector({
   width = 200,
   action,
 }: BodyZoneSelectorProps) {
+  // Column wrapper — pack content to the top so the silhouette sits
+  // directly under its header/subtitle and the selection readout nests
+  // flush beneath it, with no dead vertical gap above the header.
   const columnWrapperStyle: CSSProperties = {
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    justifyContent: 'flex-start',
     gap: space.sm,
-    paddingTop: space.sm,
+    paddingTop: space.xs,
     paddingBottom: space.sm,
   };
 
@@ -559,20 +565,23 @@ export function BodyZoneSelector({
     <div className={className}>
       <style>{ZONE_ANIMATION_CSS}</style>
 
-      {/* Diptych: two independent silhouettes, each owning its own hover
-          state and its own hover-gap adjacency pass. attack state is
-          read only by the attack stage; block state only by the block
-          stage. */}
+      {/* Glass-in-glass combat zone — a subtle inset surface behind the
+          two silhouettes that visually separates the "combat" band from
+          the panel's header/action zones. Corner accents remain on the
+          individual column wrappers inside; this container is purely a
+          backdrop and must not disturb column layout. */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          background: surface.glassSubtle,
+          borderRadius: radius.sm,
+          border: border.subtle,
+          padding: `${space.sm} ${space.md}`,
+          display: 'flex',
+          justifyContent: 'center',
           gap: space.md,
-          alignItems: 'start',
-          padding: `0 ${space.md}`,
         }}
       >
-        <div style={columnWrapperStyle}>
+        <div style={{ ...columnWrapperStyle, flex: 1 }}>
           <CornerMark color={ATTACK_CORNER_COLOR} position="tl" />
           <CornerMark color={ATTACK_CORNER_COLOR} position="bl" />
           <h3 style={ATTACK_HEADER_STYLE}>ATTACK</h3>
@@ -583,9 +592,14 @@ export function BodyZoneSelector({
             onAttackChange={onAttackChange}
             width={width}
           />
+          {attack ? (
+            <div style={SELECTION_VALUE_STYLE_ATTACK}>{attack}</div>
+          ) : (
+            <div style={SELECTION_PLACEHOLDER_STYLE}>Select zone</div>
+          )}
         </div>
 
-        <div style={columnWrapperStyle}>
+        <div style={{ ...columnWrapperStyle, flex: 1 }}>
           <CornerMark color={BLOCK_CORNER_COLOR} position="tr" />
           <CornerMark color={BLOCK_CORNER_COLOR} position="br" />
           <h3 style={BLOCK_HEADER_STYLE}>BLOCK</h3>
@@ -596,68 +610,27 @@ export function BodyZoneSelector({
             onBlockChange={onBlockChange}
             width={width}
           />
+          {block ? (
+            <div style={SELECTION_VALUE_STYLE_BLOCK}>{block}</div>
+          ) : (
+            <div style={SELECTION_PLACEHOLDER_STYLE}>Select pair</div>
+          )}
         </div>
       </div>
 
-      <Divider marginY="sm" />
-
-      {/* Compact footer row: [ ATTACK summary | BLOCK summary | LOCK IN ] */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr auto',
-          alignItems: 'center',
-          gap: space.md,
-          padding: `${space.sm} ${space.md}`,
-        }}
-      >
-        <FooterSelection
-          tone="attack"
-          label="ATTACK"
-          selected={attack}
-          placeholder="Select zone"
-        />
-        <FooterSelection
-          tone="block"
-          label="BLOCK"
-          selected={block}
-          placeholder="Select pair"
-        />
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          {action}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FooterSelection({
-  tone,
-  label,
-  selected,
-  placeholder,
-}: {
-  tone: 'attack' | 'block';
-  label: string;
-  selected: string | null;
-  placeholder: string;
-}) {
-  const selectedStyle =
-    tone === 'attack' ? ATTACK_SELECTED_VALUE_STYLE : BLOCK_SELECTED_VALUE_STYLE;
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        justifyContent: 'center',
-        gap: space.sm,
-      }}
-    >
-      <Label tone={tone}>{label}</Label>
-      {selected ? (
-        <span style={selectedStyle}>{selected}</span>
-      ) : (
-        <span style={PLACEHOLDER_VALUE_STYLE}>{placeholder}</span>
+      {action && (
+        <>
+          <Divider marginY="sm" />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              paddingBottom: space.sm,
+            }}
+          >
+            {action}
+          </div>
+        </>
       )}
     </div>
   );

@@ -493,12 +493,12 @@ export function BattleScreen({
         >
           <DSPanel variant="glass" radius="md" elevation="panel" bordered>
             <div style={{ paddingTop: space.md, paddingBottom: space.sm }}>
-              {/* Panel title — anchors the diptych as a named section. */}
-              <div style={{ padding: `${space.sm} ${space.md}` }}>
+              {/* Panel title — anchors the diptych as a named section.
+                  No bottom padding so the meta row's top padding owns
+                  the gap and title+meta read as a single header unit. */}
+              <div style={{ padding: `${space.sm} ${space.md} 0` }}>
                 <h3 style={COMBAT_PANEL_TITLE_STYLE}>Select Attack &amp; Block</h3>
               </div>
-
-              <DSDivider marginY="xs" />
 
               {/* Battle meta row — round / timer / turn state */}
               <div style={COMBAT_META_ROW_STYLE}>
@@ -527,22 +527,28 @@ export function BattleScreen({
                 </div>
               </div>
 
-              <BodyZoneSelector
-                attack={selectedAttack}
-                block={selectedDefense}
-                onAttackChange={setSelectedAttack}
-                onBlockChange={setSelectedDefense}
-                width={210}
-                action={
-                  <DSButton
-                    variant="primary"
-                    size="md"
-                    disabled={!selectedAttack || !selectedDefense}
-                  >
-                    LOCK IN
-                  </DSButton>
-                }
-              />
+              {/* Divider marks the real break: header context above,
+                  combat zone below. */}
+              <DSDivider marginY="xs" />
+
+              <div style={{ padding: `0 ${space.md}` }}>
+                <BodyZoneSelector
+                  attack={selectedAttack}
+                  block={selectedDefense}
+                  onAttackChange={setSelectedAttack}
+                  onBlockChange={setSelectedDefense}
+                  width={210}
+                  action={
+                    <DSButton
+                      variant="primary"
+                      size="md"
+                      disabled={!selectedAttack || !selectedDefense}
+                    >
+                      LOCK IN
+                    </DSButton>
+                  }
+                />
+              </div>
             </div>
           </DSPanel>
 
