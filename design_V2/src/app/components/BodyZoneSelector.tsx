@@ -629,6 +629,7 @@ export function BodyZoneSelector({
     display: 'flex',
     justifyContent: 'center',
     gap: space.md,
+    overflow: 'visible',
   };
 
   return (
@@ -648,7 +649,7 @@ export function BodyZoneSelector({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              overflow: 'hidden',
+              overflow: 'visible',
             }}
           >
             <div style={WAITING_STAGE_STYLE}>
