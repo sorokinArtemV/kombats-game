@@ -60,10 +60,9 @@ const DEFEAT_FINAL: BattleLogEntry = {
 };
 
 export default function App() {
-  // TEMP: start in 'battle' for headless screenshot capture. Revert to 'login'.
-  const [gameState, setGameState] = useState<GameState>('battle');
+  const [gameState, setGameState] = useState<GameState>('login');
   const [queueTime, setQueueTime] = useState(0);
-  const [battleLog, setBattleLog] = useState<BattleLogEntry[]>(INITIAL_BATTLE_LOG);
+  const [battleLog, setBattleLog] = useState<BattleLogEntry[]>([]);
   const [profile, setProfile] = useState<OnboardingResult | null>(null);
 
   const handleOnboardingComplete = (result: OnboardingResult) => {

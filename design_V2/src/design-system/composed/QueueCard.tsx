@@ -1,8 +1,9 @@
 import type { CSSProperties } from 'react';
 import { motion } from 'motion/react';
-import { Clock, Target } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { Panel, PanelHeader, Divider, Button, Label } from '../primitives';
 import { accent, space, text } from '../tokens';
+import mitsudamoeSrc from '../../assets/icons/mitsudamoe.png';
 
 export type QueueStatus = 'ready' | 'searching';
 
@@ -17,42 +18,56 @@ export interface QueueCardProps {
   onCancel?: () => void;
 }
 
-const PULSE_ANIMATION = {
-  scale: [1, 1.15, 1],
-  opacity: [0.55, 1, 0.55],
-};
-
-const PULSE_TRANSITION = {
-  duration: 2,
-  repeat: Infinity,
-  ease: 'easeInOut' as const,
-};
-
-function PulsingTarget() {
+// Matchmaking-search spinner. Mirrors the combat-waiting centerpiece in
+// BodyZoneSelector (mitsudomoe icon + counter-rotating ring + radial glow),
+// scaled down for this compact queue panel: 200px glow, 140px ring, 88px
+// icon. Keeps the game's waiting-state visual language consistent.
+function MitsudomoeSpinner() {
   return (
-    <motion.div
+    <div
       style={{
-        width: 80,
-        height: 80,
-        borderRadius: 9999,
-        border: `2px solid ${accent.primary}`,
         position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 200,
+        height: 200,
       }}
-      animate={PULSE_ANIMATION}
-      transition={PULSE_TRANSITION}
     >
       <div
+        aria-hidden
         style={{
           position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: 200,
+          height: 200,
+          borderRadius: '50%',
+          background:
+            'radial-gradient(circle, rgba(201,162,90,0.18) 0%, rgba(201,162,90,0.08) 35%, rgba(201,162,90,0.03) 60%, transparent 80%)',
+          pointerEvents: 'none',
         }}
-      >
-        <Target style={{ width: 40, height: 40, color: accent.primary }} />
-      </div>
-    </motion.div>
+      />
+      <motion.div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          width: 140,
+          height: 140,
+          borderRadius: '50%',
+          border: '1px solid rgba(201, 162, 90, 0.15)',
+          pointerEvents: 'none',
+        }}
+        animate={{ rotate: -360 }}
+        transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+      />
+      <motion.img
+        src={mitsudamoeSrc}
+        alt=""
+        aria-hidden
+        style={{ width: 88, height: 88, opacity: 0.5 }}
+        animate={{ rotate: 360 }}
+        transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+      />
+    </div>
   );
 }
 
@@ -125,7 +140,7 @@ export function QueueCard({
         {isSearching && (
           <>
             <div style={{ ...centerRowStyle, marginBottom: space.md }}>
-              <PulsingTarget />
+              <MitsudomoeSpinner />
             </div>
             <div style={{ marginBottom: space.md }}>
               <ElapsedTimer seconds={elapsedSeconds} />
