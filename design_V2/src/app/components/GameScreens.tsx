@@ -457,7 +457,7 @@ export function BattleScreen({
 
         {/* Center Action Panel — battle-control unit (status + selector + lock in) */}
         <div
-          className="absolute top-1/2 left-1/2 w-[400px]"
+          className="absolute top-1/2 left-1/2 w-[640px]"
           style={{ transform: 'translate(-50%, -62%)' }}
         >
           <DSPanel variant="glass" radius="md" elevation="panel" bordered>
@@ -479,7 +479,6 @@ export function BattleScreen({
                   onAttackChange={setSelectedAttack}
                   onBlockChange={setSelectedDefense}
                   width={160}
-                  layout="split"
                   action={
                     <DSButton
                       variant="primary"

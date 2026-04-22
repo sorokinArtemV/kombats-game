@@ -190,7 +190,7 @@ export function MockBattle() {
           <div className="max-w-5xl mx-auto">
             {/* Silhouette-driven combat selector */}
             <div className="mb-6 flex justify-center">
-              <div className="w-full max-w-xl">
+              <div className="w-full max-w-2xl">
                 <DSPanel variant="glass" radius="md" elevation="panel" bordered>
                   <div style={{ padding: space.lg }}>
                     <div>
@@ -200,7 +200,6 @@ export function MockBattle() {
                         onAttackChange={setSelectedAttack}
                         onBlockChange={setSelectedDefense}
                         width={190}
-                        layout="split"
                         action={
                           <DSButton
                             variant="primary"

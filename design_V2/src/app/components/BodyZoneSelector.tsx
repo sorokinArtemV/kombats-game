@@ -1,13 +1,20 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Sword, Shield } from 'lucide-react';
+import { useState, type CSSProperties } from 'react';
 import silhouetteSrc from '../../assets/fighters/silhouette.png';
-import { Divider, Label } from '../../design-system/primitives';
-import { accent, semantic, space, text, typography } from '../../design-system/tokens';
+import { Divider } from '../../design-system/primitives';
+import { semantic, space, text } from '../../design-system/tokens';
 
-// Silhouette stack (inside the width × width*1.5 wrapper, bottom → top):
+// Diptych: two independent silhouettes side-by-side, one for ATTACK
+// (opponent) and one for BLOCK (you). Each silhouette is a
+// SilhouetteStage instance with its own fixed mode and its own hover
+// state — the hover-gap adjacency logic runs per stage and never
+// crosses between them. Selection state is owned by the parent
+// (BodyZoneSelector) and threaded down to the appropriate stage.
+//
+// Per-silhouette stack (inside the width × width*1.5 wrapper, bottom → top):
 //   1. Soft backdrop             — faint warm radial glow behind the body.
-//   2. Base silhouette           — dark fill, warm edge glow.
-//   3. Selection FILL overlays   — silhouette-masked AND feather-masked,
+//   2. Tactical grid             — gold dot pattern with radial vignette.
+//   3. Base silhouette           — dark fill, warm edge glow.
+//   4. Selection FILL overlays   — silhouette-masked AND feather-masked,
 //                                   radial gradient, pulse. Attack mode
 //                                   renders one per-zone item; block mode
 //                                   renders one *paired* item spanning
@@ -16,19 +23,17 @@ import { accent, semantic, space, text, typography } from '../../design-system/t
 //                                   produce a transparent seam). The
 //                                   non-adjacent 'Legs & Head' pair falls
 //                                   back to two independent singles.
-//   4. Per-zone HOVER fill       — always mounted, opacity 0 except on
+//   5. Per-zone HOVER fill       — always mounted, opacity 0 except on
 //                                   the hovered-and-not-selected zone;
 //                                   flat fill, same feather mask, 150ms
 //                                   opacity transition for fade in/out.
-//   5. SVG outline+glow layer    — feMorphology-derived outline + outer
+//   6. SVG outline+glow layer    — feMorphology-derived outline + outer
 //                                   glow on selected zones, hairline-only
 //                                   on hover preview. Masked by a vertical
 //                                   linearGradient so the outline feathers
 //                                   at the band edges instead of
 //                                   terminating on a rect clip line.
-//   6. Hit areas                 — full-width rectangles per zone y-band.
-
-const SPLIT_THRESHOLD_PX = 520;
+//   7. Hit areas                 — full-width rectangles per zone y-band.
 
 // ---------- Domain ----------
 
@@ -66,7 +71,7 @@ const PAIR_ZONES: Record<BlockPair, [BodyZone, BodyZone]> = {
 };
 
 // Clicking a zone in block mode anchors the pair at that zone
-// (downward neighbor). Legs wraps back to Head to match the existing
+// (downward neighbour). Legs wraps back to Head to match the existing
 // game contract.
 const ZONE_TO_BLOCK_PAIR: Record<BodyZone, BlockPair> = {
   Head: 'Head & Chest',
@@ -396,9 +401,9 @@ function zoneHoverFillColor(m: Mode): string {
     : `rgba(${BLOCK_FILL_RGB}, 0.25)`;
 }
 
-// Informational value rendered below each Label tone. Mirrors QueueCard's
-// footerValueStyle but uses text.primary because this is selection state,
-// not an accent value.
+// Footer value rendered below each silhouette. Mirrors QueueCard's
+// footerValueStyle but uses text.primary because this is selection
+// state, not an accent value.
 const VALUE_STYLE: CSSProperties = {
   display: 'block',
   marginTop: space.xs,
@@ -406,6 +411,34 @@ const VALUE_STYLE: CSSProperties = {
   fontWeight: 500,
   color: text.primary,
   letterSpacing: '0.02em',
+};
+
+// Ceremonial header above each silhouette. Cinzel + wide tracking
+// matches the panel's serif-Roman aesthetic; deliberately NOT the
+// small-caps Label primitive, which is for short tone-coded inline
+// labels rather than column-anchoring headings. Tone-coloured text +
+// matching warm shadow keep attack/block channels distinct.
+const SILHOUETTE_HEADER_STYLE_BASE: CSSProperties = {
+  margin: 0,
+  fontSize: 18,
+  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+  fontWeight: 600,
+  letterSpacing: '0.24em',
+  textTransform: 'uppercase',
+  lineHeight: 1,
+  textAlign: 'center',
+};
+
+const ATTACK_HEADER_STYLE: CSSProperties = {
+  ...SILHOUETTE_HEADER_STYLE_BASE,
+  color: semantic.attack.text,
+  textShadow: '0 2px 14px rgba(192, 55, 68, 0.35)',
+};
+
+const BLOCK_HEADER_STYLE: CSSProperties = {
+  ...SILHOUETTE_HEADER_STYLE_BASE,
+  color: semantic.block.text,
+  textShadow: '0 2px 14px rgba(90, 138, 122, 0.35)',
 };
 
 // ---------- Component ----------
@@ -416,18 +449,13 @@ interface BodyZoneSelectorProps {
   onAttackChange: (zone: BodyZone) => void;
   onBlockChange: (pair: BlockPair) => void;
   className?: string;
-  /** Visual size of the silhouette body (width in px). Height is 1.5x. */
+  /** Visual size of EACH silhouette body (width in px). Height is 1.5x. */
   width?: number;
   /**
-   * Optional node rendered below the summaries — typically the LOCK IN
+   * Optional node rendered below the diptych — typically the LOCK IN
    * button. Centered horizontally; no width stretching.
    */
   action?: React.ReactNode;
-  /**
-   * 'auto' (default) picks split ≥520px, stacked below. 'split' and
-   * 'stacked' force the respective layout regardless of container size.
-   */
-  layout?: 'auto' | 'split' | 'stacked';
 }
 
 export function BodyZoneSelector({
@@ -438,50 +466,104 @@ export function BodyZoneSelector({
   className,
   width = 200,
   action,
-  layout = 'auto',
 }: BodyZoneSelectorProps) {
-  const [mode, setMode] = useState<Mode>('attack');
+  const attackValue = attack ?? 'Select zone';
+  const blockValue = block ?? 'Select zones';
+
+  return (
+    <div className={className}>
+      <style>{ZONE_ANIMATION_CSS}</style>
+
+      {/* Diptych: two independent silhouettes, each owning its own hover
+          state and its own hover-gap adjacency pass. attack state is
+          read only by the attack stage; block state only by the block
+          stage. */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: space.xl,
+          alignItems: 'start',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: space.md,
+          }}
+        >
+          <h3 style={ATTACK_HEADER_STYLE}>ATTACK</h3>
+          <SilhouetteStage
+            mode="attack"
+            attack={attack}
+            onAttackChange={onAttackChange}
+            width={width}
+          />
+          <div style={VALUE_STYLE}>{attackValue}</div>
+        </div>
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: space.md,
+          }}
+        >
+          <h3 style={BLOCK_HEADER_STYLE}>BLOCK</h3>
+          <SilhouetteStage
+            mode="block"
+            block={block}
+            onBlockChange={onBlockChange}
+            width={width}
+          />
+          <div style={VALUE_STYLE}>{blockValue}</div>
+        </div>
+      </div>
+
+      {action && (
+        <>
+          <Divider marginY="md" />
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            {action}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- SilhouetteStage ----------
+
+// Discriminated union: each instance is fixed to one mode and only the
+// relevant selection + setter for that mode are passed in. The other
+// mode's state never enters this subtree, so the two stages never
+// influence each other — independent hover, independent selection,
+// independent hover-gap adjacency.
+type SilhouetteStageProps = { width: number } & (
+  | { mode: 'attack'; attack: BodyZone | null; onAttackChange: (zone: BodyZone) => void }
+  | { mode: 'block'; block: BlockPair | null; onBlockChange: (pair: BlockPair) => void }
+);
+
+function SilhouetteStage(props: SilhouetteStageProps) {
+  const { mode, width } = props;
   const [hover, setHover] = useState<BodyZone | null>(null);
-  const [isSplit, setIsSplit] = useState(layout === 'split');
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (layout === 'split') {
-      setIsSplit(true);
-      return;
-    }
-    if (layout === 'stacked') {
-      setIsSplit(false);
-      return;
-    }
-    const el = rootRef.current;
-    if (!el) return;
-    const check = () => setIsSplit(el.clientWidth >= SPLIT_THRESHOLD_PX);
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [layout]);
-
   const height = Math.round(width * 1.5);
-
-  const handleClick = (z: BodyZone) => {
-    if (mode === 'attack') onAttackChange(z);
-    else onBlockChange(ZONE_TO_BLOCK_PAIR[z]);
-  };
 
   // Attack mode selects one zone → one single item. Block mode selects a
   // pair; adjacent pairs render as ONE pair item so the shared boundary
   // has no feather-induced transparent seam. The wraparound 'Legs & Head'
   // pair is non-adjacent and falls back to two singles.
   const filledItems: FilledItem[] = (() => {
-    if (mode === 'attack') {
-      return attack ? [{ kind: 'single', zone: attack }] : [];
+    if (props.mode === 'attack') {
+      return props.attack ? [{ kind: 'single', zone: props.attack }] : [];
     }
-    if (!block) return [];
-    const pair = adjacentBlockPair(block);
+    if (!props.block) return [];
+    const pair = adjacentBlockPair(props.block);
     if (pair) return [{ kind: 'pair', pair }];
-    const [z1, z2] = blockPairZones(block);
+    const [z1, z2] = blockPairZones(props.block);
     return [
       { kind: 'single', zone: z1 },
       { kind: 'single', zone: z2 },
@@ -507,10 +589,7 @@ export function BodyZoneSelector({
   // After the render targets are chosen, a uniform adjacency pass runs
   // against `visibleFilledZones`: any target whose outer edge touches a
   // currently-selected zone gets a hard edge extended by that neighbour's
-  // feather amount, so hover and selection meet flush with no seam. This
-  // covers attack-single-vs-hover-single, block-non-overlap-pair-vs-pair,
-  // and block-overlap uniformly; non-adjacent cases fall through with
-  // default feather behaviour.
+  // feather amount, so hover and selection meet flush with no seam.
   const {
     hoverPair,
     hoverZones,
@@ -540,12 +619,12 @@ export function BodyZoneSelector({
     //    (partial pair), or block wraparound (two singles).
     let renderPair: ZonePair | null = null;
     let renderZones: BodyZone[] = [];
-    if (mode === 'attack') {
-      if (attack === hover) return empty;
+    if (props.mode === 'attack') {
+      if (props.attack === hover) return empty;
       renderZones = [hover];
     } else {
       const hoverPairKey = ZONE_TO_BLOCK_PAIR[hover];
-      if (block === hoverPairKey) return empty;
+      if (props.block === hoverPairKey) return empty;
       const [z1, z2] = blockPairZones(hoverPairKey);
       const overlap1 = visibleFilledZones.includes(z1);
       const overlap2 = visibleFilledZones.includes(z2);
@@ -618,8 +697,8 @@ export function BodyZoneSelector({
     | null;
   const hoverOutlineTargets: HoverOutlineTargets = ((): HoverOutlineTargets => {
     if (hover === null) return null;
-    if (mode === 'attack') {
-      if (attack === hover) return null;
+    if (props.mode === 'attack') {
+      if (props.attack === hover) return null;
       return { kind: 'zones', zones: [hover] };
     }
     if (hoverPair) return { kind: 'pair', pair: hoverPair };
@@ -627,18 +706,26 @@ export function BodyZoneSelector({
     return null;
   })();
 
-  // Silhouette backdrop layers (bottom → top), transplanted from commit
-  // c6837dd so the figure reads as standing inside a tactical HUD rather
-  // than floating on bare glass:
-  //   1. Soft backdrop   — warm gold radial glow, extends past the
-  //                        silhouette bounds (inset -8% -14%).
-  //   2. Tactical grid   — warm gold dot pattern tiled at 12×12, masked
-  //                        with a radial vignette so it fades at the
-  //                        container edges.
-  //   3. Base silhouette — dark fill + warm edge glow via drop-shadow.
-  const silhouetteBase = (
-    <>
-      {/* Soft backdrop */}
+  const handleClick = (z: BodyZone) => {
+    if (props.mode === 'attack') props.onAttackChange(z);
+    else props.onBlockChange(ZONE_TO_BLOCK_PAIR[z]);
+  };
+
+  // SVG IDs are namespaced by mode so the two stages mounted side-by-
+  // side don't collide on globally-scoped SVG IDs (filter / mask /
+  // gradient lookups resolve via document-wide ID, not SVG-local).
+  const filterId = `kombats-zone-outline-${mode}`;
+  const hoverFilterId = `kombats-zone-hover-${mode}`;
+  const zoneMaskId = (z: BodyZone) => `kombats-zone-mask-${mode}-${z}`;
+  const zoneGradId = (z: BodyZone) => `kombats-zone-grad-${mode}-${z}`;
+  const pairMaskId = (id: string) => `kombats-pair-mask-${mode}-${id}`;
+  const pairGradId = (id: string) => `kombats-pair-grad-${mode}-${id}`;
+  const flood = mode === 'attack' ? ATTACK_FLOOD : BLOCK_FLOOD;
+  const ariaPrefix = mode === 'attack' ? 'Attack' : 'Block';
+
+  return (
+    <div className="relative select-none" style={{ width, height }}>
+      {/* Soft backdrop — warm gold radial glow, extends past silhouette bounds. */}
       <div
         aria-hidden
         className="absolute pointer-events-none"
@@ -673,11 +760,8 @@ export function BodyZoneSelector({
             'drop-shadow(0 0 2px rgba(201, 162, 90, 0.15)) drop-shadow(0 10px 24px rgba(0,0,0,0.6))',
         }}
       />
-    </>
-  );
 
-  const silhouetteOverlays = (
-    <>
+      {/* Selection fill overlays */}
       {filledItems.map((item) => {
         if (item.kind === 'single') {
           return (
@@ -714,11 +798,7 @@ export function BodyZoneSelector({
           adjacent pair. At most one subset has opacity=1 based on
           `hoverZones` / `hoverPair`; others are at opacity 0. Opacity
           transitions provide symmetric 150ms fade in/out even when
-          switching between hovered zones. Per-zone divs cover attack
-          mode and the block-mode wraparound (Legs & Head); per-pair
-          divs cover the four adjacent block pairs so the hover preview
-          spans both zones with no transparent seam at the shared
-          boundary. */}
+          switching between hovered zones. */}
       {BODY_ZONES.map((z) => {
         const show = hoverZones.includes(z);
         const hardEdges = hoverZoneHardEdges[z] ?? {};
@@ -773,7 +853,7 @@ export function BodyZoneSelector({
         >
           <defs>
             <filter
-              id="kombats-zone-outline-attack"
+              id={filterId}
               x="-20%"
               y="-20%"
               width="140%"
@@ -796,7 +876,7 @@ export function BodyZoneSelector({
                 stdDeviation="0.5"
                 result="outlineBlurred"
               />
-              <feFlood floodColor={ATTACK_FLOOD} result="flood" />
+              <feFlood floodColor={flood} result="flood" />
               <feComposite
                 in="flood"
                 in2="outlineBlurred"
@@ -814,48 +894,7 @@ export function BodyZoneSelector({
               </feMerge>
             </filter>
             <filter
-              id="kombats-zone-outline-block"
-              x="-20%"
-              y="-20%"
-              width="140%"
-              height="140%"
-            >
-              <feMorphology
-                in="SourceAlpha"
-                operator="dilate"
-                radius="1"
-                result="dilated"
-              />
-              <feComposite
-                in="dilated"
-                in2="SourceAlpha"
-                operator="out"
-                result="outline"
-              />
-              <feGaussianBlur
-                in="outline"
-                stdDeviation="0.5"
-                result="outlineBlurred"
-              />
-              <feFlood floodColor={BLOCK_FLOOD} result="flood" />
-              <feComposite
-                in="flood"
-                in2="outlineBlurred"
-                operator="in"
-                result="coloredOutline"
-              />
-              <feGaussianBlur
-                in="coloredOutline"
-                stdDeviation="4"
-                result="glow"
-              />
-              <feMerge>
-                <feMergeNode in="glow" />
-                <feMergeNode in="coloredOutline" />
-              </feMerge>
-            </filter>
-            <filter
-              id="kombats-zone-hover-attack"
+              id={hoverFilterId}
               x="-20%"
               y="-20%"
               width="140%"
@@ -879,43 +918,7 @@ export function BodyZoneSelector({
                 result="outlineBlurred"
               />
               <feFlood
-                floodColor={ATTACK_FLOOD}
-                floodOpacity="0.5"
-                result="flood"
-              />
-              <feComposite
-                in="flood"
-                in2="outlineBlurred"
-                operator="in"
-                result="coloredOutline"
-              />
-            </filter>
-            <filter
-              id="kombats-zone-hover-block"
-              x="-20%"
-              y="-20%"
-              width="140%"
-              height="140%"
-            >
-              <feMorphology
-                in="SourceAlpha"
-                operator="dilate"
-                radius="1"
-                result="dilated"
-              />
-              <feComposite
-                in="dilated"
-                in2="SourceAlpha"
-                operator="out"
-                result="outline"
-              />
-              <feGaussianBlur
-                in="outline"
-                stdDeviation="0.5"
-                result="outlineBlurred"
-              />
-              <feFlood
-                floodColor={BLOCK_FLOOD}
+                floodColor={flood}
                 floodOpacity="0.5"
                 result="flood"
               />
@@ -931,7 +934,7 @@ export function BodyZoneSelector({
               return (
                 <g key={`mask-${z}`}>
                   <linearGradient
-                    id={`kombats-zone-grad-${z}`}
+                    id={zoneGradId(z)}
                     x1="0"
                     y1="0"
                     x2="0"
@@ -948,7 +951,7 @@ export function BodyZoneSelector({
                     ))}
                   </linearGradient>
                   <mask
-                    id={`kombats-zone-mask-${z}`}
+                    id={zoneMaskId(z)}
                     maskUnits="userSpaceOnUse"
                     x="-20"
                     y="-20"
@@ -960,7 +963,7 @@ export function BodyZoneSelector({
                       y="-20"
                       width="140"
                       height="140"
-                      fill={`url(#kombats-zone-grad-${z})`}
+                      fill={`url(#${zoneGradId(z)})`}
                     />
                   </mask>
                 </g>
@@ -972,7 +975,7 @@ export function BodyZoneSelector({
               return (
                 <g key={`mask-pair-${id}`}>
                   <linearGradient
-                    id={`kombats-pair-grad-${id}`}
+                    id={pairGradId(id)}
                     x1="0"
                     y1="0"
                     x2="0"
@@ -989,7 +992,7 @@ export function BodyZoneSelector({
                     ))}
                   </linearGradient>
                   <mask
-                    id={`kombats-pair-mask-${id}`}
+                    id={pairMaskId(id)}
                     maskUnits="userSpaceOnUse"
                     x="-20"
                     y="-20"
@@ -1001,7 +1004,7 @@ export function BodyZoneSelector({
                       y="-20"
                       width="140"
                       height="140"
-                      fill={`url(#kombats-pair-grad-${id})`}
+                      fill={`url(#${pairGradId(id)})`}
                     />
                   </mask>
                 </g>
@@ -1009,10 +1012,10 @@ export function BodyZoneSelector({
             })}
           </defs>
           {filledItems.map((item) => {
-            const maskId =
+            const maskHref =
               item.kind === 'single'
-                ? `kombats-zone-mask-${item.zone}`
-                : `kombats-pair-mask-${item.pair.upper}-${item.pair.lower}`;
+                ? zoneMaskId(item.zone)
+                : pairMaskId(`${item.pair.upper}-${item.pair.lower}`);
             const key =
               item.kind === 'single'
                 ? `outline-${item.zone}`
@@ -1026,8 +1029,8 @@ export function BodyZoneSelector({
                 width="100"
                 height="100"
                 preserveAspectRatio="none"
-                mask={`url(#${maskId})`}
-                filter={`url(#kombats-zone-outline-${mode})`}
+                mask={`url(#${maskHref})`}
+                filter={`url(#${filterId})`}
                 style={{
                   animation:
                     'kombats-zone-pulse 2.5s ease-in-out infinite',
@@ -1044,8 +1047,8 @@ export function BodyZoneSelector({
               width="100"
               height="100"
               preserveAspectRatio="none"
-              mask={`url(#kombats-pair-mask-${hoverOutlineTargets.pair.upper}-${hoverOutlineTargets.pair.lower})`}
-              filter={`url(#kombats-zone-hover-${mode})`}
+              mask={`url(#${pairMaskId(`${hoverOutlineTargets.pair.upper}-${hoverOutlineTargets.pair.lower}`)})`}
+              filter={`url(#${hoverFilterId})`}
               style={{
                 animation: 'kombats-zone-outline-in 150ms ease-out',
               }}
@@ -1061,8 +1064,8 @@ export function BodyZoneSelector({
                 width="100"
                 height="100"
                 preserveAspectRatio="none"
-                mask={`url(#kombats-zone-mask-${z})`}
-                filter={`url(#kombats-zone-hover-${mode})`}
+                mask={`url(#${zoneMaskId(z)})`}
+                filter={`url(#${hoverFilterId})`}
                 style={{
                   animation: 'kombats-zone-outline-in 150ms ease-out',
                 }}
@@ -1082,7 +1085,7 @@ export function BodyZoneSelector({
             onFocus={() => setHover(z)}
             onBlur={() => setHover((h) => (h === z ? null : h))}
             onClick={() => handleClick(z)}
-            aria-label={`${mode === 'attack' ? 'Attack' : 'Block'} ${z}`}
+            aria-label={`${ariaPrefix} ${z}`}
             className="absolute left-0 right-0 cursor-pointer focus:outline-none"
             style={{
               top: `${top}%`,
@@ -1094,119 +1097,6 @@ export function BodyZoneSelector({
           />
         );
       })}
-    </>
-  );
-
-  const attackValue = attack ?? 'Select zone';
-  const blockValue = block ?? 'Select zones';
-
-  const attackInfoRow = (
-    <div>
-      <Label tone="attack">ATTACK</Label>
-      <div style={VALUE_STYLE}>{attackValue}</div>
-    </div>
-  );
-
-  const blockInfoRow = (
-    <div>
-      <Label tone="block">BLOCK</Label>
-      <div style={VALUE_STYLE}>{blockValue}</div>
-    </div>
-  );
-
-  // Silhouette column — simple relative wrapper sized to width × 1.5·width.
-  // All visual environment (soft backdrop, tactical grid, base silhouette)
-  // lives inside `silhouetteBase` per the c6837dd stack order; zone fills,
-  // outlines, and hit areas layer on top via `silhouetteOverlays`.
-  const silhouetteStage = (
-    <div
-      className="relative select-none"
-      style={{ width, height }}
-    >
-      {silhouetteBase}
-      {silhouetteOverlays}
-    </div>
-  );
-
-  return (
-    <div ref={rootRef} className={className}>
-      <style>{ZONE_ANIMATION_CSS}</style>
-
-      {/* Plain-text tab row — gold underline on active, no borders,
-          no background cards. */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          gap: 40,
-          marginBottom: space.lg,
-        }}
-      >
-        <ModeTab
-          active={mode === 'attack'}
-          onClick={() => setMode('attack')}
-          icon={<Sword size={14} />}
-          label="ATTACK"
-        />
-        <ModeTab
-          active={mode === 'block'}
-          onClick={() => setMode('block')}
-          icon={<Shield size={14} />}
-          label="BLOCK"
-        />
-      </div>
-
-      {isSplit ? (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '55fr 45fr',
-            gap: space.lg,
-            alignItems: 'center',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            {silhouetteStage}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
-            {attackInfoRow}
-            {blockInfoRow}
-          </div>
-        </div>
-      ) : (
-        <>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-            }}
-          >
-            {silhouetteStage}
-          </div>
-
-          <div
-            style={{
-              marginTop: space.lg,
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: space.lg,
-            }}
-          >
-            {attackInfoRow}
-            {blockInfoRow}
-          </div>
-        </>
-      )}
-
-      {action && (
-        <>
-          <Divider marginY="md" />
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            {action}
-          </div>
-        </>
-      )}
     </div>
   );
 }
@@ -1223,50 +1113,3 @@ const ZONE_ANIMATION_CSS = `
     to   { opacity: 1; }
   }
 `;
-
-interface ModeTabProps {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}
-
-function ModeTab({ active, onClick, icon, label }: ModeTabProps) {
-  const [hovered, setHovered] = useState(false);
-  const color = active
-    ? accent.text
-    : hovered
-      ? text.secondary
-      : text.muted;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      onFocus={() => setHovered(true)}
-      onBlur={() => setHovered(false)}
-      style={{
-        background: 'none',
-        border: 'none',
-        borderBottom: active
-          ? `1px solid ${accent.primary}`
-          : '1px solid transparent',
-        padding: `0 0 ${space.xs} 0`,
-        color,
-        cursor: 'pointer',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: space.sm,
-        fontSize: typography.labelLarge.fontSize,
-        letterSpacing: typography.labelLarge.letterSpacing,
-        textTransform: typography.labelLarge.textTransform,
-        fontWeight: typography.labelLarge.fontWeight,
-        transition: 'color 120ms ease',
-      }}
-    >
-      {icon}
-      {label}
-    </button>
-  );
-}
