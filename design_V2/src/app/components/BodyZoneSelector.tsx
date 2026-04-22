@@ -128,39 +128,73 @@ function zoneFillBackground(rgb: string): string {
 // double-faded.
 const ZONE_FEATHER_FRACTION = 0.15;
 
+// Hard edges on a zone or pair mask: each side independently replaces its
+// feather ramp with a zero-width transparent→black transition. Used by
+// the hover path so a hover fill can sit flush against an adjacent
+// selected fill without a partially-opacified seam. Both sides can be
+// hard simultaneously (e.g., a hover zone sandwiched between two selected
+// neighbours).
+interface HardEdges {
+  top?: boolean;
+  bottom?: boolean;
+}
+
+// Per-side feather distance of the ADJACENT selected zone, shifted past
+// the band boundary so the hover fill overlaps the selection's feather
+// ramp on the other side of the shared boundary. The selection's own
+// feather then fades smoothly under a fully-opaque hover fill — no gap.
+interface NeighbourFeathers {
+  top?: number;
+  bottom?: number;
+}
+
 // Vertical mask gradient for a zone. Stops are in container-% space (0% =
 // top of silhouette container, 100% = bottom) so a single full-container
 // linear-gradient can be composited with the silhouette PNG mask via
 // mask-composite: intersect.
-function zoneFeatherGradient(z: BodyZone): string {
+function zoneFeatherGradient(
+  z: BodyZone,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): string {
   const { top, bottom } = ZONE_BANDS[z];
   const feather = (bottom - top) * ZONE_FEATHER_FRACTION;
+  const stops: string[] = [];
+
+  // Top edge: silhouette head-contour, band-internal hard jump, or feather.
   if (z === 'Head') {
-    // Top sharp at silhouette edge (no fade off the top of the head).
-    return (
-      `linear-gradient(to bottom, black 0%, black ${bottom - feather}%, ` +
-      `transparent ${bottom}%, transparent 100%)`
-    );
+    // Silhouette edge — no fade off the top of the head.
+    stops.push('black 0%');
+  } else if (hardEdges.top) {
+    const cut = top - (neighbourFeathers.top ?? 0);
+    stops.push('transparent 0%', `transparent ${cut}%`, `black ${cut}%`);
+  } else {
+    stops.push('transparent 0%', `transparent ${top}%`, `black ${top + feather}%`);
   }
+
+  // Bottom edge: silhouette boot-contour, band-internal hard jump, or feather.
   if (z === 'Legs') {
-    // Bottom sharp at silhouette edge (no fade off the boots).
-    return (
-      `linear-gradient(to bottom, transparent 0%, transparent ${top}%, ` +
-      `black ${top + feather}%, black 100%)`
-    );
+    // Silhouette edge — no fade off the boots.
+    stops.push('black 100%');
+  } else if (hardEdges.bottom) {
+    const cut = bottom + (neighbourFeathers.bottom ?? 0);
+    stops.push(`black ${cut}%`, `transparent ${cut}%`, 'transparent 100%');
+  } else {
+    stops.push(`black ${bottom - feather}%`, `transparent ${bottom}%`, 'transparent 100%');
   }
-  return (
-    `linear-gradient(to bottom, transparent 0%, transparent ${top}%, ` +
-    `black ${top + feather}%, black ${bottom - feather}%, ` +
-    `transparent ${bottom}%, transparent 100%)`
-  );
+
+  return `linear-gradient(to bottom, ${stops.join(', ')})`;
 }
 
 // Two-mask style for zone overlays: silhouette PNG × feather gradient,
 // composited with intersect so the fill follows the body shape AND fades
 // at the band's top/bottom.
-function zoneFeatherMaskStyle(z: BodyZone): CSSProperties {
-  const gradient = zoneFeatherGradient(z);
+function zoneFeatherMaskStyle(
+  z: BodyZone,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): CSSProperties {
+  const gradient = zoneFeatherGradient(z, hardEdges, neighbourFeathers);
   return {
     WebkitMaskImage: `url(${silhouetteSrc}), ${gradient}`,
     maskImage: `url(${silhouetteSrc}), ${gradient}`,
@@ -234,14 +268,50 @@ function adjacentBlockPair(pair: BlockPair): ZonePair | null {
   return null;
 }
 
-function pairFeatherGradient({ upper, lower }: ZonePair): string {
+// Vertical neighbour lookups derived from BODY_ZONES ordering (top →
+// bottom). Used to detect when a hover target sits directly above/below
+// a selected zone and therefore needs a hard edge extended into the
+// selection's feather ramp.
+function zoneAbove(z: BodyZone): BodyZone | null {
+  const i = BODY_ZONES.indexOf(z);
+  return i > 0 ? BODY_ZONES[i - 1] : null;
+}
+function zoneBelow(z: BodyZone): BodyZone | null {
+  const i = BODY_ZONES.indexOf(z);
+  return i >= 0 && i < BODY_ZONES.length - 1 ? BODY_ZONES[i + 1] : null;
+}
+
+// Per-zone feather distance in container-% units. Matches the same
+// formula every gradient builder uses — exposed as a helper so overlap
+// logic can look up the adjacent (selected) zone's feather and hand it
+// to the gradient builder as `neighbourFeathers.{top,bottom}`.
+function zoneFeatherAmount(z: BodyZone): number {
+  const { top, bottom } = ZONE_BANDS[z];
+  return (bottom - top) * ZONE_FEATHER_FRACTION;
+}
+
+// Pair mask. Interior boundary between upper and lower stays feather-less
+// (continuous black). `hardEdges.top` applies to the pair's outer TOP
+// (top of the upper zone); `hardEdges.bottom` applies to the pair's outer
+// BOTTOM (bottom of the lower zone). `neighbourFeathers` supplies the
+// feather amount of the selected zone sitting on the other side of each
+// outer edge so the hard edge overlaps that feather and closes the gap.
+function pairFeatherGradient(
+  { upper, lower }: ZonePair,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): string {
   const ub = ZONE_BANDS[upper];
   const lb = ZONE_BANDS[lower];
   const upperFeather = (ub.bottom - ub.top) * ZONE_FEATHER_FRACTION;
   const lowerFeather = (lb.bottom - lb.top) * ZONE_FEATHER_FRACTION;
   const stops: string[] = [];
+
   if (upper === 'Head') {
     stops.push('black 0%');
+  } else if (hardEdges.top) {
+    const cut = ub.top - (neighbourFeathers.top ?? 0);
+    stops.push('transparent 0%', `transparent ${cut}%`, `black ${cut}%`);
   } else {
     stops.push(
       'transparent 0%',
@@ -249,8 +319,12 @@ function pairFeatherGradient({ upper, lower }: ZonePair): string {
       `black ${ub.top + upperFeather}%`,
     );
   }
+
   if (lower === 'Legs') {
     stops.push('black 100%');
+  } else if (hardEdges.bottom) {
+    const cut = lb.bottom + (neighbourFeathers.bottom ?? 0);
+    stops.push(`black ${cut}%`, `transparent ${cut}%`, 'transparent 100%');
   } else {
     stops.push(
       `black ${lb.bottom - lowerFeather}%`,
@@ -261,8 +335,12 @@ function pairFeatherGradient({ upper, lower }: ZonePair): string {
   return `linear-gradient(to bottom, ${stops.join(', ')})`;
 }
 
-function pairFeatherMaskStyle(pair: ZonePair): CSSProperties {
-  const gradient = pairFeatherGradient(pair);
+function pairFeatherMaskStyle(
+  pair: ZonePair,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): CSSProperties {
+  const gradient = pairFeatherGradient(pair, hardEdges, neighbourFeathers);
   return {
     WebkitMaskImage: `url(${silhouetteSrc}), ${gradient}`,
     maskImage: `url(${silhouetteSrc}), ${gradient}`,
@@ -421,28 +499,133 @@ export function BodyZoneSelector({
   // Hover preview targets. Attack mode hovers a single zone. Block mode
   // hovers the WHOLE PAIR the zone anchors — adjacent pairs render as
   // one paired fill (no internal seam); the wraparound Legs & Head pair
-  // falls back to two singles. Selection takes priority over hover at
-  // the pair level: if the hovered pair is the currently selected pair,
-  // nothing previews.
-  const { hoverPair, hoverZones } = ((): {
+  // falls back to two singles. Selection takes priority over hover:
+  //   - If the hovered pair is the currently selected pair, nothing
+  //     previews.
+  //   - If the hovered pair shares ONE zone with the selected pair
+  //     (overlap), hover renders only on the non-shared zone.
+  // After the render targets are chosen, a uniform adjacency pass runs
+  // against `visibleFilledZones`: any target whose outer edge touches a
+  // currently-selected zone gets a hard edge extended by that neighbour's
+  // feather amount, so hover and selection meet flush with no seam. This
+  // covers attack-single-vs-hover-single, block-non-overlap-pair-vs-pair,
+  // and block-overlap uniformly; non-adjacent cases fall through with
+  // default feather behaviour.
+  const {
+    hoverPair,
+    hoverZones,
+    hoverZoneHardEdges,
+    hoverZoneNeighbourFeathers,
+    hoverPairHardEdges,
+    hoverPairNeighbourFeathers,
+  } = ((): {
     hoverPair: ZonePair | null;
     hoverZones: BodyZone[];
+    hoverZoneHardEdges: Partial<Record<BodyZone, HardEdges>>;
+    hoverZoneNeighbourFeathers: Partial<Record<BodyZone, NeighbourFeathers>>;
+    hoverPairHardEdges: HardEdges;
+    hoverPairNeighbourFeathers: NeighbourFeathers;
   } => {
-    if (hover === null) return { hoverPair: null, hoverZones: [] };
+    const empty = {
+      hoverPair: null as ZonePair | null,
+      hoverZones: [] as BodyZone[],
+      hoverZoneHardEdges: {} as Partial<Record<BodyZone, HardEdges>>,
+      hoverZoneNeighbourFeathers: {} as Partial<Record<BodyZone, NeighbourFeathers>>,
+      hoverPairHardEdges: {} as HardEdges,
+      hoverPairNeighbourFeathers: {} as NeighbourFeathers,
+    };
+    if (hover === null) return empty;
+
+    // 1. Decide what to render: attack single, block pair, block overlap
+    //    (partial pair), or block wraparound (two singles).
+    let renderPair: ZonePair | null = null;
+    let renderZones: BodyZone[] = [];
     if (mode === 'attack') {
-      if (attack === hover) return { hoverPair: null, hoverZones: [] };
-      return { hoverPair: null, hoverZones: [hover] };
+      if (attack === hover) return empty;
+      renderZones = [hover];
+    } else {
+      const hoverPairKey = ZONE_TO_BLOCK_PAIR[hover];
+      if (block === hoverPairKey) return empty;
+      const [z1, z2] = blockPairZones(hoverPairKey);
+      const overlap1 = visibleFilledZones.includes(z1);
+      const overlap2 = visibleFilledZones.includes(z2);
+      if (overlap1 || overlap2) {
+        if (!overlap1) renderZones.push(z1);
+        if (!overlap2) renderZones.push(z2);
+      } else {
+        const adj = adjacentBlockPair(hoverPairKey);
+        if (adj) renderPair = adj;
+        else renderZones = [z1, z2];
+      }
     }
-    const hoverPairKey = ZONE_TO_BLOCK_PAIR[hover];
-    if (block === hoverPairKey) return { hoverPair: null, hoverZones: [] };
-    const adj = adjacentBlockPair(hoverPairKey);
-    if (adj) return { hoverPair: adj, hoverZones: [] };
-    const [z1, z2] = blockPairZones(hoverPairKey);
-    return { hoverPair: null, hoverZones: [z1, z2] };
+
+    // 2. Adjacency pass: for each render target, if its outer edge touches
+    //    a selected zone, record a hard edge and the neighbour's feather.
+    const zoneHardEdges: Partial<Record<BodyZone, HardEdges>> = {};
+    const zoneNeighbourFeathers: Partial<Record<BodyZone, NeighbourFeathers>> = {};
+    for (const z of renderZones) {
+      const above = zoneAbove(z);
+      const below = zoneBelow(z);
+      const edges: HardEdges = {};
+      const feathers: NeighbourFeathers = {};
+      if (above && visibleFilledZones.includes(above)) {
+        edges.top = true;
+        feathers.top = zoneFeatherAmount(above);
+      }
+      if (below && visibleFilledZones.includes(below)) {
+        edges.bottom = true;
+        feathers.bottom = zoneFeatherAmount(below);
+      }
+      if (edges.top || edges.bottom) {
+        zoneHardEdges[z] = edges;
+        zoneNeighbourFeathers[z] = feathers;
+      }
+    }
+
+    const pairHardEdges: HardEdges = {};
+    const pairNeighbourFeathers: NeighbourFeathers = {};
+    if (renderPair) {
+      const above = zoneAbove(renderPair.upper);
+      const below = zoneBelow(renderPair.lower);
+      if (above && visibleFilledZones.includes(above)) {
+        pairHardEdges.top = true;
+        pairNeighbourFeathers.top = zoneFeatherAmount(above);
+      }
+      if (below && visibleFilledZones.includes(below)) {
+        pairHardEdges.bottom = true;
+        pairNeighbourFeathers.bottom = zoneFeatherAmount(below);
+      }
+    }
+
+    return {
+      hoverPair: renderPair,
+      hoverZones: renderZones,
+      hoverZoneHardEdges: zoneHardEdges,
+      hoverZoneNeighbourFeathers: zoneNeighbourFeathers,
+      hoverPairHardEdges: pairHardEdges,
+      hoverPairNeighbourFeathers: pairNeighbourFeathers,
+    };
   })();
 
-  const showHoverOutline =
-    hover !== null && !visibleFilledZones.includes(hover);
+  // Hover outline targets: mirrors the selection outline's kind-branch
+  // so pair hovers render a single pair-masked <image> (outline on both
+  // zones) while overlap / wraparound / attack mode render one
+  // per-zone <image>. The anchor-only `showHoverOutline` gate was
+  // dropping the second zone of every pair hover.
+  type HoverOutlineTargets =
+    | { kind: 'pair'; pair: ZonePair }
+    | { kind: 'zones'; zones: BodyZone[] }
+    | null;
+  const hoverOutlineTargets: HoverOutlineTargets = ((): HoverOutlineTargets => {
+    if (hover === null) return null;
+    if (mode === 'attack') {
+      if (attack === hover) return null;
+      return { kind: 'zones', zones: [hover] };
+    }
+    if (hoverPair) return { kind: 'pair', pair: hoverPair };
+    if (hoverZones.length > 0) return { kind: 'zones', zones: hoverZones };
+    return null;
+  })();
 
   // Silhouette backdrop layers (bottom → top), transplanted from commit
   // c6837dd so the figure reads as standing inside a tactical HUD rather
@@ -538,13 +721,15 @@ export function BodyZoneSelector({
           boundary. */}
       {BODY_ZONES.map((z) => {
         const show = hoverZones.includes(z);
+        const hardEdges = hoverZoneHardEdges[z] ?? {};
+        const neighbourFeathers = hoverZoneNeighbourFeathers[z] ?? {};
         return (
           <div
             key={`hover-fill-zone-${z}`}
             aria-hidden
             className="absolute inset-0 pointer-events-none"
             style={{
-              ...zoneFeatherMaskStyle(z),
+              ...zoneFeatherMaskStyle(z, hardEdges, neighbourFeathers),
               background: zoneHoverFillColor(mode),
               opacity: show ? 1 : 0,
               transition: 'opacity 150ms ease',
@@ -557,13 +742,18 @@ export function BodyZoneSelector({
           hoverPair !== null &&
           hoverPair.upper === p.upper &&
           hoverPair.lower === p.lower;
+        // Adjacency-driven hard edges only apply to the currently active
+        // hover pair; the other three stay with default feather behaviour
+        // so they fade out cleanly if still visible mid-transition.
+        const hardEdges = show ? hoverPairHardEdges : {};
+        const neighbourFeathers = show ? hoverPairNeighbourFeathers : {};
         return (
           <div
             key={`hover-fill-pair-${p.upper}-${p.lower}`}
             aria-hidden
             className="absolute inset-0 pointer-events-none"
             style={{
-              ...pairFeatherMaskStyle(p),
+              ...pairFeatherMaskStyle(p, hardEdges, neighbourFeathers),
               background: zoneHoverFillColor(mode),
               opacity: show ? 1 : 0,
               transition: 'opacity 150ms ease',
@@ -572,8 +762,7 @@ export function BodyZoneSelector({
         );
       })}
 
-      {(visibleFilledZones.length > 0 ||
-        (showHoverOutline && hover)) && (
+      {(visibleFilledZones.length > 0 || hoverOutlineTargets !== null) && (
         <svg
           aria-hidden
           className="absolute inset-0 w-full h-full pointer-events-none"
@@ -846,22 +1035,39 @@ export function BodyZoneSelector({
               />
             );
           })}
-          {showHoverOutline && hover && (
+          {hoverOutlineTargets?.kind === 'pair' && (
             <image
-              key={`hover-${hover}`}
+              key={`hover-pair-${hoverOutlineTargets.pair.upper}-${hoverOutlineTargets.pair.lower}`}
               href={silhouetteSrc}
               x="0"
               y="0"
               width="100"
               height="100"
               preserveAspectRatio="none"
-              mask={`url(#kombats-zone-mask-${hover})`}
+              mask={`url(#kombats-pair-mask-${hoverOutlineTargets.pair.upper}-${hoverOutlineTargets.pair.lower})`}
               filter={`url(#kombats-zone-hover-${mode})`}
               style={{
                 animation: 'kombats-zone-outline-in 150ms ease-out',
               }}
             />
           )}
+          {hoverOutlineTargets?.kind === 'zones' &&
+            hoverOutlineTargets.zones.map((z) => (
+              <image
+                key={`hover-${z}`}
+                href={silhouetteSrc}
+                x="0"
+                y="0"
+                width="100"
+                height="100"
+                preserveAspectRatio="none"
+                mask={`url(#kombats-zone-mask-${z})`}
+                filter={`url(#kombats-zone-hover-${mode})`}
+                style={{
+                  animation: 'kombats-zone-outline-in 150ms ease-out',
+                }}
+              />
+            ))}
         </svg>
       )}
 
