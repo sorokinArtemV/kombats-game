@@ -101,6 +101,15 @@ const TURN_INDICATOR_DOT_STYLE: CSSProperties = {
   boxShadow: '0 0 8px rgba(201, 162, 90, 0.55)',
 };
 
+// Dimmer variant used during the opponent's turn — same geometry, no
+// glow halo, muted gold fill.
+const TURN_INDICATOR_DOT_MUTED_STYLE: CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: 9999,
+  background: accent.muted,
+};
+
 // ==================== MAIN HUB / LOBBY ====================
 
 // ==================== HP BAR ====================
@@ -509,7 +518,9 @@ export function BattleScreen({
                   No bottom padding so the meta row's top padding owns
                   the gap and title+meta read as a single header unit. */}
               <div style={{ padding: `${space.sm} ${space.md} 0` }}>
-                <h3 style={COMBAT_PANEL_TITLE_STYLE}>Select Attack &amp; Block</h3>
+                <h3 style={COMBAT_PANEL_TITLE_STYLE}>
+                  {isWaiting ? 'Awaiting Opponent' : <>Select Attack &amp; Block</>}
+                </h3>
               </div>
 
               {/* Battle meta row — round / timer / turn state */}
@@ -533,8 +544,20 @@ export function BattleScreen({
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <span style={TURN_INDICATOR_STYLE}>
-                    <span aria-hidden style={TURN_INDICATOR_DOT_STYLE} />
-                    <DSLabel tone="accent">Your Turn</DSLabel>
+                    <span
+                      aria-hidden
+                      style={
+                        isWaiting
+                          ? TURN_INDICATOR_DOT_MUTED_STYLE
+                          : TURN_INDICATOR_DOT_STYLE
+                      }
+                    />
+                    <DSLabel
+                      tone="accent"
+                      style={isWaiting ? { color: accent.muted } : undefined}
+                    >
+                      {isWaiting ? "Opponent's Turn" : 'Your Turn'}
+                    </DSLabel>
                   </span>
                 </div>
               </div>

@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import silhouetteSrc from '../../assets/fighters/silhouette.png';
 import mitsudamoeSrc from '../../assets/icons/mitsudamoe.png';
 import { Button } from '../../design-system/primitives';
-import { accent, border, radius, semantic, space, surface, text } from '../../design-system/tokens';
+import { border, radius, semantic, space, surface, text } from '../../design-system/tokens';
 
 // Diptych: two independent silhouettes side-by-side, one for ATTACK
 // (opponent) and one for BLOCK (you). Each silhouette is a
@@ -518,17 +518,19 @@ const BLOCK_HEADER_STYLE: CSSProperties = {
 // meta row, timer) stays visible so the opponent's remaining time is
 // legible. Only the combat zone's children and the footer action swap.
 //
-// The mitsudomoe (gold triple-comma) is a quiet ceremonial centerpiece —
-// rendered with mix-blend-mode: screen so the PNG's dark background
-// drops into the glassSubtle surface and only the gold figure reads.
+// Composition, back to front:
+//   1. Soft circular radial glow (320px, static)
+//   2. Counter-rotating hairline ring (220px, -360° over 12s)
+//   3. Mitsudomoe icon (140px, 360° over 8s) — mix-blend-mode: screen
+//      drops the PNG's dark background into the glassSubtle surface so
+//      only the gold figure reads.
 
-const MITSUDOMOE_SIZE_PX = 68;
-const MITSUDOMOE_GLOW_SIZE_PX = 140;
+const MITSUDOMOE_ICON_PX = 140;
+const MITSUDOMOE_GLOW_PX = 320;
+const MITSUDOMOE_RING_PX = 220;
 
-const WAITING_ICON_WRAPPER_STYLE: CSSProperties = {
+const WAITING_STAGE_STYLE: CSSProperties = {
   position: 'relative',
-  width: MITSUDOMOE_GLOW_SIZE_PX,
-  height: MITSUDOMOE_GLOW_SIZE_PX,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -536,30 +538,29 @@ const WAITING_ICON_WRAPPER_STYLE: CSSProperties = {
 
 const WAITING_ICON_GLOW_STYLE: CSSProperties = {
   position: 'absolute',
-  inset: 0,
+  width: MITSUDOMOE_GLOW_PX,
+  height: MITSUDOMOE_GLOW_PX,
   borderRadius: '50%',
   background:
-    'radial-gradient(circle, rgba(201, 162, 90, 0.18) 0%, rgba(201, 162, 90, 0.06) 45%, rgba(201, 162, 90, 0) 72%)',
+    'radial-gradient(circle, rgba(201, 162, 90, 0.18) 0%, rgba(201, 162, 90, 0.08) 35%, rgba(201, 162, 90, 0.03) 60%, transparent 80%)',
+  pointerEvents: 'none',
+};
+
+const WAITING_ICON_RING_STYLE: CSSProperties = {
+  position: 'absolute',
+  width: MITSUDOMOE_RING_PX,
+  height: MITSUDOMOE_RING_PX,
+  borderRadius: '50%',
+  border: '1px solid rgba(201, 162, 90, 0.15)',
   pointerEvents: 'none',
 };
 
 const WAITING_ICON_STYLE: CSSProperties = {
-  width: MITSUDOMOE_SIZE_PX,
-  height: MITSUDOMOE_SIZE_PX,
+  width: MITSUDOMOE_ICON_PX,
+  height: MITSUDOMOE_ICON_PX,
   opacity: 0.5,
   mixBlendMode: 'screen',
   pointerEvents: 'none',
-};
-
-const WAITING_LABEL_STYLE: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 600,
-  letterSpacing: '0.24em',
-  textTransform: 'uppercase',
-  color: accent.muted,
-  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
-  textAlign: 'center',
-  lineHeight: 1,
 };
 
 // ---------- Component ----------
@@ -645,14 +646,23 @@ export function BodyZoneSelector({
               flex: 1,
               minHeight: columnContentHeightPx,
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: space.md,
+              overflow: 'hidden',
             }}
           >
-            <div style={WAITING_ICON_WRAPPER_STYLE}>
+            <div style={WAITING_STAGE_STYLE}>
               <div aria-hidden style={WAITING_ICON_GLOW_STYLE} />
+              <motion.div
+                aria-hidden
+                style={WAITING_ICON_RING_STYLE}
+                animate={{ rotate: -360 }}
+                transition={{
+                  duration: 12,
+                  repeat: Infinity,
+                  ease: 'linear',
+                }}
+              />
               <motion.img
                 src={mitsudamoeSrc}
                 alt=""
@@ -660,19 +670,12 @@ export function BodyZoneSelector({
                 style={WAITING_ICON_STYLE}
                 animate={{ rotate: 360 }}
                 transition={{
-                  duration: 12,
+                  duration: 8,
                   repeat: Infinity,
                   ease: 'linear',
                 }}
               />
             </div>
-            <motion.div
-              style={WAITING_LABEL_STYLE}
-              animate={{ opacity: [0.6, 1, 0.6] }}
-              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              Awaiting Opponent
-            </motion.div>
           </div>
         ) : (
           <>
