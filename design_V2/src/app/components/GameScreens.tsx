@@ -24,8 +24,6 @@ import {
 import { BodyZoneSelector, type BodyZone, type BlockPair } from './BodyZoneSelector';
 import bgImage from '../../imports/bg-1.png';
 import characterImage from '../../imports/charackter.png';
-import mitsudamoeSrc from '../../assets/icons/mitsudamoe.png';
-import kunaiSrc from '../../assets/icons/kunai.png';
 
 // Mock data for shell
 const mockChatMessages = [
@@ -639,72 +637,204 @@ export function BattleScreen({
 }
 
 // ==================== RESULT SCREENS (shared styles) ====================
-// Local glass + atmosphere styles for VictoryScreen / DefeatScreen.
-// Intentionally kept in this file — the result screen is the emotional
-// climax of a match and its bespoke atmosphere / bloom / accent treatment
-// does not belong in the shared primitives.
+// Local atmosphere + glass panel styles for VictoryScreen / DefeatScreen.
+// Atmosphere elements are pure CSS / inline SVG — no external assets —
+// so the screen reads cleanly on any future scene theme (moonlit village
+// today, blood moon later) without dragging raster dependencies along.
 
-// Full-viewport tint that sells the outcome before any text is read.
-// Victory: gold radiates FROM the center outward (expansion, triumph).
-// Defeat: red presses IN from the edges (constriction, pressure).
-// Positioned above the background scene but below the fighter column so
-// silhouettes stay readable against the tint.
-const RESULT_ATMOSPHERE_BASE_STYLE: CSSProperties = {
-  position: 'absolute',
+// Bright, high-chroma gold. Deliberately brighter than accent.primary
+// (which is a muted, everyday UI gold). This is the one place in the app
+// where gold goes ceremonial — marking victory as an above-the-line,
+// celebratory moment distinct from regular panel / button gold.
+const VICTORY_GOLD = '#E8B830';
+
+// Dimmer baseline for both outcomes. Defeat relies on this alone (the
+// red vignette adds its own edge darkening on top); victory pushes
+// darker to keep the bright gold title from losing contrast against
+// the scene.
+const DEFEAT_DARK_OVERLAY_STYLE: CSSProperties = {
+  position: 'fixed',
   inset: 0,
+  background: 'rgba(0, 0, 0, 0.5)',
   pointerEvents: 'none',
-  zIndex: 5,
+  zIndex: 10,
 };
 
-const VICTORY_ATMOSPHERE_STYLE: CSSProperties = {
-  ...RESULT_ATMOSPHERE_BASE_STYLE,
+const VICTORY_DARK_OVERLAY_STYLE: CSSProperties = {
+  ...DEFEAT_DARK_OVERLAY_STYLE,
+  background: 'rgba(0, 0, 0, 0.65)',
+};
+
+// Victory rays — a huge rotating conic-gradient circle centered on the
+// viewport. Rendered via motion.div so rotation is declarative and no
+// CSS keyframe injection is needed. The 24 beams alternate two opacity
+// tiers so the effect feels like radiating light rather than a repeating
+// stripe pattern.
+const VICTORY_RAYS_STYLE: CSSProperties = {
+  position: 'fixed',
+  top: '50%',
+  left: '50%',
+  width: '150vmax',
+  height: '150vmax',
+  marginTop: '-75vmax',
+  marginLeft: '-75vmax',
+  borderRadius: '50%',
+  pointerEvents: 'none',
+  zIndex: 11,
+  // Tight radial mask — rays are visible only in a small halo around
+  // the title and fade well before the panel, so the panel sits in
+  // clean dark space rather than on top of animated texture.
+  WebkitMaskImage: 'radial-gradient(circle, black 15%, transparent 40%)',
+  maskImage: 'radial-gradient(circle, black 15%, transparent 40%)',
+  background: `conic-gradient(
+    from 0deg,
+    rgba(232, 184, 48, 0.22) 0deg, transparent 8deg,
+    transparent 15deg, rgba(232, 184, 48, 0.18) 15deg, transparent 23deg,
+    transparent 30deg, rgba(232, 184, 48, 0.22) 30deg, transparent 38deg,
+    transparent 45deg, rgba(232, 184, 48, 0.18) 45deg, transparent 53deg,
+    transparent 60deg, rgba(232, 184, 48, 0.22) 60deg, transparent 68deg,
+    transparent 75deg, rgba(232, 184, 48, 0.18) 75deg, transparent 83deg,
+    transparent 90deg, rgba(232, 184, 48, 0.22) 90deg, transparent 98deg,
+    transparent 105deg, rgba(232, 184, 48, 0.18) 105deg, transparent 113deg,
+    transparent 120deg, rgba(232, 184, 48, 0.22) 120deg, transparent 128deg,
+    transparent 135deg, rgba(232, 184, 48, 0.18) 135deg, transparent 143deg,
+    transparent 150deg, rgba(232, 184, 48, 0.22) 150deg, transparent 158deg,
+    transparent 165deg, rgba(232, 184, 48, 0.18) 165deg, transparent 173deg,
+    transparent 180deg, rgba(232, 184, 48, 0.22) 180deg, transparent 188deg,
+    transparent 195deg, rgba(232, 184, 48, 0.18) 195deg, transparent 203deg,
+    transparent 210deg, rgba(232, 184, 48, 0.22) 210deg, transparent 218deg,
+    transparent 225deg, rgba(232, 184, 48, 0.18) 225deg, transparent 233deg,
+    transparent 240deg, rgba(232, 184, 48, 0.22) 240deg, transparent 248deg,
+    transparent 255deg, rgba(232, 184, 48, 0.18) 255deg, transparent 263deg,
+    transparent 270deg, rgba(232, 184, 48, 0.22) 270deg, transparent 278deg,
+    transparent 285deg, rgba(232, 184, 48, 0.18) 285deg, transparent 293deg,
+    transparent 300deg, rgba(232, 184, 48, 0.22) 300deg, transparent 308deg,
+    transparent 315deg, rgba(232, 184, 48, 0.18) 315deg, transparent 323deg,
+    transparent 330deg, rgba(232, 184, 48, 0.22) 330deg, transparent 338deg,
+    transparent 345deg, rgba(232, 184, 48, 0.18) 345deg, transparent 353deg,
+    transparent 360deg
+  )`,
+};
+
+// Two-layer bloom behind the title. The white core reads as "source of
+// light" while the wider gold halo carries warmth — together they give
+// the rays a felt point of origin rather than a diffuse glow.
+const VICTORY_GOLD_BLOOM_STYLE: CSSProperties = {
+  position: 'fixed',
+  top: '25%',
+  left: '50%',
+  width: 380,
+  height: 380,
+  marginLeft: -190,
+  marginTop: -190,
+  borderRadius: '50%',
   background:
-    'radial-gradient(ellipse at 50% 30%, rgba(201, 162, 90, 0.18) 0%, rgba(201, 162, 90, 0.06) 50%, transparent 80%)',
+    'radial-gradient(circle, rgba(232, 184, 48, 0.15) 0%, rgba(232, 184, 48, 0.06) 45%, transparent 70%)',
+  pointerEvents: 'none',
+  zIndex: 11,
 };
 
-const DEFEAT_ATMOSPHERE_STYLE: CSSProperties = {
-  ...RESULT_ATMOSPHERE_BASE_STYLE,
+const VICTORY_WHITE_BLOOM_STYLE: CSSProperties = {
+  position: 'fixed',
+  top: '25%',
+  left: '50%',
+  width: 200,
+  height: 200,
+  marginLeft: -100,
+  marginTop: -100,
+  borderRadius: '50%',
   background:
-    'radial-gradient(ellipse at 50% 50%, transparent 20%, rgba(192, 55, 68, 0.08) 50%, rgba(192, 55, 68, 0.18) 80%)',
+    'radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 40%, transparent 65%)',
+  pointerEvents: 'none',
+  zIndex: 11,
 };
 
-// Wing-flanked title row. The gradient-fading rules on either side of the
-// title taper AWAY from it, framing the word without competing with it.
-const RESULT_TITLE_ROW_STYLE: CSSProperties = {
+// Defeat edge vignette — red darkens from the edges inward, a visual
+// "closing in" that mirrors the felt experience of losing.
+const DEFEAT_VIGNETTE_STYLE: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background:
+    'radial-gradient(ellipse at 50% 50%, transparent 25%, rgba(192, 55, 68, 0.12) 55%, rgba(192, 55, 68, 0.25) 85%)',
+  pointerEvents: 'none',
+  zIndex: 11,
+};
+
+// Diagonal slash overlay SVG wrapper — three slashes, each drawn as a
+// thick dark base + thin bright center so they read as layered wounds
+// rather than single-tone strokes. Kept at 0.2 opacity so they are felt
+// more than seen.
+const DEFEAT_SLASHES_WRAPPER_STYLE: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  width: '100%',
+  height: '100%',
+  opacity: 0.2,
+  pointerEvents: 'none',
+  zIndex: 11,
+};
+
+// ------- Layer 2: content shell -------
+
+// Centered content column — lives above atmosphere (zIndex 20) and
+// disables pointer events by default; the panel below re-enables them
+// so atmosphere layers never eat clicks.
+const CONTENT_LAYER_STYLE: CSSProperties = {
+  position: 'relative',
+  zIndex: 20,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '100%',
+  height: '100%',
+  padding: `${space.xl} ${space.md}`,
+  pointerEvents: 'none',
+};
+
+// ------- Layer 2: title zone -------
+
+const TITLE_ZONE_STYLE: CSSProperties = {
+  textAlign: 'center',
+  marginBottom: space.lg,
+};
+
+const TITLE_ROW_STYLE: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   gap: space.md,
+  marginBottom: space.xs,
 };
 
-const WING_LINE_BASE_STYLE: CSSProperties = {
-  flex: '0 0 60px',
+const WING_BASE_STYLE: CSSProperties = {
+  width: 60,
   height: 1,
 };
 
 const VICTORY_WING_LEFT_STYLE: CSSProperties = {
-  ...WING_LINE_BASE_STYLE,
-  background: 'linear-gradient(to right, transparent, rgba(201, 162, 90, 0.4))',
+  ...WING_BASE_STYLE,
+  background: 'linear-gradient(to right, transparent, rgba(232, 184, 48, 0.5))',
 };
 
 const VICTORY_WING_RIGHT_STYLE: CSSProperties = {
-  ...WING_LINE_BASE_STYLE,
-  background: 'linear-gradient(to left, transparent, rgba(201, 162, 90, 0.4))',
+  ...WING_BASE_STYLE,
+  background: 'linear-gradient(to left, transparent, rgba(232, 184, 48, 0.5))',
 };
 
 const DEFEAT_WING_LEFT_STYLE: CSSProperties = {
-  ...WING_LINE_BASE_STYLE,
-  background: 'linear-gradient(to right, transparent, rgba(192, 55, 68, 0.4))',
+  ...WING_BASE_STYLE,
+  background: 'linear-gradient(to right, transparent, rgba(192, 55, 68, 0.5))',
 };
 
 const DEFEAT_WING_RIGHT_STYLE: CSSProperties = {
-  ...WING_LINE_BASE_STYLE,
-  background: 'linear-gradient(to left, transparent, rgba(192, 55, 68, 0.4))',
+  ...WING_BASE_STYLE,
+  background: 'linear-gradient(to left, transparent, rgba(192, 55, 68, 0.5))',
 };
 
 // Title — Cinzel 56px with a double textShadow (tight 40px + wide 80px)
-// creating a luminous bloom against the atmosphere tint. Static, not
-// animated: this is a final verdict, not a waiting state.
+// for a luminous bloom against the atmosphere tint. Static: this is a
+// final verdict, not a waiting state.
 const RESULT_TITLE_BASE_STYLE: CSSProperties = {
   margin: 0,
   fontSize: 56,
@@ -712,146 +842,153 @@ const RESULT_TITLE_BASE_STYLE: CSSProperties = {
   letterSpacing: '0.16em',
   textTransform: 'uppercase',
   fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
-  textAlign: 'center',
   lineHeight: 1,
 };
 
 const VICTORY_TITLE_STYLE: CSSProperties = {
   ...RESULT_TITLE_BASE_STYLE,
-  color: accent.primary,
+  color: VICTORY_GOLD,
+  // Triple-layer shadow: tight white for crisp readability over the
+  // white bloom core, mid gold for warmth, wide gold for ambient glow.
   textShadow:
-    '0 0 40px rgba(201, 162, 90, 0.5), 0 0 80px rgba(201, 162, 90, 0.2)',
+    '0 0 30px rgba(255, 255, 255, 0.3), 0 0 60px rgba(232, 184, 48, 0.5), 0 0 100px rgba(232, 184, 48, 0.2)',
 };
 
 const DEFEAT_TITLE_STYLE: CSSProperties = {
   ...RESULT_TITLE_BASE_STYLE,
   color: semantic.attack.text,
   textShadow:
-    '0 0 40px rgba(192, 55, 68, 0.5), 0 0 80px rgba(192, 55, 68, 0.2)',
-};
-
-// Ceremonial emblem under the title. Static, ghosted, watermark-like —
-// deliberately NOT the mitsudomoe spin pattern used on the waiting state.
-// `mixBlendMode: screen` drops the PNG's black background into the
-// atmosphere tint so only the gold / red figure reads.
-const RESULT_ICON_BASE_STYLE: CSSProperties = {
-  width: 100,
-  height: 100,
-  opacity: 0.2,
-  marginTop: space.md,
-  marginBottom: space.xs,
-  mixBlendMode: 'screen',
-};
-
-const VICTORY_ICON_STYLE: CSSProperties = RESULT_ICON_BASE_STYLE;
-
-const DEFEAT_ICON_STYLE: CSSProperties = {
-  ...RESULT_ICON_BASE_STYLE,
-  transform: 'rotate(180deg)', // kunai pointing down — weapon dropped
+    '0 0 40px rgba(192, 55, 68, 0.6), 0 0 80px rgba(192, 55, 68, 0.25)',
 };
 
 const RESULT_SUBTITLE_STYLE: CSSProperties = {
+  margin: `${space.sm} 0 0`,
   fontSize: 12,
   fontWeight: 500,
   letterSpacing: '0.24em',
   textTransform: 'uppercase',
   color: text.muted,
-  textAlign: 'center',
-  marginTop: space.xs,
-  marginBottom: space.lg,
 };
 
-// Glass info panel — built locally with raw design tokens instead of the
-// Panel primitive so the screen can own its bespoke accent-border trim
+// ------- Layer 2: info panel -------
+
+// Glass info panel — built LOCALLY from raw tokens rather than via the
+// Panel primitive so the screen owns its bespoke accent-line trim
 // without leaking that concern into the shared primitive.
 const RESULT_PANEL_STYLE: CSSProperties = {
+  position: 'relative',
   background: surface.glass,
   backdropFilter: blur.panel,
   WebkitBackdropFilter: blur.panel,
   borderRadius: radius.md,
   border: border.subtle,
   boxShadow: shadow.panel,
-  padding: space.lg,
   maxWidth: 520,
   width: '100%',
-  position: 'relative',
   overflow: 'hidden',
+  pointerEvents: 'auto',
 };
 
-// Accent gradient line at the very top of the panel — fades at each end
-// so it reads as refined trim rather than a hard border.
-const RESULT_ACCENT_BASE_STYLE: CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  height: 2,
-  pointerEvents: 'none',
+const PANEL_CONTENT_STYLE: CSSProperties = {
+  padding: space.lg,
 };
 
-const VICTORY_ACCENT_STYLE: CSSProperties = {
-  ...RESULT_ACCENT_BASE_STYLE,
-  background: `linear-gradient(to right, transparent, ${accent.primary}, transparent)`,
+// Gradient accent line pinned to the panel top. Sits as the FIRST child
+// inside the panel (before padded content) so overflow: hidden on the
+// panel clips it to the radius corners cleanly.
+const VICTORY_ACCENT_LINE_STYLE: CSSProperties = {
+  height: 3,
+  background: `linear-gradient(to right, transparent, ${VICTORY_GOLD}, transparent)`,
 };
 
-const DEFEAT_ACCENT_STYLE: CSSProperties = {
-  ...RESULT_ACCENT_BASE_STYLE,
+const DEFEAT_ACCENT_LINE_STYLE: CSSProperties = {
+  height: 3,
   background: `linear-gradient(to right, transparent, ${semantic.attack.base}, transparent)`,
 };
 
-// Panel content styles.
-const NAMES_ROW_STYLE: CSSProperties = {
+const NAMES_GRID_STYLE: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: '1fr 1fr',
   gap: space.lg,
-  marginTop: space.xs,
 };
 
 const ROLE_LABEL_STYLE: CSSProperties = {
+  margin: 0,
   fontSize: 11,
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
   fontWeight: 500,
   color: text.muted,
+  textAlign: 'center',
 };
 
-const PLAYER_NAME_STYLE: CSSProperties = {
+const PLAYER_NAME_BASE_STYLE: CSSProperties = {
+  margin: `${space.xs} 0`,
   fontSize: 22,
   fontWeight: 600,
   letterSpacing: '0.08em',
   fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+  textAlign: 'center',
+};
+
+// Color-coded player names. The panel keeps gold reserved for the
+// WINNER label below the name — the name itself just needs to be
+// readable (winner) or faded (loser), not emotional. Over-tinting names
+// competes with the single focal point inside the panel.
+const VICTORY_WINNER_NAME_STYLE: CSSProperties = {
+  ...PLAYER_NAME_BASE_STYLE,
   color: text.primary,
-  marginTop: space.xs,
 };
 
-const WINNER_STATUS_STYLE: CSSProperties = {
-  fontSize: 11,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase',
-  fontWeight: 500,
-  color: accent.primary,
-  marginTop: space.xs,
+const VICTORY_LOSER_NAME_STYLE: CSSProperties = {
+  ...PLAYER_NAME_BASE_STYLE,
+  // Dimmer than text.muted so the opponent recedes further on victory —
+  // their outcome is informational, not emotional, to the player.
+  color: 'rgba(232, 232, 240, 0.35)',
 };
 
-const LOSER_STATUS_STYLE: CSSProperties = {
-  ...WINNER_STATUS_STYLE,
+const DEFEAT_WINNER_NAME_STYLE: CSSProperties = {
+  ...PLAYER_NAME_BASE_STYLE,
+  color: text.primary,
+};
+
+const DEFEAT_LOSER_NAME_STYLE: CSSProperties = {
+  ...PLAYER_NAME_BASE_STYLE,
   color: text.muted,
 };
 
+// Outcome labels — "WINNER" / "VICTOR" always bright gold (the single
+// focal point inside the panel). "DEFEATED" is screen-dependent: muted
+// on victory (it is the opponent — unimportant to you) and red on
+// defeat (it is you — the loss should land).
+const WINNER_LABEL_STYLE: CSSProperties = {
+  margin: 0,
+  fontSize: 11,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  fontWeight: 600,
+  color: VICTORY_GOLD,
+  textAlign: 'center',
+};
+
+const VICTORY_DEFEATED_LABEL_STYLE: CSSProperties = {
+  ...WINNER_LABEL_STYLE,
+  color: text.muted,
+};
+
+const DEFEAT_DEFEATED_LABEL_STYLE: CSSProperties = {
+  ...WINNER_LABEL_STYLE,
+  color: semantic.attack.text,
+};
+
 const SECTION_LABEL_STYLE: CSSProperties = {
+  margin: `0 0 ${space.sm}`,
   fontSize: 11,
   letterSpacing: '0.16em',
   textTransform: 'uppercase',
   fontWeight: 600,
   color: text.secondary,
   textAlign: 'center',
-  marginBottom: space.sm,
-};
-
-const REWARDS_STACK_STYLE: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: space.xs,
 };
 
 const REWARD_ROW_STYLE: CSSProperties = {
@@ -861,6 +998,8 @@ const REWARD_ROW_STYLE: CSSProperties = {
   padding: `${space.sm} ${space.md}`,
   background: surface.glassSubtle,
   borderRadius: radius.sm,
+  border: border.subtle,
+  marginBottom: space.xs,
 };
 
 const REWARD_LABEL_STYLE: CSSProperties = {
@@ -871,11 +1010,14 @@ const REWARD_LABEL_STYLE: CSSProperties = {
   color: text.secondary,
 };
 
+// Reward VALUES use the semantic block/attack colors (green / red) so
+// positive vs negative reads at a glance without competing with the
+// panel's single gold focal point (the WINNER / VICTOR label).
 const REWARD_VALUE_POSITIVE_STYLE: CSSProperties = {
   fontSize: 14,
   fontWeight: 700,
   letterSpacing: '0.08em',
-  color: accent.primary,
+  color: semantic.block.text,
 };
 
 const REWARD_VALUE_NEGATIVE_STYLE: CSSProperties = {
@@ -886,10 +1028,22 @@ const REWARD_VALUE_NEGATIVE_STYLE: CSSProperties = {
 const EXCHANGE_BLOCK_BASE_STYLE: CSSProperties = {
   padding: `${space.sm} ${space.md}`,
   background: surface.glassSubtle,
-  borderRadius: radius.sm,
+  borderRadius: `0 ${radius.sm} ${radius.sm} 0`,
   borderLeftWidth: 3,
   borderLeftStyle: 'solid',
-  marginTop: space.sm,
+};
+
+// Exchange block accent border is subdued on purpose — the bright
+// gold / red belong to the accent line at the panel top. Here we only
+// want a tonal hint of the outcome, not another focal point.
+const EXCHANGE_BLOCK_VICTORY_STYLE: CSSProperties = {
+  ...EXCHANGE_BLOCK_BASE_STYLE,
+  borderLeftColor: 'rgba(201, 162, 90, 0.3)',
+};
+
+const EXCHANGE_BLOCK_DEFEAT_STYLE: CSSProperties = {
+  ...EXCHANGE_BLOCK_BASE_STYLE,
+  borderLeftColor: 'rgba(192, 55, 68, 0.4)',
 };
 
 const EXCHANGE_HEADER_STYLE: CSSProperties = {
@@ -902,6 +1056,7 @@ const EXCHANGE_HEADER_STYLE: CSSProperties = {
 };
 
 const EXCHANGE_TEXT_STYLE: CSSProperties = {
+  margin: 0,
   fontSize: 14,
   color: text.primary,
   lineHeight: 1.5,
@@ -913,6 +1068,28 @@ const BUTTONS_ROW_STYLE: CSSProperties = {
   gap: space.md,
   marginTop: space.lg,
 };
+
+// Three diagonal slash marks drawn as dual-layer strokes: a thick
+// dark-red base for the wound body, a thin bright-red centerline for the
+// fresh cut. Relies on an SVG viewBox (not a fixed pixel canvas) so it
+// scales responsively with the viewport.
+function DefeatSlashes() {
+  return (
+    <svg
+      style={DEFEAT_SLASHES_WRAPPER_STYLE}
+      viewBox="0 0 1920 1080"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
+      <line x1="1350" y1="-50" x2="400" y2="1130" stroke="#c03744" strokeWidth="40" strokeLinecap="round" opacity="0.7" />
+      <line x1="1350" y1="-50" x2="400" y2="1130" stroke="#ff2244" strokeWidth="8"  strokeLinecap="round" opacity="0.5" />
+      <line x1="1500" y1="-30" x2="550" y2="1110" stroke="#c03744" strokeWidth="32" strokeLinecap="round" opacity="0.6" />
+      <line x1="1500" y1="-30" x2="550" y2="1110" stroke="#ff2244" strokeWidth="6"  strokeLinecap="round" opacity="0.4" />
+      <line x1="1650" y1="-70" x2="700" y2="1150" stroke="#c03744" strokeWidth="44" strokeLinecap="round" opacity="0.5" />
+      <line x1="1650" y1="-70" x2="700" y2="1150" stroke="#ff2244" strokeWidth="10" strokeLinecap="round" opacity="0.4" />
+    </svg>
+  );
+}
 
 // ==================== VICTORY SCREEN ====================
 
@@ -932,110 +1109,80 @@ export function VictoryScreen({
       header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
     >
-      {/* Background scene */}
+      {/* Background scene — kept behind the dark overlay so the screen
+          still sits in the game world rather than on a blank canvas. */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${bgImage})` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/40 to-[var(--kombats-ink-navy)]/60" />
-      </div>
+      />
 
-      {/* Atmosphere — gold radiates FROM the center outward */}
-      <div style={VICTORY_ATMOSPHERE_STYLE} />
+      {/* LAYER 1 — Atmosphere: heavier dim, rotating rays, gold halo
+          with a white core painted on top as the perceived light source. */}
+      <div style={VICTORY_DARK_OVERLAY_STYLE} />
+      <motion.div
+        style={VICTORY_RAYS_STYLE}
+        animate={{ rotate: 360 }}
+        transition={{ duration: 60, ease: 'linear', repeat: Infinity }}
+      />
+      <div style={VICTORY_GOLD_BLOOM_STYLE} />
+      <div style={VICTORY_WHITE_BLOOM_STYLE} />
 
-      {/* Player character — celebratory, no HP/stat overlay */}
-      <div className={`${FIGHTER_COLUMN_LEFT_CLASSNAME} z-10 pointer-events-none`}>
-        <motion.img
-          src={characterImage}
-          alt="Your Character"
-          className={FIGHTER_IMAGE_CLASSNAME}
-          style={{
-            filter: FIGHTER_IMAGE_BASE_FILTER,
-            marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM,
-          }}
-          initial={{ opacity: 0, x: -40 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6 }}
-        />
-      </div>
-
-      {/* Content — bottom padding reserves the chat dock's safe area. */}
+      {/* LAYER 2 — Content column (title zone + info panel). */}
       <div
-        className="relative z-20 h-full flex flex-col items-center justify-center px-8 pointer-events-none"
-        style={{ paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px` }}
+        style={{
+          ...CONTENT_LAYER_STYLE,
+          paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px`,
+        }}
       >
-        {/* Title zone: wings → VICTORY → wings, then seal, then subtitle. */}
-        <div className="flex flex-col items-center">
-          <div style={RESULT_TITLE_ROW_STYLE}>
+        <div style={TITLE_ZONE_STYLE}>
+          <div style={TITLE_ROW_STYLE}>
             <div style={VICTORY_WING_LEFT_STYLE} />
             <h1 style={VICTORY_TITLE_STYLE}>VICTORY</h1>
             <div style={VICTORY_WING_RIGHT_STYLE} />
           </div>
-          <img
-            src={mitsudamoeSrc}
-            alt=""
-            aria-hidden
-            style={VICTORY_ICON_STYLE}
-          />
-          <div style={RESULT_SUBTITLE_STYLE}>Triumph in Combat</div>
+          <p style={RESULT_SUBTITLE_STYLE}>Triumph in Combat</p>
         </div>
 
-        {/* Result Panel */}
-        <div className="pointer-events-auto" style={{ width: '100%', maxWidth: 520 }}>
-          <div style={RESULT_PANEL_STYLE}>
-            {/* Gold accent trim */}
-            <div style={VICTORY_ACCENT_STYLE} />
-
-            {/* Player names */}
-            <div style={NAMES_ROW_STYLE}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={ROLE_LABEL_STYLE}>You</div>
-                <div style={PLAYER_NAME_STYLE}>Kazumi</div>
-                <div style={WINNER_STATUS_STYLE}>Winner</div>
+        <div style={RESULT_PANEL_STYLE}>
+          <div style={VICTORY_ACCENT_LINE_STYLE} />
+          <div style={PANEL_CONTENT_STYLE}>
+            <div style={NAMES_GRID_STYLE}>
+              <div>
+                <p style={ROLE_LABEL_STYLE}>You</p>
+                <p style={VICTORY_WINNER_NAME_STYLE}>Kazumi</p>
+                <p style={WINNER_LABEL_STYLE}>Winner</p>
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={ROLE_LABEL_STYLE}>Opponent</div>
-                <div style={PLAYER_NAME_STYLE}>Shadow Oni</div>
-                <div style={LOSER_STATUS_STYLE}>Defeated</div>
+              <div>
+                <p style={ROLE_LABEL_STYLE}>Opponent</p>
+                <p style={VICTORY_LOSER_NAME_STYLE}>Shadow Oni</p>
+                <p style={VICTORY_DEFEATED_LABEL_STYLE}>Defeated</p>
               </div>
             </div>
 
-            <DSDivider marginY="sm" />
+            <DSDivider marginY="md" />
 
-            {/* Rewards */}
-            <div>
-              <div style={SECTION_LABEL_STYLE}>Rewards</div>
-              <div style={REWARDS_STACK_STYLE}>
-                <div style={REWARD_ROW_STYLE}>
-                  <span style={REWARD_LABEL_STYLE}>XP Gained</span>
-                  <span style={REWARD_VALUE_POSITIVE_STYLE}>+1,250 XP</span>
-                </div>
-                <div style={REWARD_ROW_STYLE}>
-                  <span style={REWARD_LABEL_STYLE}>Rating Gained</span>
-                  <span style={REWARD_VALUE_POSITIVE_STYLE}>+25 RP</span>
-                </div>
-              </div>
+            <p style={SECTION_LABEL_STYLE}>Rewards</p>
+            <div style={REWARD_ROW_STYLE}>
+              <span style={REWARD_LABEL_STYLE}>XP Gained</span>
+              <span style={REWARD_VALUE_POSITIVE_STYLE}>+1,250 XP</span>
+            </div>
+            <div style={REWARD_ROW_STYLE}>
+              <span style={REWARD_LABEL_STYLE}>Rating Gained</span>
+              <span style={REWARD_VALUE_POSITIVE_STYLE}>+25 RP</span>
             </div>
 
-            {/* Final Exchange — gold left border */}
             {finalEntry && (
               <>
-                <DSDivider marginY="sm" />
-                <div
-                  style={{
-                    ...EXCHANGE_BLOCK_BASE_STYLE,
-                    borderLeftColor: accent.primary,
-                  }}
-                >
+                <DSDivider marginY="md" />
+                <div style={EXCHANGE_BLOCK_VICTORY_STYLE}>
                   <div style={EXCHANGE_HEADER_STYLE}>
                     Final Exchange · Round {finalEntry.round}
                   </div>
-                  <div style={EXCHANGE_TEXT_STYLE}>{finalEntry.text}</div>
+                  <p style={EXCHANGE_TEXT_STYLE}>{finalEntry.text}</p>
                 </div>
               </>
             )}
 
-            {/* Actions */}
             <div style={BUTTONS_ROW_STYLE}>
               <DSButton variant="primary" size="md" onClick={onQueueAgain}>
                 Battle Again
@@ -1069,111 +1216,73 @@ export function DefeatScreen({
       header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
     >
-      {/* Background scene */}
+      {/* Background scene — kept behind the dark overlay. */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${bgImage})` }}
-      >
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/40 to-[var(--kombats-ink-navy)]/60" />
-      </div>
+      />
 
-      {/* Atmosphere — red presses IN from the edges */}
-      <div style={DEFEAT_ATMOSPHERE_STYLE} />
+      {/* LAYER 1 — Atmosphere: dim first, then red vignette + slashes. */}
+      <div style={DEFEAT_DARK_OVERLAY_STYLE} />
+      <div style={DEFEAT_VIGNETTE_STYLE} />
+      <DefeatSlashes />
 
-      {/* Enemy character — the one who won, right side, mirrored & hue-shifted */}
-      <div className={`${FIGHTER_COLUMN_RIGHT_CLASSNAME} z-10 pointer-events-none`}>
-        <div style={{ transform: 'scaleX(-1)', marginBottom: FIGHTER_IMAGE_MARGIN_BOTTOM }}>
-          <motion.img
-            src={characterImage}
-            alt="Victorious Opponent"
-            className={FIGHTER_IMAGE_CLASSNAME}
-            style={{
-              filter: `${FIGHTER_IMAGE_BASE_FILTER} hue-rotate(180deg)`,
-            }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.6 }}
-          />
-        </div>
-      </div>
-
-      {/* Content — bottom padding reserves the chat dock's safe area. */}
+      {/* LAYER 2 — Content column (title zone + info panel). */}
       <div
-        className="relative z-20 h-full flex flex-col items-center justify-center px-8 pointer-events-none"
-        style={{ paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px` }}
+        style={{
+          ...CONTENT_LAYER_STYLE,
+          paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px`,
+        }}
       >
-        {/* Title zone: wings → DEFEAT → wings, then inverted kunai, then subtitle. */}
-        <div className="flex flex-col items-center">
-          <div style={RESULT_TITLE_ROW_STYLE}>
+        <div style={TITLE_ZONE_STYLE}>
+          <div style={TITLE_ROW_STYLE}>
             <div style={DEFEAT_WING_LEFT_STYLE} />
             <h1 style={DEFEAT_TITLE_STYLE}>DEFEAT</h1>
             <div style={DEFEAT_WING_RIGHT_STYLE} />
           </div>
-          <img
-            src={kunaiSrc}
-            alt=""
-            aria-hidden
-            style={DEFEAT_ICON_STYLE}
-          />
-          <div style={RESULT_SUBTITLE_STYLE}>Honor in Battle</div>
+          <p style={RESULT_SUBTITLE_STYLE}>Honor in Battle</p>
         </div>
 
-        {/* Result Panel */}
-        <div className="pointer-events-auto" style={{ width: '100%', maxWidth: 520 }}>
-          <div style={RESULT_PANEL_STYLE}>
-            {/* Red accent trim */}
-            <div style={DEFEAT_ACCENT_STYLE} />
-
-            {/* Player names */}
-            <div style={NAMES_ROW_STYLE}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={ROLE_LABEL_STYLE}>You</div>
-                <div style={PLAYER_NAME_STYLE}>Kazumi</div>
-                <div style={LOSER_STATUS_STYLE}>Defeated</div>
+        <div style={RESULT_PANEL_STYLE}>
+          <div style={DEFEAT_ACCENT_LINE_STYLE} />
+          <div style={PANEL_CONTENT_STYLE}>
+            <div style={NAMES_GRID_STYLE}>
+              <div>
+                <p style={ROLE_LABEL_STYLE}>You</p>
+                <p style={DEFEAT_LOSER_NAME_STYLE}>Kazumi</p>
+                <p style={DEFEAT_DEFEATED_LABEL_STYLE}>Defeated</p>
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={ROLE_LABEL_STYLE}>Opponent</div>
-                <div style={PLAYER_NAME_STYLE}>Shadow Oni</div>
-                <div style={WINNER_STATUS_STYLE}>Victor</div>
+              <div>
+                <p style={ROLE_LABEL_STYLE}>Opponent</p>
+                <p style={DEFEAT_WINNER_NAME_STYLE}>Shadow Oni</p>
+                <p style={WINNER_LABEL_STYLE}>Victor</p>
               </div>
             </div>
 
-            <DSDivider marginY="sm" />
+            <DSDivider marginY="md" />
 
-            {/* Rewards */}
-            <div>
-              <div style={SECTION_LABEL_STYLE}>Rewards</div>
-              <div style={REWARDS_STACK_STYLE}>
-                <div style={REWARD_ROW_STYLE}>
-                  <span style={REWARD_LABEL_STYLE}>XP Gained</span>
-                  <span style={REWARD_VALUE_POSITIVE_STYLE}>+250 XP</span>
-                </div>
-                <div style={REWARD_ROW_STYLE}>
-                  <span style={REWARD_LABEL_STYLE}>Rating Lost</span>
-                  <span style={REWARD_VALUE_NEGATIVE_STYLE}>-18 RP</span>
-                </div>
-              </div>
+            <p style={SECTION_LABEL_STYLE}>Rewards</p>
+            <div style={REWARD_ROW_STYLE}>
+              <span style={REWARD_LABEL_STYLE}>XP Gained</span>
+              <span style={REWARD_VALUE_POSITIVE_STYLE}>+250 XP</span>
+            </div>
+            <div style={REWARD_ROW_STYLE}>
+              <span style={REWARD_LABEL_STYLE}>Rating Lost</span>
+              <span style={REWARD_VALUE_NEGATIVE_STYLE}>-18 RP</span>
             </div>
 
-            {/* Final Exchange — red left border */}
             {finalEntry && (
               <>
-                <DSDivider marginY="sm" />
-                <div
-                  style={{
-                    ...EXCHANGE_BLOCK_BASE_STYLE,
-                    borderLeftColor: semantic.attack.base,
-                  }}
-                >
+                <DSDivider marginY="md" />
+                <div style={EXCHANGE_BLOCK_DEFEAT_STYLE}>
                   <div style={EXCHANGE_HEADER_STYLE}>
                     Final Exchange · Round {finalEntry.round}
                   </div>
-                  <div style={EXCHANGE_TEXT_STYLE}>{finalEntry.text}</div>
+                  <p style={EXCHANGE_TEXT_STYLE}>{finalEntry.text}</p>
                 </div>
               </>
             )}
 
-            {/* Actions */}
             <div style={BUTTONS_ROW_STYLE}>
               <DSButton variant="primary" size="md" onClick={onQueueAgain}>
                 Try Again
