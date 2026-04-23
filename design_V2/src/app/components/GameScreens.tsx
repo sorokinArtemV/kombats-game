@@ -1,16 +1,14 @@
 import { useState, type CSSProperties } from 'react';
-import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Trophy, Heart, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sword, Zap, TrendingUp, ChevronRight, Target, Clock, Heart, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion } from 'motion/react';
-import { PrimaryButton, SecondaryButton, GhostButton, GamePanel } from './KombatsUI';
 import {
   Button as DSButton,
   Divider as DSDivider,
   Label as DSLabel,
   Panel as DSPanel,
 } from '../../design-system/primitives';
-import { accent, space, text } from '../../design-system/tokens';
+import { accent, blur, border, radius, semantic, shadow, space, surface, text } from '../../design-system/tokens';
 import {
-  RewardRow,
   QueueCard,
   FighterStatsPopover,
   type FighterAttribute,
@@ -20,13 +18,14 @@ import {
   GameShell,
   LobbyHeader,
   LobbyChatDock,
-  BattleLogRecap,
   CHAT_DOCK_SAFE_AREA_PX,
   type BattleLogEntry,
 } from './GameShell';
 import { BodyZoneSelector, type BodyZone, type BlockPair } from './BodyZoneSelector';
 import bgImage from '../../imports/bg-1.png';
 import characterImage from '../../imports/charackter.png';
+import mitsudamoeSrc from '../../assets/icons/mitsudamoe.png';
+import kunaiSrc from '../../assets/icons/kunai.png';
 
 // Mock data for shell
 const mockChatMessages = [
@@ -639,6 +638,282 @@ export function BattleScreen({
   );
 }
 
+// ==================== RESULT SCREENS (shared styles) ====================
+// Local glass + atmosphere styles for VictoryScreen / DefeatScreen.
+// Intentionally kept in this file — the result screen is the emotional
+// climax of a match and its bespoke atmosphere / bloom / accent treatment
+// does not belong in the shared primitives.
+
+// Full-viewport tint that sells the outcome before any text is read.
+// Victory: gold radiates FROM the center outward (expansion, triumph).
+// Defeat: red presses IN from the edges (constriction, pressure).
+// Positioned above the background scene but below the fighter column so
+// silhouettes stay readable against the tint.
+const RESULT_ATMOSPHERE_BASE_STYLE: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  pointerEvents: 'none',
+  zIndex: 5,
+};
+
+const VICTORY_ATMOSPHERE_STYLE: CSSProperties = {
+  ...RESULT_ATMOSPHERE_BASE_STYLE,
+  background:
+    'radial-gradient(ellipse at 50% 30%, rgba(201, 162, 90, 0.18) 0%, rgba(201, 162, 90, 0.06) 50%, transparent 80%)',
+};
+
+const DEFEAT_ATMOSPHERE_STYLE: CSSProperties = {
+  ...RESULT_ATMOSPHERE_BASE_STYLE,
+  background:
+    'radial-gradient(ellipse at 50% 50%, transparent 20%, rgba(192, 55, 68, 0.08) 50%, rgba(192, 55, 68, 0.18) 80%)',
+};
+
+// Wing-flanked title row. The gradient-fading rules on either side of the
+// title taper AWAY from it, framing the word without competing with it.
+const RESULT_TITLE_ROW_STYLE: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: space.md,
+};
+
+const WING_LINE_BASE_STYLE: CSSProperties = {
+  flex: '0 0 60px',
+  height: 1,
+};
+
+const VICTORY_WING_LEFT_STYLE: CSSProperties = {
+  ...WING_LINE_BASE_STYLE,
+  background: 'linear-gradient(to right, transparent, rgba(201, 162, 90, 0.4))',
+};
+
+const VICTORY_WING_RIGHT_STYLE: CSSProperties = {
+  ...WING_LINE_BASE_STYLE,
+  background: 'linear-gradient(to left, transparent, rgba(201, 162, 90, 0.4))',
+};
+
+const DEFEAT_WING_LEFT_STYLE: CSSProperties = {
+  ...WING_LINE_BASE_STYLE,
+  background: 'linear-gradient(to right, transparent, rgba(192, 55, 68, 0.4))',
+};
+
+const DEFEAT_WING_RIGHT_STYLE: CSSProperties = {
+  ...WING_LINE_BASE_STYLE,
+  background: 'linear-gradient(to left, transparent, rgba(192, 55, 68, 0.4))',
+};
+
+// Title — Cinzel 56px with a double textShadow (tight 40px + wide 80px)
+// creating a luminous bloom against the atmosphere tint. Static, not
+// animated: this is a final verdict, not a waiting state.
+const RESULT_TITLE_BASE_STYLE: CSSProperties = {
+  margin: 0,
+  fontSize: 56,
+  fontWeight: 700,
+  letterSpacing: '0.16em',
+  textTransform: 'uppercase',
+  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+  textAlign: 'center',
+  lineHeight: 1,
+};
+
+const VICTORY_TITLE_STYLE: CSSProperties = {
+  ...RESULT_TITLE_BASE_STYLE,
+  color: accent.primary,
+  textShadow:
+    '0 0 40px rgba(201, 162, 90, 0.5), 0 0 80px rgba(201, 162, 90, 0.2)',
+};
+
+const DEFEAT_TITLE_STYLE: CSSProperties = {
+  ...RESULT_TITLE_BASE_STYLE,
+  color: semantic.attack.text,
+  textShadow:
+    '0 0 40px rgba(192, 55, 68, 0.5), 0 0 80px rgba(192, 55, 68, 0.2)',
+};
+
+// Ceremonial emblem under the title. Static, ghosted, watermark-like —
+// deliberately NOT the mitsudomoe spin pattern used on the waiting state.
+// `mixBlendMode: screen` drops the PNG's black background into the
+// atmosphere tint so only the gold / red figure reads.
+const RESULT_ICON_BASE_STYLE: CSSProperties = {
+  width: 100,
+  height: 100,
+  opacity: 0.2,
+  marginTop: space.md,
+  marginBottom: space.xs,
+  mixBlendMode: 'screen',
+};
+
+const VICTORY_ICON_STYLE: CSSProperties = RESULT_ICON_BASE_STYLE;
+
+const DEFEAT_ICON_STYLE: CSSProperties = {
+  ...RESULT_ICON_BASE_STYLE,
+  transform: 'rotate(180deg)', // kunai pointing down — weapon dropped
+};
+
+const RESULT_SUBTITLE_STYLE: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 500,
+  letterSpacing: '0.24em',
+  textTransform: 'uppercase',
+  color: text.muted,
+  textAlign: 'center',
+  marginTop: space.xs,
+  marginBottom: space.lg,
+};
+
+// Glass info panel — built locally with raw design tokens instead of the
+// Panel primitive so the screen can own its bespoke accent-border trim
+// without leaking that concern into the shared primitive.
+const RESULT_PANEL_STYLE: CSSProperties = {
+  background: surface.glass,
+  backdropFilter: blur.panel,
+  WebkitBackdropFilter: blur.panel,
+  borderRadius: radius.md,
+  border: border.subtle,
+  boxShadow: shadow.panel,
+  padding: space.lg,
+  maxWidth: 520,
+  width: '100%',
+  position: 'relative',
+  overflow: 'hidden',
+};
+
+// Accent gradient line at the very top of the panel — fades at each end
+// so it reads as refined trim rather than a hard border.
+const RESULT_ACCENT_BASE_STYLE: CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 2,
+  pointerEvents: 'none',
+};
+
+const VICTORY_ACCENT_STYLE: CSSProperties = {
+  ...RESULT_ACCENT_BASE_STYLE,
+  background: `linear-gradient(to right, transparent, ${accent.primary}, transparent)`,
+};
+
+const DEFEAT_ACCENT_STYLE: CSSProperties = {
+  ...RESULT_ACCENT_BASE_STYLE,
+  background: `linear-gradient(to right, transparent, ${semantic.attack.base}, transparent)`,
+};
+
+// Panel content styles.
+const NAMES_ROW_STYLE: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1fr 1fr',
+  gap: space.lg,
+  marginTop: space.xs,
+};
+
+const ROLE_LABEL_STYLE: CSSProperties = {
+  fontSize: 11,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  fontWeight: 500,
+  color: text.muted,
+};
+
+const PLAYER_NAME_STYLE: CSSProperties = {
+  fontSize: 22,
+  fontWeight: 600,
+  letterSpacing: '0.08em',
+  fontFamily: '"Cinzel","Trajan Pro","Noto Serif JP",serif',
+  color: text.primary,
+  marginTop: space.xs,
+};
+
+const WINNER_STATUS_STYLE: CSSProperties = {
+  fontSize: 11,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  fontWeight: 500,
+  color: accent.primary,
+  marginTop: space.xs,
+};
+
+const LOSER_STATUS_STYLE: CSSProperties = {
+  ...WINNER_STATUS_STYLE,
+  color: text.muted,
+};
+
+const SECTION_LABEL_STYLE: CSSProperties = {
+  fontSize: 11,
+  letterSpacing: '0.16em',
+  textTransform: 'uppercase',
+  fontWeight: 600,
+  color: text.secondary,
+  textAlign: 'center',
+  marginBottom: space.sm,
+};
+
+const REWARDS_STACK_STYLE: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: space.xs,
+};
+
+const REWARD_ROW_STYLE: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: `${space.sm} ${space.md}`,
+  background: surface.glassSubtle,
+  borderRadius: radius.sm,
+};
+
+const REWARD_LABEL_STYLE: CSSProperties = {
+  fontSize: 12,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  fontWeight: 500,
+  color: text.secondary,
+};
+
+const REWARD_VALUE_POSITIVE_STYLE: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  color: accent.primary,
+};
+
+const REWARD_VALUE_NEGATIVE_STYLE: CSSProperties = {
+  ...REWARD_VALUE_POSITIVE_STYLE,
+  color: semantic.attack.text,
+};
+
+const EXCHANGE_BLOCK_BASE_STYLE: CSSProperties = {
+  padding: `${space.sm} ${space.md}`,
+  background: surface.glassSubtle,
+  borderRadius: radius.sm,
+  borderLeftWidth: 3,
+  borderLeftStyle: 'solid',
+  marginTop: space.sm,
+};
+
+const EXCHANGE_HEADER_STYLE: CSSProperties = {
+  fontSize: 11,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  fontWeight: 500,
+  color: text.secondary,
+  marginBottom: space.xs,
+};
+
+const EXCHANGE_TEXT_STYLE: CSSProperties = {
+  fontSize: 14,
+  color: text.primary,
+  lineHeight: 1.5,
+};
+
+const BUTTONS_ROW_STYLE: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'center',
+  gap: space.md,
+  marginTop: space.lg,
+};
+
 // ==================== VICTORY SCREEN ====================
 
 export function VictoryScreen({
@@ -657,14 +932,16 @@ export function VictoryScreen({
       header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
     >
-      {/* Background */}
+      {/* Background scene */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${bgImage})` }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/40 to-[var(--kombats-ink-navy)]/60" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--kombats-jade)]/10 via-transparent to-transparent" />
       </div>
+
+      {/* Atmosphere — gold radiates FROM the center outward */}
+      <div style={VICTORY_ATMOSPHERE_STYLE} />
 
       {/* Player character — celebratory, no HP/stat overlay */}
       <div className={`${FIGHTER_COLUMN_LEFT_CLASSNAME} z-10 pointer-events-none`}>
@@ -682,79 +959,90 @@ export function VictoryScreen({
         />
       </div>
 
-      {/* Content — bottom padding reserves the shared chat dock's safe area so
-          the centered result panel never collides with the lower chat. */}
+      {/* Content — bottom padding reserves the chat dock's safe area. */}
       <div
         className="relative z-20 h-full flex flex-col items-center justify-center px-8 pointer-events-none"
         style={{ paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px` }}
       >
-        {/* Victory Banner */}
-        <motion.div
-          className="text-center mb-8"
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', duration: 0.6 }}
-        >
-          <h1
-            className="text-6xl text-[var(--kombats-gold)] mb-2 tracking-wide"
-            style={{
-              textShadow:
-                '0 2px 10px rgba(0,0,0,0.75), 0 0 24px rgba(201,169,97,0.32), 0 0 56px rgba(201,169,97,0.16)',
-            }}
-          >
-            VICTORY
-          </h1>
-          <p className="text-sm text-[var(--kombats-text-muted)] uppercase tracking-wider">Triumph in Combat</p>
-        </motion.div>
+        {/* Title zone: wings → VICTORY → wings, then seal, then subtitle. */}
+        <div className="flex flex-col items-center">
+          <div style={RESULT_TITLE_ROW_STYLE}>
+            <div style={VICTORY_WING_LEFT_STYLE} />
+            <h1 style={VICTORY_TITLE_STYLE}>VICTORY</h1>
+            <div style={VICTORY_WING_RIGHT_STYLE} />
+          </div>
+          <img
+            src={mitsudamoeSrc}
+            alt=""
+            aria-hidden
+            style={VICTORY_ICON_STYLE}
+          />
+          <div style={RESULT_SUBTITLE_STYLE}>Triumph in Combat</div>
+        </div>
 
         {/* Result Panel */}
-        <div className="max-w-2xl w-full pointer-events-auto">
-          <div className="bg-[var(--kombats-panel)] backdrop-blur-md border-2 border-[var(--kombats-jade)]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_30px_rgba(90,138,122,0.15)] rounded-lg overflow-hidden">
-            {/* Match Summary */}
-            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
-              <div className="grid grid-cols-2 gap-8">
-                <div className="text-center">
-                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">You</div>
-                  <div className="text-2xl text-[var(--kombats-jade)]">Kazumi</div>
-                  <div className="text-xs text-[var(--kombats-jade)] mt-1">Winner</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">Opponent</div>
-                  <div className="text-2xl text-[var(--kombats-text-primary)]">Shadow Oni</div>
-                  <div className="text-xs text-[var(--kombats-text-muted)] mt-1">Defeated</div>
-                </div>
+        <div className="pointer-events-auto" style={{ width: '100%', maxWidth: 520 }}>
+          <div style={RESULT_PANEL_STYLE}>
+            {/* Gold accent trim */}
+            <div style={VICTORY_ACCENT_STYLE} />
+
+            {/* Player names */}
+            <div style={NAMES_ROW_STYLE}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={ROLE_LABEL_STYLE}>You</div>
+                <div style={PLAYER_NAME_STYLE}>Kazumi</div>
+                <div style={WINNER_STATUS_STYLE}>Winner</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={ROLE_LABEL_STYLE}>Opponent</div>
+                <div style={PLAYER_NAME_STYLE}>Shadow Oni</div>
+                <div style={LOSER_STATUS_STYLE}>Defeated</div>
               </div>
             </div>
+
+            <DSDivider marginY="sm" />
 
             {/* Rewards */}
-            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
-              <h3 className="text-xs text-[var(--kombats-text-muted)] uppercase tracking-wider mb-3 flex items-center justify-center gap-2">
-                <Trophy className="w-3 h-3 text-[var(--kombats-gold)]" />
-                Rewards
-              </h3>
-              <div className="space-y-2">
-                <RewardRow label="XP Gained" value="+1,250 XP" tone="accent" />
-                <RewardRow label="Rating Gained" value="+25 RP" tone="success" />
+            <div>
+              <div style={SECTION_LABEL_STYLE}>Rewards</div>
+              <div style={REWARDS_STACK_STYLE}>
+                <div style={REWARD_ROW_STYLE}>
+                  <span style={REWARD_LABEL_STYLE}>XP Gained</span>
+                  <span style={REWARD_VALUE_POSITIVE_STYLE}>+1,250 XP</span>
+                </div>
+                <div style={REWARD_ROW_STYLE}>
+                  <span style={REWARD_LABEL_STYLE}>Rating Gained</span>
+                  <span style={REWARD_VALUE_POSITIVE_STYLE}>+25 RP</span>
+                </div>
               </div>
             </div>
 
-            {/* Final Exchange Recap */}
+            {/* Final Exchange — gold left border */}
             {finalEntry && (
-              <div className="px-6 py-4 border-b border-[var(--kombats-panel-border)]">
-                <BattleLogRecap entry={finalEntry} tone="victory" />
-              </div>
+              <>
+                <DSDivider marginY="sm" />
+                <div
+                  style={{
+                    ...EXCHANGE_BLOCK_BASE_STYLE,
+                    borderLeftColor: accent.primary,
+                  }}
+                >
+                  <div style={EXCHANGE_HEADER_STYLE}>
+                    Final Exchange · Round {finalEntry.round}
+                  </div>
+                  <div style={EXCHANGE_TEXT_STYLE}>{finalEntry.text}</div>
+                </div>
+              </>
             )}
 
             {/* Actions */}
-            <div className="p-6 bg-[var(--kombats-panel)]/50">
-              <div className="flex gap-3 justify-center">
-                <PrimaryButton onClick={onQueueAgain}>
-                  Battle Again
-                </PrimaryButton>
-                <SecondaryButton onClick={onReturnToLobby}>
-                  Return to Lobby
-                </SecondaryButton>
-              </div>
+            <div style={BUTTONS_ROW_STYLE}>
+              <DSButton variant="primary" size="md" onClick={onQueueAgain}>
+                Battle Again
+              </DSButton>
+              <DSButton variant="secondary" size="md" onClick={onReturnToLobby}>
+                Return to Lobby
+              </DSButton>
             </div>
           </div>
         </div>
@@ -781,14 +1069,16 @@ export function DefeatScreen({
       header={<LobbyHeader onGameInfo={onGameInfo} onLeaderboard={onLeaderboard} />}
       bottomOverlay={<LobbyChatDock messages={mockChatMessages} onlineUsers={mockOnlineUsers} />}
     >
-      {/* Background */}
+      {/* Background scene */}
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{ backgroundImage: `url(${bgImage})` }}
       >
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--kombats-ink-navy)]/40 to-[var(--kombats-ink-navy)]/60" />
-        <div className="absolute inset-0 bg-gradient-to-t from-[var(--kombats-crimson)]/10 via-transparent to-transparent" />
       </div>
+
+      {/* Atmosphere — red presses IN from the edges */}
+      <div style={DEFEAT_ATMOSPHERE_STYLE} />
 
       {/* Enemy character — the one who won, right side, mirrored & hue-shifted */}
       <div className={`${FIGHTER_COLUMN_RIGHT_CLASSNAME} z-10 pointer-events-none`}>
@@ -807,78 +1097,90 @@ export function DefeatScreen({
         </div>
       </div>
 
-      {/* Content — bottom padding reserves the shared chat dock's safe area so
-          the centered result panel never collides with the lower chat. */}
+      {/* Content — bottom padding reserves the chat dock's safe area. */}
       <div
         className="relative z-20 h-full flex flex-col items-center justify-center px-8 pointer-events-none"
         style={{ paddingBottom: `${CHAT_DOCK_SAFE_AREA_PX}px` }}
       >
-        {/* Defeat Banner */}
-        <motion.div
-          className="text-center mb-8"
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', duration: 0.6 }}
-        >
-          <h1
-            className="text-6xl text-[var(--kombats-crimson)] mb-2 tracking-wide"
-            style={{
-              textShadow:
-                '0 2px 10px rgba(0,0,0,0.75), 0 0 24px rgba(192,55,68,0.32), 0 0 56px rgba(192,55,68,0.16)',
-            }}
-          >
-            DEFEAT
-          </h1>
-          <p className="text-sm text-[var(--kombats-text-muted)] uppercase tracking-wider">Honor in Battle</p>
-        </motion.div>
+        {/* Title zone: wings → DEFEAT → wings, then inverted kunai, then subtitle. */}
+        <div className="flex flex-col items-center">
+          <div style={RESULT_TITLE_ROW_STYLE}>
+            <div style={DEFEAT_WING_LEFT_STYLE} />
+            <h1 style={DEFEAT_TITLE_STYLE}>DEFEAT</h1>
+            <div style={DEFEAT_WING_RIGHT_STYLE} />
+          </div>
+          <img
+            src={kunaiSrc}
+            alt=""
+            aria-hidden
+            style={DEFEAT_ICON_STYLE}
+          />
+          <div style={RESULT_SUBTITLE_STYLE}>Honor in Battle</div>
+        </div>
 
         {/* Result Panel */}
-        <div className="max-w-2xl w-full pointer-events-auto">
-          <div className="bg-[var(--kombats-panel)] backdrop-blur-md border-2 border-[var(--kombats-crimson)]/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.03),0_0_30px_rgba(192,55,68,0.15)] rounded-lg overflow-hidden">
-            {/* Match Summary */}
-            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
-              <div className="grid grid-cols-2 gap-8">
-                <div className="text-center">
-                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">You</div>
-                  <div className="text-2xl text-[var(--kombats-text-primary)]">Kazumi</div>
-                  <div className="text-xs text-[var(--kombats-crimson)] mt-1">Defeated</div>
+        <div className="pointer-events-auto" style={{ width: '100%', maxWidth: 520 }}>
+          <div style={RESULT_PANEL_STYLE}>
+            {/* Red accent trim */}
+            <div style={DEFEAT_ACCENT_STYLE} />
+
+            {/* Player names */}
+            <div style={NAMES_ROW_STYLE}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={ROLE_LABEL_STYLE}>You</div>
+                <div style={PLAYER_NAME_STYLE}>Kazumi</div>
+                <div style={LOSER_STATUS_STYLE}>Defeated</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={ROLE_LABEL_STYLE}>Opponent</div>
+                <div style={PLAYER_NAME_STYLE}>Shadow Oni</div>
+                <div style={WINNER_STATUS_STYLE}>Victor</div>
+              </div>
+            </div>
+
+            <DSDivider marginY="sm" />
+
+            {/* Rewards */}
+            <div>
+              <div style={SECTION_LABEL_STYLE}>Rewards</div>
+              <div style={REWARDS_STACK_STYLE}>
+                <div style={REWARD_ROW_STYLE}>
+                  <span style={REWARD_LABEL_STYLE}>XP Gained</span>
+                  <span style={REWARD_VALUE_POSITIVE_STYLE}>+250 XP</span>
                 </div>
-                <div className="text-center">
-                  <div className="text-sm text-[var(--kombats-text-secondary)] mb-1">Opponent</div>
-                  <div className="text-2xl text-[var(--kombats-gold)]">Shadow Oni</div>
-                  <div className="text-xs text-[var(--kombats-gold)] mt-1">Victor</div>
+                <div style={REWARD_ROW_STYLE}>
+                  <span style={REWARD_LABEL_STYLE}>Rating Lost</span>
+                  <span style={REWARD_VALUE_NEGATIVE_STYLE}>-18 RP</span>
                 </div>
               </div>
             </div>
 
-            {/* Rewards — same progression-style structure as Victory */}
-            <div className="p-6 border-b border-[var(--kombats-panel-border)]">
-              <h3 className="text-xs text-[var(--kombats-text-muted)] uppercase tracking-wider mb-3 text-center">
-                Rewards
-              </h3>
-              <div className="space-y-2">
-                <RewardRow label="XP Gained" value="+250 XP" tone="accent" />
-                <RewardRow label="Rating Lost" value="-18 RP" tone="danger" />
-              </div>
-            </div>
-
-            {/* Final Exchange Recap */}
+            {/* Final Exchange — red left border */}
             {finalEntry && (
-              <div className="px-6 py-4 border-b border-[var(--kombats-panel-border)]">
-                <BattleLogRecap entry={finalEntry} tone="defeat" />
-              </div>
+              <>
+                <DSDivider marginY="sm" />
+                <div
+                  style={{
+                    ...EXCHANGE_BLOCK_BASE_STYLE,
+                    borderLeftColor: semantic.attack.base,
+                  }}
+                >
+                  <div style={EXCHANGE_HEADER_STYLE}>
+                    Final Exchange · Round {finalEntry.round}
+                  </div>
+                  <div style={EXCHANGE_TEXT_STYLE}>{finalEntry.text}</div>
+                </div>
+              </>
             )}
 
             {/* Actions */}
-            <div className="p-6 bg-[var(--kombats-panel)]/50">
-              <div className="flex gap-3 justify-center">
-                <PrimaryButton onClick={onQueueAgain}>
-                  Try Again
-                </PrimaryButton>
-                <SecondaryButton onClick={onReturnToLobby}>
-                  Return to Lobby
-                </SecondaryButton>
-              </div>
+            <div style={BUTTONS_ROW_STYLE}>
+              <DSButton variant="primary" size="md" onClick={onQueueAgain}>
+                Try Again
+              </DSButton>
+              <DSButton variant="secondary" size="md" onClick={onReturnToLobby}>
+                Return to Lobby
+              </DSButton>
             </div>
           </div>
         </div>
