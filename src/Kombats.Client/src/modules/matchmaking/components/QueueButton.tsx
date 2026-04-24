@@ -28,13 +28,16 @@ export function QueueButton() {
         type="button"
         onClick={handleJoin}
         disabled={disabled}
-        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-go px-6 py-3 text-base font-bold uppercase tracking-wide text-white shadow-md transition-colors hover:bg-go-hover disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-go"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-accent-primary px-6 py-3 font-display text-[13px] font-semibold uppercase tracking-[0.18em] text-text-on-accent transition-colors duration-150 hover:bg-kombats-gold-light disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-accent-primary"
       >
         {joining ? <Spinner size="sm" /> : <PlayIcon />}
         <span>{joining ? 'Joining…' : 'Join Queue'}</span>
       </button>
       {errorMessage && (
-        <p className="text-center text-xs text-error" role="alert">
+        <p
+          className="text-center text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light"
+          role="alert"
+        >
           {errorMessage}
         </p>
       )}
@@ -53,8 +56,8 @@ function extractMessage(err: unknown): string {
 function PlayIcon() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"

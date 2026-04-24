@@ -5,14 +5,13 @@ import {
   STAT_LABELS,
 } from '../useAllocateStats';
 import { Button } from '@/ui/components/Button';
-import { Card } from '@/ui/components/Card';
 import { StatPointAllocator } from '@/ui/components/StatPointAllocator';
 
 /**
  * Post-level-up stat allocation from the lobby. Renders nothing when the
  * character has no unspent points. Shares the `useAllocateStats` hook
  * with the onboarding initial-allocation screen; diverges only in the
- * panel chrome (Card wrapper, collapsed header + Reset button) and the
+ * panel chrome (glass panel, header + Reset button) and the
  * `pendingLevelUpLevel` reset on successful drain to zero.
  */
 export function StatAllocationPanel() {
@@ -35,16 +34,25 @@ export function StatAllocationPanel() {
   }
 
   return (
-    <Card>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <div className="rounded-md border-[0.5px] border-border-subtle bg-glass p-6 shadow-[var(--shadow-panel)] backdrop-blur-[20px]">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div className="flex items-center justify-between">
-          <h3 className="font-display text-base text-text-primary">
+          <h3 className="font-display text-[14px] font-semibold uppercase tracking-[0.24em] text-accent-text">
             Allocate Stat Points
           </h3>
-          <span className="rounded-full bg-accent/20 px-2 py-0.5 text-xs font-medium text-accent">
+          <span
+            className="rounded-sm border-[0.5px] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] tabular-nums"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--color-kombats-gold) 40%, transparent)',
+              background: 'color-mix(in srgb, var(--color-kombats-gold) 12%, transparent)',
+              color: 'var(--color-accent-text)',
+            }}
+          >
             {alloc.unspentPoints} available
           </span>
         </div>
+
+        <div className="h-px bg-border-divider" aria-hidden />
 
         <div className="flex flex-col gap-2">
           {STAT_KEYS.map((stat) => (
@@ -62,12 +70,19 @@ export function StatAllocationPanel() {
           ))}
         </div>
 
-        <p className="text-center text-sm font-medium text-text-secondary">
-          Points remaining: <span className="text-accent">{alloc.remaining}</span>
-        </p>
+        <div className="flex items-center justify-between rounded-sm border-[0.5px] border-border-subtle bg-glass-subtle px-4 py-2">
+          <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-text-muted">
+            Points remaining
+          </span>
+          <span className="text-sm font-medium tabular-nums text-kombats-gold">
+            {alloc.remaining}
+          </span>
+        </div>
 
         {alloc.errorMessage && (
-          <p className="text-center text-sm text-error">{alloc.errorMessage}</p>
+          <p className="text-center text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light">
+            {alloc.errorMessage}
+          </p>
         )}
 
         <div className="flex items-center justify-end gap-2">
@@ -88,6 +103,6 @@ export function StatAllocationPanel() {
           </Button>
         </div>
       </form>
-    </Card>
+    </div>
   );
 }
