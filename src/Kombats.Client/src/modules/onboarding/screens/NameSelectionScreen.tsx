@@ -5,6 +5,7 @@ import * as characterApi from '@/transport/http/endpoints/character';
 import { usePlayerStore } from '@/modules/player/store';
 import { Button } from '@/ui/components/Button';
 import { NameInput, NAME_MIN, NAME_MAX } from '../components/NameInput';
+import { OnboardingCard } from '../components/OnboardingCard';
 import { isApiError } from '@/types/api';
 
 function validateName(name: string): string | null {
@@ -74,33 +75,32 @@ export function NameSelectionScreen() {
   const displayError = clientError ?? getServerError();
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-6">
-      <header className="flex flex-col gap-1">
-        <h2 className="font-display text-2xl font-bold text-text-primary">Choose Your Name</h2>
-        <p className="text-sm text-text-muted">
-          This name is permanent and visible to all players.
-        </p>
-      </header>
+    <OnboardingCard
+      eyebrow="Welcome"
+      title="Choose Your Name"
+      subtitle="Permanent · Visible to all players"
+    >
+      <form onSubmit={handleSubmit} className="flex w-full flex-col gap-6">
+        <NameInput
+          value={name}
+          onChange={(v) => {
+            setName(v);
+            setClientError(null);
+            if (mutation.isError) mutation.reset();
+          }}
+          error={displayError ?? undefined}
+          disabled={mutation.isPending}
+        />
 
-      <NameInput
-        value={name}
-        onChange={(v) => {
-          setName(v);
-          setClientError(null);
-          if (mutation.isError) mutation.reset();
-        }}
-        error={displayError ?? undefined}
-        disabled={mutation.isPending}
-      />
-
-      <Button
-        type="submit"
-        loading={mutation.isPending}
-        disabled={name.trim().length === 0}
-        className="w-full"
-      >
-        Set Name
-      </Button>
-    </form>
+        <Button
+          type="submit"
+          loading={mutation.isPending}
+          disabled={name.trim().length === 0}
+          className="w-full"
+        >
+          Set Name
+        </Button>
+      </form>
+    </OnboardingCard>
   );
 }
