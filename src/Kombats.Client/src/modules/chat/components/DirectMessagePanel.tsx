@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatKeys } from '@/app/query-client';
 import * as chatApi from '@/transport/http/endpoints/chat';
 import { useChatStore } from '../store';
-import { Avatar } from '@/ui/components/Avatar';
 import { Spinner } from '@/ui/components/Spinner';
 import { MessageInput } from './MessageInput';
 import { formatTimestamp } from '../format';
@@ -94,32 +93,34 @@ export function DirectMessagePanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b border-bg-surface px-3 py-2">
+      <div className="flex items-center gap-2 border-b-[0.5px] border-border-subtle px-4 py-3">
         <button
           onClick={onBack}
-          className="rounded-md p-1 text-text-muted transition-colors hover:text-text-primary"
+          className="rounded-sm p-1 text-text-muted transition-colors duration-150 hover:text-kombats-gold"
           aria-label="Back to conversations"
         >
           &#x2190;
         </button>
-        <Avatar name={displayName} size="sm" />
+        <span
+          aria-hidden
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-kombats-jade"
+          style={{ boxShadow: '0 0 6px var(--color-kombats-jade)' }}
+        />
         <button
           onClick={() => onViewProfile(otherPlayerId)}
-          className="flex-1 truncate text-left text-sm font-medium text-text-primary hover:text-accent"
+          className="flex-1 truncate text-left text-[11px] font-medium uppercase tracking-[0.18em] text-text-secondary transition-colors duration-150 hover:text-kombats-gold"
         >
           {displayName}
         </button>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="kombats-scroll flex-1 overflow-y-auto px-4 py-3">
         {historyQuery.isPending ? (
           <div className="flex items-center justify-center py-8">
             <Spinner size="sm" />
           </div>
         ) : messages.length === 0 ? (
-          <p className="py-8 text-center text-xs text-text-muted">
+          <p className="py-8 text-center text-[11px] uppercase tracking-[0.18em] text-text-muted">
             No messages yet. Say hello!
           </p>
         ) : (
@@ -128,7 +129,7 @@ export function DirectMessagePanel({
               <button
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="mb-2 self-center rounded-md px-3 py-1 text-xs text-text-muted transition-colors hover:text-text-primary"
+                className="mb-2 self-center rounded-sm px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-text-muted transition-colors duration-150 hover:text-kombats-gold disabled:opacity-50"
               >
                 {loadingMore ? 'Loading...' : 'Load older messages'}
               </button>
@@ -136,14 +137,16 @@ export function DirectMessagePanel({
             {messages.map((msg) => (
               <div key={msg.messageId} className="flex flex-col gap-0.5">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xs font-medium text-accent">
+                  <span className="text-xs font-semibold text-accent-text">
                     {msg.sender.displayName}
                   </span>
-                  <span className="text-xs text-text-muted">
+                  <span className="text-[10px] text-text-muted tabular-nums">
                     {formatTimestamp(msg.sentAt)}
                   </span>
                 </div>
-                <p className="break-words text-sm text-text-primary">{msg.content}</p>
+                <p className="break-words pl-2 text-sm text-text-secondary">
+                  {msg.content}
+                </p>
               </div>
             ))}
             <div ref={messagesEndRef} />
@@ -151,8 +154,7 @@ export function DirectMessagePanel({
         )}
       </div>
 
-      {/* Input */}
-      <div className="border-t border-bg-surface p-3">
+      <div className="border-t-[0.5px] border-border-subtle px-3 py-2">
         <MessageInput mode="direct" recipientPlayerId={otherPlayerId} />
       </div>
     </div>

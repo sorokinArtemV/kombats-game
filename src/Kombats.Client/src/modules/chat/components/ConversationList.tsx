@@ -4,7 +4,6 @@ import { format } from 'date-fns';
 import { chatKeys } from '@/app/query-client';
 import * as chatApi from '@/transport/http/endpoints/chat';
 import { useChatStore } from '../store';
-import { Avatar } from '@/ui/components/Avatar';
 import { Spinner } from '@/ui/components/Spinner';
 import type { ChatConversationResponse } from '@/types/chat';
 
@@ -42,7 +41,7 @@ export function ConversationList({ onSelectConversation }: ConversationListProps
 
   if (conversationsQuery.isPending) {
     return (
-      <div className="flex items-center justify-center py-4">
+      <div className="flex items-center justify-center py-6">
         <Spinner size="sm" />
       </div>
     );
@@ -50,27 +49,31 @@ export function ConversationList({ onSelectConversation }: ConversationListProps
 
   if (conversations.length === 0) {
     return (
-      <p className="px-3 py-4 text-center text-xs text-text-muted">
+      <p className="px-4 py-6 text-center text-[11px] uppercase tracking-[0.18em] text-text-muted">
         No conversations yet
       </p>
     );
   }
 
   return (
-    <ul className="flex flex-col">
+    <ul className="kombats-scroll flex h-full flex-col overflow-y-auto py-1">
       {conversations.map((conv) => (
         <li key={conv.conversationId}>
           <button
             onClick={() => onSelectConversation(conv.otherPlayer.playerId, conv.otherPlayer.displayName)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-bg-surface"
+            className="flex w-full items-center gap-3 border-b-[0.5px] border-border-divider px-5 py-3 text-left transition-colors duration-150 hover:bg-white/[0.03]"
           >
-            <Avatar name={conv.otherPlayer.displayName} size="sm" />
+            <span
+              aria-hidden
+              className="h-1.5 w-1.5 shrink-0 rounded-full bg-kombats-jade"
+              style={{ boxShadow: '0 0 6px var(--color-kombats-jade)' }}
+            />
             <div className="flex-1 overflow-hidden">
               <span className="block truncate text-sm text-text-primary">
                 {conv.otherPlayer.displayName}
               </span>
               {conv.lastMessageAt && (
-                <span className="text-xs text-text-muted">
+                <span className="text-[10px] text-text-muted tabular-nums">
                   {formatConversationTime(conv.lastMessageAt)}
                 </span>
               )}

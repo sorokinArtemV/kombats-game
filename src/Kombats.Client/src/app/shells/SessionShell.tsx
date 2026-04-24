@@ -24,7 +24,7 @@ export function SessionShell() {
   const isBattleResult = pathname.endsWith('/result');
 
   return (
-    <div className="flex h-screen flex-col bg-bg-primary text-text-primary">
+    <div className="flex h-screen flex-col overflow-hidden bg-kombats-ink-navy text-text-primary">
       <AppHeader />
       <main
         className={

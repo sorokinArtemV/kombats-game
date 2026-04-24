@@ -69,8 +69,8 @@ export function MessageInput({
   );
 
   return (
-    <div className={clsx('flex flex-col gap-1', className)}>
-      <div className="flex gap-2">
+    <div className={clsx('flex flex-col gap-1.5', className)}>
+      <div className="flex items-center gap-2 rounded-full border-[0.5px] border-border-subtle bg-glass-subtle px-4 py-1.5 transition-colors focus-within:border-accent-muted">
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -84,24 +84,27 @@ export function MessageInput({
           }
           disabled={connectionState !== 'connected' || rateLimitState.isLimited}
           rows={1}
-          className="flex-1 resize-none rounded-md border border-bg-surface bg-bg-secondary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted outline-none transition-colors focus:border-accent disabled:opacity-50"
+          className="flex-1 resize-none bg-transparent text-xs text-text-primary placeholder:text-text-muted outline-none disabled:opacity-50"
         />
         <button
           onClick={handleSend}
           disabled={!canSend}
-          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:hover:bg-accent"
+          className="rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-accent-text transition-colors duration-150 hover:text-kombats-gold disabled:cursor-not-allowed disabled:opacity-40"
         >
           Send
         </button>
       </div>
-      <div className="flex justify-between text-xs">
+      <div className="flex justify-between px-1 text-[10px]">
         {rateLimitState.isLimited ? (
-          <span className="text-warning">Rate limited — wait a moment</span>
+          <span className="uppercase tracking-[0.18em] text-warning">
+            Rate limited — wait a moment
+          </span>
         ) : (
           <span />
         )}
         <span
           className={clsx(
+            'tabular-nums',
             content.length > MAX_MESSAGE_LENGTH ? 'text-error' : 'text-text-muted',
           )}
         >

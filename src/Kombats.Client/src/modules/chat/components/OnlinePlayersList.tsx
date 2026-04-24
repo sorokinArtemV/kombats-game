@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useOnlinePlayers, useOnlineCount } from '../hooks';
-import { Avatar } from '@/ui/components/Avatar';
 import type { OnlinePlayerResponse } from '@/types/chat';
 
 interface OnlinePlayersListProps {
@@ -19,20 +18,23 @@ export function OnlinePlayersList({ onSendMessage, onViewProfile }: OnlinePlayer
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-sm font-semibold text-text-primary">
-          Online Players
+      <div className="flex items-center gap-2 border-b-[0.5px] border-border-subtle px-4 py-2">
+        <UsersIcon />
+        <span className="flex-1 text-[11px] font-medium uppercase tracking-[0.18em] text-text-muted">
+          Players in Chat
         </span>
-        <span className="text-xs text-text-muted">{onlineCount}</span>
+        <span className="text-[11px] font-medium text-text-secondary tabular-nums">
+          {onlineCount}
+        </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="kombats-scroll flex-1 overflow-y-auto py-1">
         {playerList.length === 0 ? (
-          <p className="px-3 py-4 text-center text-xs text-text-muted">
+          <p className="px-4 py-4 text-center text-[11px] uppercase tracking-[0.18em] text-text-muted">
             No players online
           </p>
         ) : (
-          <ul className="flex flex-col">
+          <ul className="flex flex-col px-2">
             {playerList.map((player) => (
               <PlayerRow
                 key={player.playerId}
@@ -48,10 +50,6 @@ export function OnlinePlayersList({ onSendMessage, onViewProfile }: OnlinePlayer
   );
 }
 
-// Row is two sibling buttons inside a non-interactive container. Previously
-// the DM action was a `role="button"` span nested inside the row's parent
-// `<button>` — invalid HTML (interactive inside interactive) and a React
-// DOM warning. Splitting them flat-hierarchy resolves both.
 function PlayerRow({
   player,
   onViewProfile,
@@ -62,25 +60,20 @@ function PlayerRow({
   onSendMessage?: (playerId: string, displayName: string) => void;
 }) {
   return (
-    <li className="group flex items-center gap-3 px-3 py-2 transition-colors hover:bg-bg-surface">
+    <li className="group flex items-center gap-2 rounded-sm px-2 py-1.5 transition-colors duration-150 hover:bg-white/[0.03]">
       <button
         type="button"
         onClick={() => onViewProfile?.(player.playerId)}
-        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
-        <div className="relative">
-          <Avatar name={player.displayName} size="md" />
-          <span
-            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-bg-secondary bg-success"
-            aria-hidden
-          />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium text-text-primary">
-            {player.displayName}
-          </span>
-          <span className="truncate text-xs text-text-muted">Online</span>
-        </div>
+        <span
+          aria-hidden
+          className="h-1.5 w-1.5 shrink-0 rounded-full bg-kombats-jade"
+          style={{ boxShadow: '0 0 6px var(--color-kombats-jade)' }}
+        />
+        <span className="truncate text-xs text-text-secondary group-hover:text-text-primary">
+          {player.displayName}
+        </span>
       </button>
       {onSendMessage && (
         <button
@@ -88,11 +81,33 @@ function PlayerRow({
           onClick={() => onSendMessage(player.playerId, player.displayName)}
           title="Send message"
           aria-label={`Send message to ${player.displayName}`}
-          className="hidden rounded-md px-2 py-1 text-xs font-medium text-accent transition-colors hover:bg-bg-elevated group-hover:inline-flex"
+          className="hidden rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-accent-text transition-colors duration-150 hover:text-kombats-gold group-hover:inline-flex"
         >
           DM
         </button>
       )}
     </li>
+  );
+}
+
+function UsersIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="text-kombats-gold"
+    >
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
   );
 }

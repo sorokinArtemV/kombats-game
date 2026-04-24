@@ -22,28 +22,34 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps = {}) {
   return (
     <div className="flex h-full flex-col">
       {!hideHeader && (
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="text-sm font-semibold text-text-primary">Room Chat</span>
+        <div className="flex items-center justify-between border-b-[0.5px] border-border-subtle px-4 py-2">
+          <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent-text">
+            Room Chat
+          </span>
           <ConnectionIndicator state={connectionState} />
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto bg-bg-elevated px-3 py-2">
+      <div className="kombats-scroll flex-1 overflow-y-auto px-4 py-3">
         {messages.length === 0 ? (
-          <p className="text-center text-xs text-text-muted">No messages yet</p>
+          <p className="text-center text-[11px] uppercase tracking-[0.18em] text-text-muted">
+            No messages yet
+          </p>
         ) : (
           <div className="flex flex-col gap-2">
             {messages.map((msg) => (
               <div key={msg.messageId} className="flex flex-col gap-0.5">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xs font-semibold text-accent">
-                    {msg.sender.displayName}:
+                  <span className="text-xs font-semibold text-accent-text">
+                    {msg.sender.displayName}
                   </span>
-                  <span className="text-xs text-text-muted">
+                  <span className="text-[10px] text-text-muted tabular-nums">
                     {formatTimestamp(msg.sentAt)}
                   </span>
                 </div>
-                <p className="break-words pl-2 text-sm text-text-primary">{msg.content}</p>
+                <p className="break-words pl-2 text-sm text-text-secondary">
+                  {msg.content}
+                </p>
               </div>
             ))}
             <div ref={messagesEndRef} />
@@ -51,10 +57,9 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps = {}) {
         )}
       </div>
 
-      <div className="border-t border-border bg-bg-secondary p-2">
+      <div className="border-t-[0.5px] border-border-subtle px-3 py-2">
         <MessageInput />
       </div>
     </div>
   );
 }
-

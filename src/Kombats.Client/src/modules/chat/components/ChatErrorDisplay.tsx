@@ -30,16 +30,16 @@ export function ChatErrorDisplay() {
 
     return (
       <div
-        className="flex items-center justify-between border-b border-error/30 bg-error/10 px-3 py-1.5"
+        className="flex items-center justify-between border-b-[0.5px] border-kombats-crimson/40 bg-kombats-crimson/10 px-4 py-1.5"
         role="alert"
       >
-        <p className="text-xs text-error">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light">
           Chat disconnected. Automatic reconnect exhausted.
         </p>
         <button
           onClick={handleRetry}
           disabled={reconnecting}
-          className="ml-2 rounded-md border border-error/40 px-2 py-0.5 text-xs text-error transition-colors hover:bg-error/10 disabled:opacity-50"
+          className="ml-2 rounded-sm border-[0.5px] border-kombats-crimson/50 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-kombats-crimson-light transition-colors duration-150 hover:bg-kombats-crimson/15 disabled:opacity-50"
         >
           {reconnecting ? 'Reconnecting…' : 'Reconnect'}
         </button>
@@ -53,13 +53,15 @@ export function ChatErrorDisplay() {
 
   return (
     <div
-      className="flex items-center justify-between border-b border-error/30 bg-error/10 px-3 py-1.5"
+      className="flex items-center justify-between border-b-[0.5px] border-kombats-crimson/40 bg-kombats-crimson/10 px-4 py-1.5"
       role="alert"
     >
-      <p className="text-xs text-error">{message}</p>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light">
+        {message}
+      </p>
       <button
         onClick={() => useChatStore.setState({ lastError: null })}
-        className="ml-2 text-xs text-error/60 transition-colors hover:text-error"
+        className="ml-2 text-xs text-kombats-crimson-light/70 transition-colors duration-150 hover:text-kombats-crimson-light"
         aria-label="Dismiss"
       >
         &#x2715;

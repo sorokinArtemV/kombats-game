@@ -31,30 +31,37 @@ export function BottomDock() {
   };
 
   return (
-    <div className="flex h-full min-h-0 gap-3 px-3 pb-3">
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-bg-secondary">
-        <ChatErrorDisplay />
-        <div className="flex items-center justify-between border-b border-border px-3 py-2">
-          <span className="text-sm font-semibold text-text-primary">Room Chat</span>
-          <button
-            type="button"
-            onClick={() => setConversationsOpen(true)}
-            className="rounded-md px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-surface hover:text-text-primary"
-          >
-            Messages
-          </button>
-        </div>
-        <div className="min-h-0 flex-1">
-          <ChatPanel hideHeader />
-        </div>
-      </section>
+    <div className="flex h-full min-h-0 px-4 pb-3">
+      <div className="flex h-full min-h-0 w-full overflow-hidden rounded-[var(--radius-lg)] border-[0.5px] border-border-subtle bg-glass shadow-[var(--shadow-panel-lift)] backdrop-blur-[20px]">
+        <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <ChatErrorDisplay />
+          <div className="flex items-center justify-between border-b-[0.5px] border-border-subtle px-4 py-2">
+            <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-accent-text">
+              Room Chat
+            </span>
+            <button
+              type="button"
+              onClick={() => setConversationsOpen(true)}
+              className="rounded-sm px-2 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-text-muted transition-colors duration-150 hover:text-kombats-gold"
+            >
+              Messages
+            </button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <ChatPanel hideHeader />
+          </div>
+        </section>
 
-      <aside className="hidden w-[320px] shrink-0 overflow-hidden rounded-md border border-border bg-bg-secondary md:flex md:flex-col">
-        <OnlinePlayersList
-          onSendMessage={openDm}
-          onViewProfile={setProfilePlayerId}
-        />
-      </aside>
+        <aside
+          aria-hidden={false}
+          className="hidden w-[280px] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border-subtle md:flex"
+        >
+          <OnlinePlayersList
+            onSendMessage={openDm}
+            onViewProfile={setProfilePlayerId}
+          />
+        </aside>
+      </div>
 
       <Sheet
         open={conversationsOpen}
