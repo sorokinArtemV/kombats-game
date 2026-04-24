@@ -1,1 +1,23 @@
-/* Google Fonts loaded via <link> tags in index.html for correct CSS ordering. */
+/* Kombats font registration.
+ * The Google Fonts @import url for Inter + Noto Sans JP lives at the top of
+ * index.css to satisfy CSS @import ordering. The Cinzel display chain is
+ * system-fallback only and not fetched. */
+
+:root {
+  font-family: var(--font-primary);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-jp);
+  letter-spacing: 0.03em;
+}
+
+button {
+  font-family: var(--font-primary);
+  letter-spacing: 0.05em;
+}

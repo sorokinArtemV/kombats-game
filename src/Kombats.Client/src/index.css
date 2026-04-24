@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @import './ui/theme/tokens.css';
+@import './ui/theme/fonts.css';
 
 @theme {
   /* Surface colors */
@@ -10,6 +12,18 @@
   --color-bg-nav: var(--color-bg-nav);
   --color-bg-overlay: var(--color-bg-overlay);
 
+  /* Kombats surfaces */
+  --color-kombats-charcoal: var(--color-kombats-charcoal);
+  --color-kombats-ink-navy: var(--color-kombats-ink-navy);
+  --color-kombats-deep-indigo: var(--color-kombats-deep-indigo);
+  --color-kombats-smoke-gray: var(--color-kombats-smoke-gray);
+
+  /* Glass surface variants */
+  --color-glass: var(--color-glass);
+  --color-glass-dense: var(--color-glass-dense);
+  --color-glass-subtle: var(--color-glass-subtle);
+  --color-glass-solid: var(--color-glass-solid);
+
   /* Fighter portrait surfaces */
   --color-portrait-friendly: var(--color-portrait-friendly);
   --color-portrait-hostile: var(--color-portrait-hostile);
@@ -17,16 +31,47 @@
   /* Borders */
   --color-border: var(--color-border);
   --color-border-strong: var(--color-border-strong);
+  --color-border-subtle: var(--color-border-subtle);
+  --color-border-divider: var(--color-border-divider);
+  --color-border-emphasis: var(--color-border-emphasis);
 
   /* Text colors */
   --color-text-primary: var(--color-text-primary);
   --color-text-secondary: var(--color-text-secondary);
   --color-text-muted: var(--color-text-muted);
+  --color-text-on-accent: var(--color-text-on-accent);
+  --color-text-on-danger: var(--color-text-on-danger);
 
-  /* Accent / brand */
+  /* Accent / brand — legacy + Kombats gold */
   --color-accent: var(--color-accent);
   --color-accent-hover: var(--color-accent-hover);
   --color-accent-strong: var(--color-accent-strong);
+  --color-accent-primary: var(--color-accent-primary);
+  --color-accent-text: var(--color-accent-text);
+  --color-accent-muted: var(--color-accent-muted);
+
+  /* Kombats gold scale */
+  --color-kombats-gold: var(--color-kombats-gold);
+  --color-kombats-gold-light: var(--color-kombats-gold-light);
+  --color-kombats-gold-dark: var(--color-kombats-gold-dark);
+
+  /* Ceremonial bright gold */
+  --color-victory-gold: var(--color-victory-gold);
+
+  /* Kombats crimson scale */
+  --color-kombats-crimson: var(--color-kombats-crimson);
+  --color-kombats-crimson-dark: var(--color-kombats-crimson-dark);
+  --color-kombats-crimson-light: var(--color-kombats-crimson-light);
+
+  /* Kombats jade scale */
+  --color-kombats-jade: var(--color-kombats-jade);
+  --color-kombats-jade-dark: var(--color-kombats-jade-dark);
+  --color-kombats-jade-light: var(--color-kombats-jade-light);
+
+  /* Kombats moon silver scale */
+  --color-kombats-moon-silver: var(--color-kombats-moon-silver);
+  --color-kombats-moon-silver-light: var(--color-kombats-moon-silver-light);
+  --color-kombats-moon-silver-dark: var(--color-kombats-moon-silver-dark);
 
   /* Action tones */
   --color-attack: var(--color-attack);
@@ -57,6 +102,8 @@
   /* Typography */
   --font-primary: var(--font-primary);
   --font-display: var(--font-display);
+  --font-jp: var(--font-jp);
+  --font-glyph: var(--font-glyph);
   --font-mono: var(--font-mono);
 
   /* Border radius */
@@ -72,4 +119,32 @@ body {
   font-family: var(--font-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Kombats premium dark scrollbar — opt-in via .kombats-scroll. */
+.kombats-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201, 169, 97, 0.18) transparent;
+}
+.kombats-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.kombats-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+.kombats-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  transition: background-color 180ms ease;
+}
+.kombats-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(201, 169, 97, 0.22);
+}
+.kombats-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(201, 169, 97, 0.4);
+}
+.kombats-scroll::-webkit-scrollbar-corner {
+  background: transparent;
 }
