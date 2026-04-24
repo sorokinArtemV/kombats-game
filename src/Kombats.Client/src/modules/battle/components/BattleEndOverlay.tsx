@@ -7,6 +7,13 @@ import { useAuthStore } from '@/modules/auth/store';
 import { deriveOutcome } from '../battle-end-outcome';
 import { outcomeAccentClass } from '../outcome-tone';
 
+/**
+ * Lightweight overlay shown when the battle ends while the live battle screen
+ * is still visible, before the guard routes over to `/battle/:id/result`. The
+ * full-fidelity result screen is Step 10; this keeps parity with existing
+ * behavior (a centered panel + "View Result" CTA) while matching the new
+ * glass-panel visual language.
+ */
 export function BattleEndOverlay() {
   const phase = useBattlePhase();
   const { endReason, winnerPlayerId } = useBattleResult();
@@ -21,29 +28,44 @@ export function BattleEndOverlay() {
   return (
     <Dialog.Root open={open}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-bg-overlay" />
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/70" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-border bg-bg-secondary p-6 shadow-xl outline-none"
+          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-md border-[0.5px] border-border-subtle bg-glass-dense p-6 shadow-[var(--shadow-panel-lift)] outline-none"
+          style={{ backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
           aria-describedby={undefined}
         >
           <div className="flex flex-col items-center gap-4 text-center">
             <Dialog.Title
               className={clsx(
-                'font-display text-3xl font-bold uppercase tracking-[0.2em]',
+                'font-display uppercase',
                 outcomeAccentClass(outcome),
               )}
+              style={{
+                fontSize: 28,
+                fontWeight: 700,
+                letterSpacing: '0.28em',
+                textShadow: '0 2px 16px rgba(201, 162, 90, 0.25)',
+              }}
             >
               {title.replace(/!$/, '')}
             </Dialog.Title>
-            <p className="text-sm text-text-secondary">{subtitle}</p>
-            {endReason &&
-              outcome === 'other' &&
-              endReason !== 'Unknown' && (
-                <p className="font-mono text-xs text-text-muted">Reason: {endReason}</p>
-              )}
+            <p
+              className="text-text-secondary"
+              style={{
+                fontSize: 12,
+                letterSpacing: '0.12em',
+              }}
+            >
+              {subtitle}
+            </p>
+            {endReason && outcome === 'other' && endReason !== 'Unknown' && (
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-text-muted">
+                Reason: {endReason}
+              </p>
+            )}
             <Link
               to={`/battle/${battleId}/result`}
-              className="mt-2 inline-flex items-center justify-center rounded-md bg-accent px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              className="mt-2 inline-flex items-center justify-center rounded-md bg-accent-primary px-6 py-2 font-display text-[13px] uppercase tracking-[0.24em] text-text-on-accent transition-colors duration-150 hover:bg-kombats-gold-light"
             >
               View Result
             </Link>

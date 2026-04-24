@@ -12,25 +12,24 @@ const outcomeLabel: Record<AttackOutcomeRealtime, string> = {
   Blocked: 'Blocked',
   Hit: 'Hit',
   CriticalHit: 'Critical hit',
-  CriticalBypassBlock: 'Critical (bypass block)',
-  CriticalHybridBlocked: 'Critical (hybrid block)',
+  CriticalBypassBlock: 'Critical (bypass)',
+  CriticalHybridBlocked: 'Critical (hybrid)',
 };
 
-function outcomeToneClass(outcome: AttackOutcomeRealtime): string {
+// DESIGN_REFERENCE.md §3.20 — chip color derived from outcome tone.
+function outcomeChipColor(outcome: AttackOutcomeRealtime): string {
   switch (outcome) {
     case 'Hit':
-      return 'text-error';
     case 'CriticalHit':
     case 'CriticalBypassBlock':
     case 'CriticalHybridBlocked':
-      return 'text-warning';
+      return 'var(--color-kombats-crimson)';
     case 'Blocked':
-      return 'text-info';
     case 'Dodged':
-      return 'text-success';
+      return 'var(--color-kombats-jade)';
     case 'NoAction':
     default:
-      return 'text-text-muted';
+      return 'var(--color-kombats-moon-silver)';
   }
 }
 
@@ -41,7 +40,25 @@ export function TurnResultPanel() {
   const playerAName = useBattleStore((s) => s.playerAName);
   const playerBName = useBattleStore((s) => s.playerBName);
 
-  if (!lastResolution || !lastResolution.log) return null;
+  if (!lastResolution || !lastResolution.log) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 rounded-md border-[0.5px] border-border-subtle bg-glass-subtle px-4 py-6 text-center">
+        <p
+          className="font-display uppercase"
+          style={{
+            fontSize: 13,
+            letterSpacing: '0.24em',
+            color: 'var(--color-accent-text)',
+          }}
+        >
+          Arena Ready
+        </p>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-text-muted">
+          Awaiting first turn
+        </p>
+      </div>
+    );
+  }
 
   const { atoB, btoA, turnIndex } = lastResolution.log;
   const isPlayerA = myId !== null && myId === playerAId;
@@ -51,37 +68,50 @@ export function TurnResultPanel() {
   const myAttack = isPlayerA ? atoB : btoA;
   const opponentAttack = isPlayerA ? btoA : atoB;
 
-  // Intermediate payload safety: if the server publishes a Log envelope
-  // without both attack resolutions (partial state during resolving), render
-  // a turn header instead of crashing on undefined access.
   if (!myAttack || !opponentAttack) {
     return (
-      <div className="flex flex-col gap-2 rounded-lg border border-bg-surface bg-bg-secondary p-4">
+      <div className="flex flex-col gap-2 rounded-md border-[0.5px] border-border-subtle bg-glass-subtle p-4">
         <header className="flex items-center justify-between">
-          <h2 className="font-display text-sm uppercase tracking-wide text-text-primary">
-            Turn {turnIndex} Result
-          </h2>
+          <h3
+            className="font-display uppercase"
+            style={{
+              fontSize: 13,
+              letterSpacing: '0.24em',
+              color: 'var(--color-accent-text)',
+            }}
+          >
+            Turn {turnIndex}
+          </h3>
         </header>
-        <p className="text-xs text-text-muted">Resolving turn…</p>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-text-muted">
+          Resolving turn…
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-bg-surface bg-bg-secondary p-4">
+    <div className="flex flex-col gap-3 rounded-md border-[0.5px] border-border-subtle bg-glass-subtle p-4">
       <header className="flex items-center justify-between">
-        <h2 className="font-display text-sm uppercase tracking-wide text-text-primary">
+        <h3
+          className="font-display uppercase"
+          style={{
+            fontSize: 13,
+            letterSpacing: '0.24em',
+            color: 'var(--color-accent-text)',
+          }}
+        >
           Turn {turnIndex} Result
-        </h2>
+        </h3>
       </header>
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
         <DirectionRow
-          title={`${myName} attacks`}
+          title={`${myName} → ${opponentName}`}
           attack={myAttack}
           defenderName={opponentName}
         />
         <DirectionRow
-          title={`${opponentName} attacks`}
+          title={`${opponentName} → ${myName}`}
           attack={opponentAttack}
           defenderName={myName}
         />
@@ -99,23 +129,45 @@ function DirectionRow({
   attack: AttackResolutionRealtime;
   defenderName: string;
 }) {
-  const blockZones = [attack.defenderBlockPrimary, attack.defenderBlockSecondary]
-    .filter((z): z is string => z !== null);
+  const blockZones = [attack.defenderBlockPrimary, attack.defenderBlockSecondary].filter(
+    (z): z is string => z !== null,
+  );
+  const color = outcomeChipColor(attack.outcome);
 
   return (
-    <div className="flex flex-col gap-1 rounded-md bg-bg-primary p-3">
-      <span className="text-xs uppercase tracking-wide text-text-muted">{title}</span>
-      <div className="flex items-center justify-between">
-        <span className={clsx('text-sm font-medium', outcomeToneClass(attack.outcome))}>
+    <div className="flex flex-col gap-1.5 rounded-sm border-[0.5px] border-border-subtle bg-glass-dense p-3">
+      <span className="text-[10px] uppercase tracking-[0.24em] text-text-muted">
+        {title}
+      </span>
+      <div className="flex items-center justify-between gap-2">
+        <span
+          className={clsx(
+            'inline-flex items-center gap-1 rounded-sm border px-1.5 py-[1px] text-[9px] uppercase tracking-[0.18em]',
+          )}
+          style={{
+            color,
+            borderColor: `${color}55`,
+            background: `${color}14`,
+          }}
+        >
           {outcomeLabel[attack.outcome]}
         </span>
         {attack.damage > 0 && (
-          <span className="font-mono text-sm text-error">-{attack.damage} HP</span>
+          <span
+            className="font-display tabular-nums"
+            style={{
+              fontSize: 13,
+              letterSpacing: '0.04em',
+              color: 'var(--color-kombats-crimson-light)',
+            }}
+          >
+            −{attack.damage} HP
+          </span>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs">
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
         <div>
-          <span className="text-text-muted">Attack zone: </span>
+          <span className="text-text-muted">Zone: </span>
           <span className="text-text-secondary">{attack.attackZone ?? '—'}</span>
         </div>
         <div>

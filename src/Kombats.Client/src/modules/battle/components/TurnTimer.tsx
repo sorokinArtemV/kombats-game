@@ -6,6 +6,10 @@ import {
   type TurnTimerUrgency,
 } from '../turn-timer-view';
 
+/**
+ * Inline Clock+number turn timer. Matches DESIGN_REFERENCE.md §5.17 meta row
+ * (gold Clock icon + tabular-nums countdown).
+ */
 export function TurnTimer() {
   const phase = useBattlePhase();
   const { deadlineUtc } = useBattleTurn();
@@ -16,8 +20,6 @@ export function TurnTimer() {
   useEffect(() => {
     if (!countsDown) return;
 
-    // setInterval callback is an external subscription, which satisfies
-    // react-hooks/set-state-in-effect.
     const tick = () => setNow(Date.now());
     tick();
     const timer = setInterval(tick, 100);
@@ -29,17 +31,34 @@ export function TurnTimer() {
   const view = computeTurnTimerView(phase, deadlineUtc, now);
 
   if (view.kind === 'resolving') {
-    return <span className="font-mono text-xs text-warning">Resolving…</span>;
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 font-display text-[13px] uppercase tracking-[0.18em]"
+        style={{ color: 'var(--color-kombats-gold-light)' }}
+      >
+        <ClockIcon />
+        <span>—</span>
+      </span>
+    );
   }
   if (view.kind === 'idle') {
-    return <span className="font-mono text-xs text-text-muted">—</span>;
+    return (
+      <span className="inline-flex items-center gap-1.5 font-display text-[13px] tabular-nums text-text-muted">
+        <ClockIcon />
+        <span>—</span>
+      </span>
+    );
   }
 
   return (
     <span
-      className={clsx('font-mono text-xs tabular-nums', urgencyClass(view.urgency))}
+      className={clsx(
+        'inline-flex items-center gap-1.5 font-display text-[13px] tabular-nums',
+        urgencyClass(view.urgency),
+      )}
     >
-      {view.seconds}s
+      <ClockIcon />
+      <span>{view.seconds}s</span>
     </span>
   );
 }
@@ -47,10 +66,29 @@ export function TurnTimer() {
 function urgencyClass(urgency: TurnTimerUrgency): string {
   switch (urgency) {
     case 'critical':
-      return 'text-error';
+      return 'text-kombats-crimson-light';
     case 'warning':
-      return 'text-warning';
+      return 'text-victory-gold';
     default:
-      return 'text-text-primary';
+      return 'text-accent-text';
   }
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
 }
