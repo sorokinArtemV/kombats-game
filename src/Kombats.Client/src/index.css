@@ -195,3 +195,15 @@ body {
   font-size: var(--kombats-diamond-glyph-size, 30px);
   line-height: 1;
 }
+
+/* Body-zone selector animations.
+   `kombats-zone-pulse` drives the selected-zone radial fill + SVG outline.
+   `kombats-zone-outline-in` drives the hover preview fade-in. */
+@keyframes kombats-zone-pulse {
+  0%, 100% { opacity: 0.8; }
+  50%      { opacity: 1; }
+}
+@keyframes kombats-zone-outline-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}

@@ -16,6 +16,7 @@ import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScr
 import { LobbyScreen } from '@/modules/player/screens/LobbyScreen';
 import { BattleScreen } from '@/modules/battle/screens/BattleScreen';
 import { BattleResultScreen } from '@/modules/battle/screens/BattleResultScreen';
+import { DebugBattleScreen } from './debug/DebugBattleScreen';
 
 export const router = createBrowserRouter([
   // Unauthenticated landing
@@ -93,6 +94,22 @@ export const router = createBrowserRouter([
       },
     ],
   },
+
+  // Dev-only debug routes. Bypass auth + onboarding + battle guards and
+  // mount the target screen with a mocked store so layout work doesn't
+  // require a real opponent. Wrapped in SessionShell so the top header
+  // and chat dock match production. Stripped from the route table in
+  // production builds via the import.meta.env.DEV check.
+  ...(import.meta.env.DEV
+    ? [
+        {
+          element: <SessionShell />,
+          children: [
+            { path: '/debug/battle', element: <DebugBattleScreen /> },
+          ],
+        },
+      ]
+    : []),
 
   // Catch-all: any unknown URL renders the branded 404 instead of falling
   // through to React Router's default error surface. Placed at the top

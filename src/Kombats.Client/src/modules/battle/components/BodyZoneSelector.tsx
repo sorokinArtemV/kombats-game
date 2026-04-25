@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { clsx } from 'clsx';
 import { motion, useReducedMotion } from 'motion/react';
 import { useBattlePhase, useBattleActions, useBattleConnectionState } from '../hooks';
@@ -8,79 +8,301 @@ import mitsudamoeSrc from '@/ui/assets/icons/mitsudamoe.png';
 import type { BattleZone } from '@/types/battle';
 
 // ---------------------------------------------------------------------------
-// Vertical zone bands (percent of stage height, top → bottom)
-// Chosen so each band covers the expected anatomical region of the neutral
-// silhouette PNG. Feathering handled by the gradient stops below.
+// Zone geometry — overlap-feather model.
+//
+// Bands are container-% values (0% top, 100% bottom of the silhouette stage).
+// Inner edges between adjacent bands meet exactly at a shared boundary; the
+// feather ramp at each interior edge is centered on that boundary with half
+// extending into each neighbour's territory. At the boundary line itself the
+// alpha is ≈0.5 on both sides, so two adjacent fills sum to ≈1 and no
+// transparent stripe appears between selected zones.
+//
+//   Head    4 → 20
+//   Chest   20 → 36
+//   Belly   36 → 49
+//   Waist   49 → 73
+//   Legs    73 → 91
+//
+// Head's top edge and Legs' bottom edge stay sharp — the silhouette PNG
+// already defines the head contour and boot contour, so layering an extra
+// fade there would double-feather the natural shape.
 // ---------------------------------------------------------------------------
-const ZONE_BAND: Record<BattleZone, { start: number; end: number }> = {
-  Head: { start: 0, end: 16 },
-  Chest: { start: 16, end: 36 },
-  Belly: { start: 36, end: 54 },
-  Waist: { start: 54, end: 68 },
-  Legs: { start: 68, end: 100 },
+
+interface ZoneBand {
+  top: number;
+  bottom: number;
+}
+
+const ZONE_BANDS: Record<BattleZone, ZoneBand> = {
+  Head: { top: 4, bottom: 20 },
+  Chest: { top: 20, bottom: 36 },
+  Belly: { top: 36, bottom: 49 },
+  Waist: { top: 49, bottom: 73 },
+  Legs: { top: 73, bottom: 91 },
 };
 
-// Feather width around each band, in percent. Kept small so bands do not
-// visually bleed into each other but large enough to avoid a hard edge.
-const FEATHER = 3;
+const ZONE_FEATHER_FRACTION = 0.15;
 
-function bandGradient(zone: BattleZone): string {
-  const { start, end } = ZONE_BAND[zone];
-  // Soft edges at start/end unless we're pinned to 0% or 100%.
-  const top = Math.max(0, start - FEATHER);
-  const bottom = Math.min(100, end + FEATHER);
-  return [
-    `linear-gradient(to bottom,`,
-    start <= 0
-      ? `black 0%,`
-      : `transparent ${top}%, black ${start}%,`,
-    `black ${end}%,`,
-    end >= 100
-      ? `black 100%)`
-      : `transparent ${bottom}%)`,
-  ].join(' ');
+function clampPct(v: number): number {
+  if (v < 0) return 0;
+  if (v > 100) return 100;
+  return v;
 }
 
-function pairGradient(a: BattleZone, b: BattleZone): string {
-  const aBand = ZONE_BAND[a];
-  const bBand = ZONE_BAND[b];
-  const start = Math.min(aBand.start, bBand.start);
-  const end = Math.max(aBand.end, bBand.end);
-  const top = Math.max(0, start - FEATHER);
-  const bottom = Math.min(100, end + FEATHER);
-  return [
-    `linear-gradient(to bottom,`,
-    start <= 0
-      ? `black 0%,`
-      : `transparent ${top}%, black ${start}%,`,
-    `black ${end}%,`,
-    end >= 100
-      ? `black 100%)`
-      : `transparent ${bottom}%)`,
-  ].join(' ');
+function zoneFeatherAmount(z: BattleZone): number {
+  const { top, bottom } = ZONE_BANDS[z];
+  return (bottom - top) * ZONE_FEATHER_FRACTION;
 }
 
-// ---------------------------------------------------------------------------
-// Shared mask styles — silhouette PNG + zone gradient, composited to intersect.
-// DESIGN_REFERENCE.md §3.13.
-// ---------------------------------------------------------------------------
-function twoLayerMask(zoneGradient: string): React.CSSProperties {
+// Hard edges replace the standard overlap-feather on a side with a zero-width
+// transparent→black transition, optionally extended by half the neighbour's
+// feather amount so the hover fill becomes opaque exactly where the
+// neighbour selection's opaque region ends.
+interface HardEdges {
+  top?: boolean;
+  bottom?: boolean;
+}
+interface NeighbourFeathers {
+  top?: number;
+  bottom?: number;
+}
+
+function zoneFeatherGradient(
+  z: BattleZone,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): string {
+  const { top, bottom } = ZONE_BANDS[z];
+  const feather = (bottom - top) * ZONE_FEATHER_FRACTION;
+  const half = feather / 2;
+  const fadeInStart = clampPct(top - half);
+  const fadeInEnd = clampPct(top + half);
+  const fadeOutStart = clampPct(bottom - half);
+  const fadeOutEnd = clampPct(bottom + half);
+  const stops: string[] = [];
+
+  if (z === 'Head') {
+    stops.push('black 0%');
+  } else if (hardEdges.top) {
+    const cut = clampPct(top - (neighbourFeathers.top ?? 0) / 2);
+    stops.push('transparent 0%', `transparent ${cut}%`, `black ${cut}%`);
+  } else {
+    stops.push(
+      'transparent 0%',
+      `transparent ${fadeInStart}%`,
+      `black ${fadeInEnd}%`,
+    );
+  }
+
+  if (z === 'Legs') {
+    stops.push('black 100%');
+  } else if (hardEdges.bottom) {
+    const cut = clampPct(bottom + (neighbourFeathers.bottom ?? 0) / 2);
+    stops.push(`black ${cut}%`, `transparent ${cut}%`, 'transparent 100%');
+  } else {
+    stops.push(
+      `black ${fadeOutStart}%`,
+      `transparent ${fadeOutEnd}%`,
+      'transparent 100%',
+    );
+  }
+
+  return `linear-gradient(to bottom, ${stops.join(', ')})`;
+}
+
+function zoneFeatherMaskStyle(
+  z: BattleZone,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): CSSProperties {
+  const gradient = zoneFeatherGradient(z, hardEdges, neighbourFeathers);
   return {
-    WebkitMaskImage: `url(${silhouetteSrc}), ${zoneGradient}`,
-    maskImage: `url(${silhouetteSrc}), ${zoneGradient}`,
+    WebkitMaskImage: `url(${silhouetteSrc}), ${gradient}`,
+    maskImage: `url(${silhouetteSrc}), ${gradient}`,
     WebkitMaskSize: '100% 100%, 100% 100%',
     maskSize: '100% 100%, 100% 100%',
     WebkitMaskRepeat: 'no-repeat, no-repeat',
     maskRepeat: 'no-repeat, no-repeat',
     WebkitMaskPosition: 'center, center',
     maskPosition: 'center, center',
-    // `intersect` in standards; `source-in` in WebKit.
     WebkitMaskComposite: 'source-in',
     maskComposite: 'intersect',
   };
 }
 
-const silhouetteOnlyMask: React.CSSProperties = {
+interface GradStop {
+  offset: string;
+  color: 'white' | 'black';
+}
+function zoneFeatherSvgStops(z: BattleZone): GradStop[] {
+  const { top, bottom } = ZONE_BANDS[z];
+  const feather = (bottom - top) * ZONE_FEATHER_FRACTION;
+  const half = feather / 2;
+  const fadeInStart = clampPct(top - half);
+  const fadeInEnd = clampPct(top + half);
+  const fadeOutStart = clampPct(bottom - half);
+  const fadeOutEnd = clampPct(bottom + half);
+  if (z === 'Head') {
+    return [
+      { offset: '0%', color: 'white' },
+      { offset: `${fadeOutStart}%`, color: 'white' },
+      { offset: `${fadeOutEnd}%`, color: 'black' },
+      { offset: '100%', color: 'black' },
+    ];
+  }
+  if (z === 'Legs') {
+    return [
+      { offset: '0%', color: 'black' },
+      { offset: `${fadeInStart}%`, color: 'black' },
+      { offset: `${fadeInEnd}%`, color: 'white' },
+      { offset: '100%', color: 'white' },
+    ];
+  }
+  return [
+    { offset: '0%', color: 'black' },
+    { offset: `${fadeInStart}%`, color: 'black' },
+    { offset: `${fadeInEnd}%`, color: 'white' },
+    { offset: `${fadeOutStart}%`, color: 'white' },
+    { offset: `${fadeOutEnd}%`, color: 'black' },
+    { offset: '100%', color: 'black' },
+  ];
+}
+
+// Adjacent block pairs render as ONE seamless fill. The wraparound 'Legs +
+// Head' pair is non-adjacent (band-wise) and falls back to two singles.
+type ZonePair = { upper: BattleZone; lower: BattleZone };
+
+const ADJACENT_PAIRS: readonly ZonePair[] = [
+  { upper: 'Head', lower: 'Chest' },
+  { upper: 'Chest', lower: 'Belly' },
+  { upper: 'Belly', lower: 'Waist' },
+  { upper: 'Waist', lower: 'Legs' },
+] as const;
+
+function adjacentBlockPair(a: BattleZone, b: BattleZone): ZonePair | null {
+  const ba = ZONE_BANDS[a];
+  const bb = ZONE_BANDS[b];
+  if (ba.bottom === bb.top) return { upper: a, lower: b };
+  if (bb.bottom === ba.top) return { upper: b, lower: a };
+  return null;
+}
+
+function zoneAbove(z: BattleZone): BattleZone | null {
+  const i = ALL_ZONES.indexOf(z);
+  return i > 0 ? ALL_ZONES[i - 1] : null;
+}
+function zoneBelow(z: BattleZone): BattleZone | null {
+  const i = ALL_ZONES.indexOf(z);
+  return i >= 0 && i < ALL_ZONES.length - 1 ? ALL_ZONES[i + 1] : null;
+}
+
+// Pair mask. Interior boundary is feather-less (continuous black) so the
+// two zones render as one seamless fill. Outer edges follow the same
+// overlap-feather geometry; hard edges + neighbour feathers apply only to
+// the pair's outer edges and use the /2 extension rule.
+function pairFeatherGradient(
+  { upper, lower }: ZonePair,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): string {
+  const ub = ZONE_BANDS[upper];
+  const lb = ZONE_BANDS[lower];
+  const upperFeather = (ub.bottom - ub.top) * ZONE_FEATHER_FRACTION;
+  const lowerFeather = (lb.bottom - lb.top) * ZONE_FEATHER_FRACTION;
+  const upperHalf = upperFeather / 2;
+  const lowerHalf = lowerFeather / 2;
+  const topFadeStart = clampPct(ub.top - upperHalf);
+  const topFadeEnd = clampPct(ub.top + upperHalf);
+  const bottomFadeStart = clampPct(lb.bottom - lowerHalf);
+  const bottomFadeEnd = clampPct(lb.bottom + lowerHalf);
+  const stops: string[] = [];
+
+  if (upper === 'Head') {
+    stops.push('black 0%');
+  } else if (hardEdges.top) {
+    const cut = clampPct(ub.top - (neighbourFeathers.top ?? 0) / 2);
+    stops.push('transparent 0%', `transparent ${cut}%`, `black ${cut}%`);
+  } else {
+    stops.push(
+      'transparent 0%',
+      `transparent ${topFadeStart}%`,
+      `black ${topFadeEnd}%`,
+    );
+  }
+
+  if (lower === 'Legs') {
+    stops.push('black 100%');
+  } else if (hardEdges.bottom) {
+    const cut = clampPct(lb.bottom + (neighbourFeathers.bottom ?? 0) / 2);
+    stops.push(`black ${cut}%`, `transparent ${cut}%`, 'transparent 100%');
+  } else {
+    stops.push(
+      `black ${bottomFadeStart}%`,
+      `transparent ${bottomFadeEnd}%`,
+      'transparent 100%',
+    );
+  }
+  return `linear-gradient(to bottom, ${stops.join(', ')})`;
+}
+
+function pairFeatherMaskStyle(
+  pair: ZonePair,
+  hardEdges: HardEdges = {},
+  neighbourFeathers: NeighbourFeathers = {},
+): CSSProperties {
+  const gradient = pairFeatherGradient(pair, hardEdges, neighbourFeathers);
+  return {
+    WebkitMaskImage: `url(${silhouetteSrc}), ${gradient}`,
+    maskImage: `url(${silhouetteSrc}), ${gradient}`,
+    WebkitMaskSize: '100% 100%, 100% 100%',
+    maskSize: '100% 100%, 100% 100%',
+    WebkitMaskRepeat: 'no-repeat, no-repeat',
+    maskRepeat: 'no-repeat, no-repeat',
+    WebkitMaskPosition: 'center, center',
+    maskPosition: 'center, center',
+    WebkitMaskComposite: 'source-in',
+    maskComposite: 'intersect',
+  };
+}
+
+function pairFeatherSvgStops({ upper, lower }: ZonePair): GradStop[] {
+  const ub = ZONE_BANDS[upper];
+  const lb = ZONE_BANDS[lower];
+  const upperFeather = (ub.bottom - ub.top) * ZONE_FEATHER_FRACTION;
+  const lowerFeather = (lb.bottom - lb.top) * ZONE_FEATHER_FRACTION;
+  const upperHalf = upperFeather / 2;
+  const lowerHalf = lowerFeather / 2;
+  const topFadeStart = clampPct(ub.top - upperHalf);
+  const topFadeEnd = clampPct(ub.top + upperHalf);
+  const bottomFadeStart = clampPct(lb.bottom - lowerHalf);
+  const bottomFadeEnd = clampPct(lb.bottom + lowerHalf);
+  const stops: GradStop[] = [];
+  if (upper === 'Head') {
+    stops.push({ offset: '0%', color: 'white' });
+  } else {
+    stops.push(
+      { offset: '0%', color: 'black' },
+      { offset: `${topFadeStart}%`, color: 'black' },
+      { offset: `${topFadeEnd}%`, color: 'white' },
+    );
+  }
+  if (lower === 'Legs') {
+    stops.push({ offset: '100%', color: 'white' });
+  } else {
+    stops.push(
+      { offset: `${bottomFadeStart}%`, color: 'white' },
+      { offset: `${bottomFadeEnd}%`, color: 'black' },
+      { offset: '100%', color: 'black' },
+    );
+  }
+  return stops;
+}
+
+// ---------------------------------------------------------------------------
+// Shared visual styles
+// ---------------------------------------------------------------------------
+
+const silhouetteOnlyMask: CSSProperties = {
   WebkitMaskImage: `url(${silhouetteSrc})`,
   maskImage: `url(${silhouetteSrc})`,
   WebkitMaskSize: '100% 100%',
@@ -91,20 +313,20 @@ const silhouetteOnlyMask: React.CSSProperties = {
   maskPosition: 'center',
 };
 
-const silhouetteBaseStyle: React.CSSProperties = {
+const silhouetteBaseStyle: CSSProperties = {
   ...silhouetteOnlyMask,
   background: 'var(--color-silhouette)',
   filter:
     'drop-shadow(0 0 2px rgba(var(--rgb-gold-accent), 0.15)) drop-shadow(0 10px 24px rgba(var(--rgb-black), 0.6))',
 };
 
-const warmBackdropStyle: React.CSSProperties = {
+const warmBackdropStyle: CSSProperties = {
   inset: '-8% -14%',
   background:
     'radial-gradient(58% 55% at 50% 55%, rgba(var(--rgb-gold), 0.05) 0%, rgba(var(--rgb-ink-navy), 0) 70%)',
 };
 
-const tacticalGridStyle: React.CSSProperties = {
+const tacticalGridStyle: CSSProperties = {
   backgroundImage:
     'radial-gradient(circle, rgba(var(--rgb-gold-accent), 0.12) 1px, transparent 1.5px)',
   backgroundSize: '12px 12px',
@@ -113,29 +335,25 @@ const tacticalGridStyle: React.CSSProperties = {
   maskImage: 'radial-gradient(ellipse at center, black 50%, transparent 90%)',
 };
 
-// DESIGN_REFERENCE.md §3.13 — selected radial fill + hover flat fill.
-// Token name (e.g. '--rgb-crimson') resolves to the channel triple at runtime.
 function selectedFillBackground(rgbVar: string): string {
   return `radial-gradient(ellipse at center, rgba(var(${rgbVar}), 0.7) 0%, rgba(var(${rgbVar}), 0.3) 60%, rgba(var(${rgbVar}), 0) 100%)`;
 }
+
+function hoverFillBackground(rgbVar: string): string {
+  return `rgba(var(${rgbVar}), 0.25)`;
+}
+
 const ATTACK_RGB = '--rgb-crimson';
 const BLOCK_RGB = '--rgb-jade';
 
-// Keyframes for the selected zone pulse. Injected via <style> inside the
-// component so this is self-contained and does not pollute global CSS.
-const PULSE_KEYFRAMES = `
-@keyframes kombats-zone-pulse {
-  0%, 100% { opacity: 0.8; }
-  50%      { opacity: 1; }
-}
-@keyframes kombats-zone-outline-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-`;
+// SVG <feFlood> needs a literal colour string — CSS variable resolution does
+// not happen inside the filter graph. The values mirror tokens.css attack /
+// block channel triples.
+const ATTACK_FLOOD = 'rgb(192, 55, 68)';
+const BLOCK_FLOOD = 'rgb(90, 138, 122)';
 
 // ---------------------------------------------------------------------------
-// Main component
+// Main component — keeps every production data binding intact.
 // ---------------------------------------------------------------------------
 
 export function BodyZoneSelector() {
@@ -144,17 +362,14 @@ export function BodyZoneSelector() {
   const actions = useBattleActions();
   const reduceMotion = useReducedMotion();
 
-  // Local state for the two-click block pair flow. Held locally because the
-  // store only accepts fully-formed (adjacent) pairs via `selectBlockPair`.
+  // Two-click block flow: held locally because the store only accepts
+  // fully-formed (adjacent) pairs via `selectBlockPair`.
   const [blockPrimary, setBlockPrimary] = useState<BattleZone | null>(null);
 
   const turnOpen = phase === 'TurnOpen';
   const connectionBlocked = connectionState !== 'connected';
   const disabled = !turnOpen || connectionBlocked || actions.isSubmitting;
   const canGo = actions.canSubmit && !connectionBlocked;
-
-  // Lock-in waiting state: post-Submitted/Resolving, show a centered
-  // Mitsudomoe spinner instead of the silhouette diptych.
   const isWaiting = phase === 'Submitted' || phase === 'Resolving';
 
   const handleAttackClick = (zone: BattleZone) => {
@@ -166,7 +381,6 @@ export function BodyZoneSelector() {
     if (disabled) return;
     const committed = actions.selectedBlockPair;
     if (committed && committed[0] === zone) {
-      // Click primary zone of committed pair → restart selection from there.
       setBlockPrimary(zone);
       return;
     }
@@ -175,7 +389,6 @@ export function BodyZoneSelector() {
       return;
     }
     if (blockPrimary === zone) {
-      // Click same zone again → deselect.
       setBlockPrimary(null);
       return;
     }
@@ -183,18 +396,12 @@ export function BodyZoneSelector() {
       actions.selectBlockPair([blockPrimary, zone]);
       setBlockPrimary(null);
     } else {
-      // Non-adjacent second click → treat as a fresh primary.
       setBlockPrimary(zone);
     }
   };
 
-  const attackHover = useHoverZone();
-  const blockHover = useHoverZone();
-
   return (
     <div className="flex flex-col gap-4">
-      <style>{PULSE_KEYFRAMES}</style>
-
       <div
         className="grid grid-cols-2 gap-4 rounded-sm border-[0.5px] border-border-subtle bg-glass-subtle p-4"
         style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}
@@ -211,12 +418,8 @@ export function BodyZoneSelector() {
               headerColor="var(--color-kombats-crimson-light)"
               headerGlow="0 2px 14px rgba(var(--rgb-crimson), 0.35)"
               selected={
-                actions.selectedAttackZone
-                  ? [actions.selectedAttackZone]
-                  : []
+                actions.selectedAttackZone ? [actions.selectedAttackZone] : []
               }
-              hoverZone={attackHover.hover}
-              onZoneHover={attackHover.setHover}
               onZoneClick={handleAttackClick}
               selectionLabel={actions.selectedAttackZone ?? null}
               placeholder="Select zone"
@@ -234,8 +437,6 @@ export function BodyZoneSelector() {
                     ? [blockPrimary]
                     : []
               }
-              hoverZone={blockHover.hover}
-              onZoneHover={blockHover.setHover}
               onZoneClick={handleBlockClick}
               selectionLabel={
                 actions.selectedBlockPair
@@ -246,7 +447,6 @@ export function BodyZoneSelector() {
               }
               placeholder="Select pair"
               disabled={disabled}
-              primaryZone={blockPrimary}
             />
           </>
         )}
@@ -277,8 +477,7 @@ export function BodyZoneSelector() {
         )}
       </div>
 
-      {/* Accessible secondary pair list for keyboard users and as a
-         visual confirmation/fallback for the silhouette picker. */}
+      {/* Accessible secondary pair list for keyboard users. */}
       {!isWaiting && (
         <fieldset className="sr-only" aria-label="Select block pair">
           <legend>Valid block pairs</legend>
@@ -307,13 +506,9 @@ export function BodyZoneSelector() {
   );
 }
 
-function useHoverZone() {
-  const [hover, setHover] = useState<BattleZone | null>(null);
-  return { hover, setHover };
-}
-
 // ---------------------------------------------------------------------------
-// Silhouette column — one side of the diptych.
+// Silhouette column — one side of the diptych. Owns its own hover state so
+// the two columns never influence each other.
 // ---------------------------------------------------------------------------
 
 interface SilhouetteColumnProps {
@@ -322,13 +517,10 @@ interface SilhouetteColumnProps {
   headerColor: string;
   headerGlow: string;
   selected: BattleZone[];
-  hoverZone: BattleZone | null;
-  onZoneHover: (zone: BattleZone | null) => void;
   onZoneClick: (zone: BattleZone) => void;
   selectionLabel: string | null;
   placeholder: string;
   disabled: boolean;
-  primaryZone?: BattleZone | null;
 }
 
 function SilhouetteColumn({
@@ -337,23 +529,79 @@ function SilhouetteColumn({
   headerColor,
   headerGlow,
   selected,
-  hoverZone,
-  onZoneHover,
   onZoneClick,
   selectionLabel,
   placeholder,
   disabled,
 }: SilhouetteColumnProps) {
+  const [hover, setHover] = useState<BattleZone | null>(null);
   const rgb = mode === 'attack' ? ATTACK_RGB : BLOCK_RGB;
-  const pairZones: [BattleZone, BattleZone] | null =
-    mode === 'block' && selected.length === 2
-      ? [selected[0], selected[1]]
-      : null;
+  const flood = mode === 'attack' ? ATTACK_FLOOD : BLOCK_FLOOD;
+
+  // Selection: a committed pair (two adjacent zones) renders as one
+  // seamless fill via pairFeatherMaskStyle. A single zone (attack pick or
+  // block-primary) renders as one zoneFeatherMaskStyle item. Wraparound
+  // 'Legs + Head' is non-adjacent and falls back to two independent fills.
+  type FilledItem =
+    | { kind: 'single'; zone: BattleZone }
+    | { kind: 'pair'; pair: ZonePair };
+  const filledItems: FilledItem[] = (() => {
+    if (selected.length === 0) return [];
+    if (selected.length === 1) {
+      return [{ kind: 'single', zone: selected[0] }];
+    }
+    const pair = adjacentBlockPair(selected[0], selected[1]);
+    if (pair) return [{ kind: 'pair', pair }];
+    return [
+      { kind: 'single', zone: selected[0] },
+      { kind: 'single', zone: selected[1] },
+    ];
+  })();
+
+  const visibleFilledZones: BattleZone[] = filledItems.flatMap((item) =>
+    item.kind === 'single' ? [item.zone] : [item.pair.upper, item.pair.lower],
+  );
+
+  // Hover preview lives on the single hovered zone (single-zone hover for
+  // both attack and block columns, since the production block click flow
+  // is two-click rather than auto-anchor).
+  const showHover = hover !== null && !visibleFilledZones.includes(hover);
+
+  // Adjacency pass: if the hover target sits directly above/below a
+  // currently-selected zone, give that edge a hard cut extended by the
+  // selection's feather/2 so the two fills meet flush instead of leaving a
+  // partially-opacified seam between them.
+  const hoverHardEdges: HardEdges = {};
+  const hoverNeighbourFeathers: NeighbourFeathers = {};
+  if (showHover && hover) {
+    const above = zoneAbove(hover);
+    const below = zoneBelow(hover);
+    if (above && visibleFilledZones.includes(above)) {
+      hoverHardEdges.top = true;
+      hoverNeighbourFeathers.top = zoneFeatherAmount(above);
+    }
+    if (below && visibleFilledZones.includes(below)) {
+      hoverHardEdges.bottom = true;
+      hoverNeighbourFeathers.bottom = zoneFeatherAmount(below);
+    }
+  }
 
   const cornerColor =
     mode === 'attack'
       ? 'rgba(var(--rgb-crimson), 0.35)'
       : 'rgba(var(--rgb-jade), 0.35)';
+
+  // Namespacing SVG IDs by mode prevents collisions between the two
+  // columns mounted side-by-side (filter / mask / gradient lookups
+  // resolve via document-wide ID).
+  const filterId = `kombats-zone-outline-${mode}`;
+  const hoverFilterId = `kombats-zone-hover-${mode}`;
+  const zoneMaskId = (z: BattleZone) => `kombats-zone-mask-${mode}-${z}`;
+  const zoneGradId = (z: BattleZone) => `kombats-zone-grad-${mode}-${z}`;
+  const pairMaskId = (id: string) => `kombats-pair-mask-${mode}-${id}`;
+  const pairGradId = (id: string) => `kombats-pair-grad-${mode}-${id}`;
+
+  const showOutline = filledItems.length > 0 || showHover;
 
   return (
     <div className="relative flex flex-col items-center gap-3">
@@ -373,10 +621,10 @@ function SilhouetteColumn({
       </h3>
 
       <div
-        className="relative mx-auto aspect-[2/3] w-full max-w-[210px]"
-        onMouseLeave={() => onZoneHover(null)}
+        className="relative mx-auto aspect-[2/3] w-full max-w-[210px] select-none"
+        onMouseLeave={() => setHover(null)}
       >
-        {/* Soft warm radial backdrop behind silhouette. */}
+        {/* Soft warm radial backdrop. */}
         <div
           aria-hidden
           className="absolute pointer-events-none"
@@ -397,50 +645,279 @@ function SilhouetteColumn({
           style={silhouetteBaseStyle}
         />
 
-        {/* Selected zone fills — radial-gradient, clipped to silhouette × band. */}
-        {pairZones ? (
-          <ZoneFill
-            zoneGradient={pairGradient(pairZones[0], pairZones[1])}
-            background={selectedFillBackground(rgb)}
-            pulsing
-          />
-        ) : (
-          selected.map((zone) => (
-            <ZoneFill
-              key={`sel-${zone}`}
-              zoneGradient={bandGradient(zone)}
-              background={selectedFillBackground(rgb)}
-              pulsing
+        {/* Selection radial fills — silhouette × overlap-feather mask. */}
+        {filledItems.map((item) => {
+          if (item.kind === 'single') {
+            return (
+              <div
+                key={`fill-${item.zone}`}
+                aria-hidden
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  ...zoneFeatherMaskStyle(item.zone),
+                  background: selectedFillBackground(rgb),
+                  animation: 'kombats-zone-pulse 2.5s ease-in-out infinite',
+                }}
+              />
+            );
+          }
+          return (
+            <div
+              key={`fill-pair-${item.pair.upper}-${item.pair.lower}`}
+              aria-hidden
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                ...pairFeatherMaskStyle(item.pair),
+                background: selectedFillBackground(rgb),
+                animation: 'kombats-zone-pulse 2.5s ease-in-out infinite',
+              }}
             />
-          ))
-        )}
+          );
+        })}
 
-        {/* Hover fill — flat alpha, 150ms fade. */}
-        {hoverZone && !selected.includes(hoverZone) && (
-          <ZoneFill
-            key={`hover-${hoverZone}`}
-            zoneGradient={bandGradient(hoverZone)}
-            background={`rgba(var(${rgb}), 0.25)`}
-            hover
+        {/* Hover preview fill — flat alpha, 150ms fade-in. Adjacency-aware
+            hard edges so it sits flush against any selected neighbour. */}
+        {showHover && hover && (
+          <div
+            key={`hover-${hover}`}
+            aria-hidden
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              ...zoneFeatherMaskStyle(hover, hoverHardEdges, hoverNeighbourFeathers),
+              background: hoverFillBackground(rgb),
+              animation: 'kombats-zone-outline-in 150ms ease-out both',
+            }}
           />
         )}
 
-        {/* Click targets — one transparent button per zone, stacked vertically. */}
+        {/* SVG outline + glow layer. The same silhouette PNG is rendered
+            inside an <image> with a feMorphology-derived outline filter and
+            a vertical linearGradient mask so the outline feathers at the
+            band edges instead of clipping on a rect line. */}
+        {showOutline && (
+          <svg
+            aria-hidden
+            className="absolute inset-0 h-full w-full pointer-events-none"
+            style={{ overflow: 'visible' }}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              <filter id={filterId} x="-20%" y="-20%" width="140%" height="140%">
+                <feMorphology
+                  in="SourceAlpha"
+                  operator="dilate"
+                  radius="1"
+                  result="dilated"
+                />
+                <feComposite
+                  in="dilated"
+                  in2="SourceAlpha"
+                  operator="out"
+                  result="outline"
+                />
+                <feGaussianBlur
+                  in="outline"
+                  stdDeviation="0.5"
+                  result="outlineBlurred"
+                />
+                <feFlood floodColor={flood} result="flood" />
+                <feComposite
+                  in="flood"
+                  in2="outlineBlurred"
+                  operator="in"
+                  result="coloredOutline"
+                />
+                <feGaussianBlur
+                  in="coloredOutline"
+                  stdDeviation="4"
+                  result="glow"
+                />
+                <feMerge>
+                  <feMergeNode in="glow" />
+                  <feMergeNode in="coloredOutline" />
+                </feMerge>
+              </filter>
+              <filter
+                id={hoverFilterId}
+                x="-20%"
+                y="-20%"
+                width="140%"
+                height="140%"
+              >
+                <feMorphology
+                  in="SourceAlpha"
+                  operator="dilate"
+                  radius="1"
+                  result="dilated"
+                />
+                <feComposite
+                  in="dilated"
+                  in2="SourceAlpha"
+                  operator="out"
+                  result="outline"
+                />
+                <feGaussianBlur
+                  in="outline"
+                  stdDeviation="0.5"
+                  result="outlineBlurred"
+                />
+                <feFlood
+                  floodColor={flood}
+                  floodOpacity="0.5"
+                  result="flood"
+                />
+                <feComposite
+                  in="flood"
+                  in2="outlineBlurred"
+                  operator="in"
+                  result="coloredOutline"
+                />
+              </filter>
+              {ALL_ZONES.map((z) => {
+                const stops = zoneFeatherSvgStops(z);
+                return (
+                  <g key={`mask-${z}`}>
+                    <linearGradient
+                      id={zoneGradId(z)}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="100"
+                      gradientUnits="userSpaceOnUse"
+                      spreadMethod="pad"
+                    >
+                      {stops.map((s, i) => (
+                        <stop
+                          key={`${z}-stop-${i}`}
+                          offset={s.offset}
+                          stopColor={s.color}
+                        />
+                      ))}
+                    </linearGradient>
+                    <mask
+                      id={zoneMaskId(z)}
+                      maskUnits="userSpaceOnUse"
+                      x="-20"
+                      y="-20"
+                      width="140"
+                      height="140"
+                    >
+                      <rect
+                        x="-20"
+                        y="-20"
+                        width="140"
+                        height="140"
+                        fill={`url(#${zoneGradId(z)})`}
+                      />
+                    </mask>
+                  </g>
+                );
+              })}
+              {ADJACENT_PAIRS.map((p) => {
+                const stops = pairFeatherSvgStops(p);
+                const id = `${p.upper}-${p.lower}`;
+                return (
+                  <g key={`mask-pair-${id}`}>
+                    <linearGradient
+                      id={pairGradId(id)}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="100"
+                      gradientUnits="userSpaceOnUse"
+                      spreadMethod="pad"
+                    >
+                      {stops.map((s, i) => (
+                        <stop
+                          key={`${id}-stop-${i}`}
+                          offset={s.offset}
+                          stopColor={s.color}
+                        />
+                      ))}
+                    </linearGradient>
+                    <mask
+                      id={pairMaskId(id)}
+                      maskUnits="userSpaceOnUse"
+                      x="-20"
+                      y="-20"
+                      width="140"
+                      height="140"
+                    >
+                      <rect
+                        x="-20"
+                        y="-20"
+                        width="140"
+                        height="140"
+                        fill={`url(#${pairGradId(id)})`}
+                      />
+                    </mask>
+                  </g>
+                );
+              })}
+            </defs>
+
+            {filledItems.map((item) => {
+              const maskHref =
+                item.kind === 'single'
+                  ? zoneMaskId(item.zone)
+                  : pairMaskId(`${item.pair.upper}-${item.pair.lower}`);
+              const key =
+                item.kind === 'single'
+                  ? `outline-${item.zone}`
+                  : `outline-pair-${item.pair.upper}-${item.pair.lower}`;
+              return (
+                <image
+                  key={key}
+                  href={silhouetteSrc}
+                  x="0"
+                  y="0"
+                  width="100"
+                  height="100"
+                  preserveAspectRatio="none"
+                  mask={`url(#${maskHref})`}
+                  filter={`url(#${filterId})`}
+                  style={{
+                    animation: 'kombats-zone-pulse 2.5s ease-in-out infinite',
+                  }}
+                />
+              );
+            })}
+
+            {showHover && hover && (
+              <image
+                key={`hover-outline-${hover}`}
+                href={silhouetteSrc}
+                x="0"
+                y="0"
+                width="100"
+                height="100"
+                preserveAspectRatio="none"
+                mask={`url(#${zoneMaskId(hover)})`}
+                filter={`url(#${hoverFilterId})`}
+                style={{ animation: 'kombats-zone-outline-in 150ms ease-out' }}
+              />
+            )}
+          </svg>
+        )}
+
+        {/* Click targets — one transparent button per zone band. */}
         <div className="absolute inset-0">
           {ALL_ZONES.map((zone) => {
-            const band = ZONE_BAND[zone];
-            const top = `${band.start}%`;
-            const height = `${band.end - band.start}%`;
-            const isSelected = selected.includes(zone);
+            const band = ZONE_BANDS[zone];
+            const top = `${band.top}%`;
+            const height = `${band.bottom - band.top}%`;
+            const isSelected = visibleFilledZones.includes(zone);
             return (
               <button
                 key={zone}
                 type="button"
                 disabled={disabled}
                 onClick={() => onZoneClick(zone)}
-                onMouseEnter={() => onZoneHover(zone)}
-                onFocus={() => onZoneHover(zone)}
-                onBlur={() => onZoneHover(null)}
+                onMouseEnter={() => setHover(zone)}
+                onFocus={() => setHover(zone)}
+                onBlur={() => setHover((h) => (h === zone ? null : h))}
                 aria-label={`${mode === 'attack' ? 'Attack' : 'Block'} ${zone}`}
                 aria-pressed={isSelected}
                 className="absolute left-0 right-0 cursor-pointer bg-transparent outline-none transition-[background-color] duration-150 focus-visible:bg-white/[0.03] disabled:cursor-not-allowed"
@@ -459,9 +936,10 @@ function SilhouetteColumn({
             fontSize: 13,
             fontWeight: 600,
             letterSpacing: '0.08em',
-            color: mode === 'attack'
-              ? 'var(--color-kombats-crimson-light)'
-              : 'var(--color-kombats-jade-light)',
+            color:
+              mode === 'attack'
+                ? 'var(--color-kombats-crimson-light)'
+                : 'var(--color-kombats-jade-light)',
           }}
         >
           {selectionLabel}
@@ -483,34 +961,10 @@ function SilhouetteColumn({
   );
 }
 
-interface ZoneFillProps {
-  zoneGradient: string;
-  background: string;
-  pulsing?: boolean;
-  hover?: boolean;
-}
-
-function ZoneFill({ zoneGradient, background, pulsing, hover }: ZoneFillProps) {
-  const style: React.CSSProperties = {
-    ...twoLayerMask(zoneGradient),
-    background,
-    animation: pulsing
-      ? 'kombats-zone-pulse 2.5s ease-in-out infinite'
-      : hover
-        ? 'kombats-zone-outline-in 150ms ease-out both'
-        : undefined,
-  };
-  return (
-    <div aria-hidden className="absolute inset-0 pointer-events-none" style={style} />
-  );
-}
-
-// DESIGN_REFERENCE.md §3.15 — corner ornament marks (slim variant).
+// DESIGN_REFERENCE.md §3.15 — corner ornament marks.
 function CornerMarks({ color, side }: { color: string; side: 'left' | 'right' }) {
-  const common = {
-    width: 14,
-    height: 14,
-  };
+  const armPx = 14;
+  const thickness = 1.5;
   if (side === 'left') {
     return (
       <>
@@ -518,22 +972,24 @@ function CornerMarks({ color, side }: { color: string; side: 'left' | 'right' })
           aria-hidden
           className="absolute -z-0"
           style={{
-            ...common,
+            width: armPx,
+            height: armPx,
             top: 0,
             left: 0,
-            borderTop: `1.5px solid ${color}`,
-            borderLeft: `1.5px solid ${color}`,
+            borderTop: `${thickness}px solid ${color}`,
+            borderLeft: `${thickness}px solid ${color}`,
           }}
         />
         <span
           aria-hidden
           className="absolute -z-0"
           style={{
-            ...common,
+            width: armPx,
+            height: armPx,
             bottom: 0,
             left: 0,
-            borderBottom: `1.5px solid ${color}`,
-            borderLeft: `1.5px solid ${color}`,
+            borderBottom: `${thickness}px solid ${color}`,
+            borderLeft: `${thickness}px solid ${color}`,
           }}
         />
       </>
@@ -545,45 +1001,48 @@ function CornerMarks({ color, side }: { color: string; side: 'left' | 'right' })
         aria-hidden
         className="absolute -z-0"
         style={{
-          ...common,
+          width: armPx,
+          height: armPx,
           top: 0,
           right: 0,
-          borderTop: `1.5px solid ${color}`,
-          borderRight: `1.5px solid ${color}`,
+          borderTop: `${thickness}px solid ${color}`,
+          borderRight: `${thickness}px solid ${color}`,
         }}
       />
       <span
         aria-hidden
         className="absolute -z-0"
         style={{
-          ...common,
+          width: armPx,
+          height: armPx,
           bottom: 0,
           right: 0,
-          borderBottom: `1.5px solid ${color}`,
-          borderRight: `1.5px solid ${color}`,
+          borderBottom: `${thickness}px solid ${color}`,
+          borderRight: `${thickness}px solid ${color}`,
         }}
       />
     </>
   );
 }
 
-// DESIGN_REFERENCE.md §3.12 — Mitsudomoe spinner, sized to fit the lock-in
-// waiting slot (smaller than the queue variant).
+// DESIGN_REFERENCE.md §3.12 — Mitsudomoe spinner. Sized to match the
+// design_V2 reference (320 glow / 220 ring / 140 icon) so the panel reads
+// the same as the ceremonial post-lock-in state.
 function LockedInSpinner({ reduceMotion }: { reduceMotion: boolean }) {
   return (
     <div
-      className="relative flex h-[200px] w-[200px] items-center justify-center"
+      className="relative flex h-[320px] w-[320px] items-center justify-center"
       aria-hidden
     >
       <div
-        className="pointer-events-none absolute h-[200px] w-[200px] rounded-full"
+        className="pointer-events-none absolute h-[320px] w-[320px] rounded-full"
         style={{
           background:
             'radial-gradient(circle, rgba(var(--rgb-gold-accent), 0.18) 0%, rgba(var(--rgb-gold-accent), 0.08) 35%, rgba(var(--rgb-gold-accent), 0.03) 60%, transparent 80%)',
         }}
       />
       <motion.div
-        className="pointer-events-none absolute h-[140px] w-[140px] rounded-full"
+        className="pointer-events-none absolute h-[220px] w-[220px] rounded-full"
         style={{ border: '1px solid rgba(var(--rgb-gold-accent), 0.15)' }}
         animate={reduceMotion ? undefined : { rotate: -360 }}
         transition={
@@ -595,7 +1054,7 @@ function LockedInSpinner({ reduceMotion }: { reduceMotion: boolean }) {
       <motion.img
         src={mitsudamoeSrc}
         alt=""
-        className="pointer-events-none h-[88px] w-[88px] opacity-50 mix-blend-screen"
+        className="pointer-events-none h-[140px] w-[140px] opacity-50 mix-blend-screen"
         animate={reduceMotion ? undefined : { rotate: 360 }}
         transition={
           reduceMotion
@@ -606,4 +1065,3 @@ function LockedInSpinner({ reduceMotion }: { reduceMotion: boolean }) {
     </div>
   );
 }
-
