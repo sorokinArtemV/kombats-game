@@ -27,5 +27,5 @@ internal static class PlayerCombatProfileEntityDefaults
     // Kept in sync with Kombats.Players.Domain.Entities.AvatarCatalog.Default.
     // Duplicated here to avoid a cross-service domain dependency — Matchmaking
     // receives avatar ids through the integration event and treats them as opaque.
-    public const string AvatarId = "default";
+    public const string AvatarId = "shadow_oni";
 }

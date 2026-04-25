@@ -9,17 +9,26 @@ namespace Kombats.Players.Domain.Entities;
 /// </summary>
 public static class AvatarCatalog
 {
-    public const string Default = "default";
+    /// <summary>
+    /// Avatar id assigned to newly created characters.
+    /// </summary>
+    public const string Default = "shadow_oni";
+
+    /// <summary>
+    /// Legacy default value retained as an alias so historical rows remain valid.
+    /// New characters use <see cref="Default"/> instead.
+    /// </summary>
+    public const string LegacyDefault = "default";
 
     public static readonly IReadOnlySet<string> AllowedIds = new HashSet<string>(StringComparer.Ordinal)
     {
+        LegacyDefault,
+        "female_archer",
+        "female_ninja",
+        "ronin",
+        "shadow_assassin",
         Default,
-        "warrior-01",
-        "warrior-02",
-        "mage-01",
-        "mage-02",
-        "rogue-01",
-        "rogue-02",
+        "silhouette",
     };
 
     public const int MaxLength = 64;

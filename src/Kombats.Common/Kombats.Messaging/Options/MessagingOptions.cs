@@ -61,7 +61,7 @@ public class OutboxOptions
 
 public class SchedulerOptions
 {
-    public bool Enabled { get; set; } = true; // Enable delayed message scheduler by default
+    public bool Enabled { get; set; } = false; // Enable delayed message scheduler by default
 }
 
 
