@@ -171,7 +171,11 @@
       "Bash(git -C \"D:\\\\Programming\\\\Sharp\\\\kombats-game\\\\kombats-game\" diff src/Kombats.Client/src/modules/auth/hooks.ts)",
       "Bash(python -c \"import json; json.load\\(open\\('infra/keycloak/kombats-realm.json'\\)\\)\")",
       "Bash(python *)",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(git -C D:/Programming/Sharp/kombats-game/kombats-game log --oneline -5 -- src/Kombats.Client/src/ui/assets/fighters/)",
+      "Bash(git -C D:/Programming/Sharp/kombats-game/kombats-game ls-files src/Kombats.Client/src/ui/assets/fighters/)",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(echo \"---TSC-EXIT: $?---\")"
     ]
   }
 }

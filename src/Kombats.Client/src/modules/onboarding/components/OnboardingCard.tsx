@@ -7,9 +7,9 @@ interface OnboardingCardProps {
   children: ReactNode;
 }
 
-// Cinzel title gold bloom — DESIGN_REFERENCE.md §5.11.
+// Display title gold bloom — DESIGN_REFERENCE.md §5.11.
 const titleBloomStyle = {
-  textShadow: '0 2px 12px rgba(201, 162, 90, 0.30)',
+  textShadow: 'var(--shadow-title-soft)',
 };
 
 export function OnboardingCard({ eyebrow, title, subtitle, children }: OnboardingCardProps) {

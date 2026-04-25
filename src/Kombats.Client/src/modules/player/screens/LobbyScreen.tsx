@@ -4,20 +4,20 @@ import { FighterNameplate } from '../components/FighterNameplate';
 import { QueueButton } from '@/modules/matchmaking/components/QueueButton';
 import { usePlayerStore } from '../store';
 import { usePostBattleRefresh } from '../post-battle-refresh';
+import { getAvatarAsset } from '../avatar-assets';
 import bgScene from '@/ui/assets/backgrounds/bg-1.png';
-import fighterSprite from '@/ui/assets/fighters/charackter.png';
 
 // DESIGN_REFERENCE.md §1.3 — full-bleed scene + ink-navy bottom gradient.
 // Two-stop gradient darkens the bottom so the fighter sprite/nameplate read
 // over the scene art without washing out the horizon.
 const sceneOverlayStyle: React.CSSProperties = {
   background:
-    'linear-gradient(to bottom, rgba(15, 20, 25, 0.45) 0%, rgba(15, 20, 25, 0.15) 40%, rgba(15, 20, 25, 0.88) 100%)',
+    'linear-gradient(to bottom, rgba(var(--rgb-ink-navy), 0.45) 0%, rgba(var(--rgb-ink-navy), 0.15) 40%, rgba(var(--rgb-ink-navy), 0.88) 100%)',
 };
 
 // DESIGN_REFERENCE.md §3.16 — oversized sprite drop shadow.
 const spriteStyle: React.CSSProperties = {
-  filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.9))',
+  filter: 'drop-shadow(0 25px 50px rgba(var(--rgb-black), 0.9))',
 };
 
 /**
@@ -55,7 +55,7 @@ export function LobbyScreen() {
         <div className="pointer-events-auto flex flex-col items-start gap-4">
           <FighterNameplate />
           <img
-            src={fighterSprite}
+            src={getAvatarAsset(character?.avatarId)}
             alt=""
             aria-hidden
             className="pointer-events-none h-[min(82vh,720px)] w-auto object-contain"
@@ -91,7 +91,7 @@ function QueueCard() {
         </span>
         <h1
           className="font-display text-[22px] font-semibold uppercase tracking-[0.28em] text-accent-text"
-          style={{ textShadow: '0 2px 12px rgba(201, 162, 90, 0.3)' }}
+          style={{ textShadow: 'var(--shadow-title-soft)' }}
         >
           Ready to Fight
         </h1>

@@ -18,26 +18,25 @@ import { ConnectionIndicator } from '@/ui/components/ConnectionIndicator';
 import { ErrorBoundary } from '@/ui/components/ErrorBoundary';
 import { logger } from '@/app/logger';
 import { useBattleConnectionState } from '../hooks';
+import { getAvatarAsset } from '@/modules/player/avatar-assets';
 import bgScene from '@/ui/assets/backgrounds/bg-1.png';
-import fighterSprite from '@/ui/assets/fighters/charackter.png';
 import type { PlayerCardResponse } from '@/types/player';
 
 // DESIGN_REFERENCE.md §1.5 — full-bleed scene + ink-navy bottom gradient.
 const sceneOverlayStyle: React.CSSProperties = {
   background:
-    'linear-gradient(to bottom, rgba(15, 20, 25, 0.40) 0%, rgba(15, 20, 25, 0.15) 35%, rgba(15, 20, 25, 0.88) 100%)',
+    'linear-gradient(to bottom, rgba(var(--rgb-ink-navy), 0.40) 0%, rgba(var(--rgb-ink-navy), 0.15) 35%, rgba(var(--rgb-ink-navy), 0.88) 100%)',
 };
 
 // DESIGN_REFERENCE.md §3.16 — oversized sprite drop shadow.
 const selfSpriteStyle: React.CSSProperties = {
-  filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.9))',
+  filter: 'drop-shadow(0 25px 50px rgba(var(--rgb-black), 0.9))',
 };
 
-// DESIGN_REFERENCE.md §3.19 — mirrored opponent sprite with hue rotation so
-// the shared asset reads as a different fighter.
-const opponentSpriteInnerStyle: React.CSSProperties = {
-  filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.9)) hue-rotate(180deg)',
-};
+// DESIGN_REFERENCE.md §3.19 — mirrored opponent sprite. Hue rotation only
+// applies when both fighters happen to share the same avatar art (so the
+// player can still tell them apart); distinct avatars render naturally.
+const opponentSpriteFilterBase = 'drop-shadow(0 25px 50px rgba(var(--rgb-black), 0.9))';
 
 /**
  * Battle layout. Full-bleed scene with bottom-anchored player/opponent
@@ -68,6 +67,15 @@ export function BattleScreen() {
 
   const myCard = usePlayerCardQuery(myFighterId);
   const oppCard = usePlayerCardQuery(oppFighterId);
+
+  const myAvatarSrc = getAvatarAsset(myCard?.avatarId);
+  const oppAvatarSrc = getAvatarAsset(oppCard?.avatarId);
+  const opponentSpriteInnerStyle: React.CSSProperties = {
+    filter:
+      myCard?.avatarId && oppCard?.avatarId === myCard.avatarId
+        ? `${opponentSpriteFilterBase} hue-rotate(180deg)`
+        : opponentSpriteFilterBase,
+  };
 
   const reduceMotion = useReducedMotion();
 
@@ -126,7 +134,7 @@ export function BattleScreen() {
           />
         </div>
         <motion.img
-          src={fighterSprite}
+          src={myAvatarSrc}
           alt=""
           aria-hidden
           className="pointer-events-none h-[min(70vh,620px)] w-auto object-contain"
@@ -156,7 +164,7 @@ export function BattleScreen() {
           style={{ transform: 'scaleX(-1)' }}
         >
           <motion.img
-            src={fighterSprite}
+            src={oppAvatarSrc}
             alt=""
             aria-hidden
             className="pointer-events-none h-full w-auto object-contain"
@@ -240,7 +248,7 @@ function CombatPanelHeader() {
           fontWeight: 600,
           letterSpacing: '0.24em',
           color: 'var(--color-accent-text)',
-          textShadow: '0 2px 12px rgba(201, 162, 90, 0.3)',
+          textShadow: 'var(--shadow-title-soft)',
         }}
       >
         {title}
@@ -300,11 +308,11 @@ function TurnIndicatorPill({
   const dot =
     state === 'your_turn'
       ? {
-          background: '#c9a25a',
-          boxShadow: '0 0 8px rgba(201, 169, 97, 0.55)',
+          background: 'var(--color-accent)',
+          boxShadow: '0 0 8px rgba(var(--rgb-gold), 0.55)',
         }
       : {
-          background: 'rgba(201, 162, 90, 0.60)',
+          background: 'var(--color-accent-muted)',
           boxShadow: 'none',
         };
   return (

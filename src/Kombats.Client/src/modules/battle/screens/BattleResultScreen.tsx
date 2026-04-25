@@ -18,9 +18,9 @@ const VICTORY_RAYS_BACKGROUND = (() => {
   const stops: string[] = [];
   for (let i = 0; i < 12; i++) {
     const base = i * 30;
-    stops.push(`rgba(232, 184, 48, 0.22) ${base}deg ${base + 8}deg`);
+    stops.push(`rgba(var(--rgb-gold-victory), 0.22) ${base}deg ${base + 8}deg`);
     stops.push(`transparent ${base + 8}deg ${base + 15}deg`);
-    stops.push(`rgba(232, 184, 48, 0.18) ${base + 15}deg ${base + 23}deg`);
+    stops.push(`rgba(var(--rgb-gold-victory), 0.18) ${base + 15}deg ${base + 23}deg`);
     stops.push(`transparent ${base + 23}deg ${base + 30}deg`);
   }
   return `conic-gradient(from 0deg, ${stops.join(', ')})`;
@@ -31,69 +31,67 @@ const VICTORY_RAYS_MASK = 'radial-gradient(circle, black 15%, transparent 40%)';
 // DESIGN_REFERENCE.md §1.6 — overall scene darkening for victory (heavier so
 // the ceremonial gold reads cleanly).
 const VICTORY_OVERLAY: React.CSSProperties = {
-  background: 'rgba(0, 0, 0, 0.65)',
+  background: 'rgba(var(--rgb-black), 0.65)',
 };
 
 // DESIGN_REFERENCE.md §1.7 — lighter overlay so the red vignette/slashes read.
 const DEFEAT_OVERLAY: React.CSSProperties = {
-  background: 'rgba(0, 0, 0, 0.5)',
+  background: 'rgba(var(--rgb-black), 0.5)',
 };
 
 // DESIGN_REFERENCE.md §3.7 — red closing-in vignette.
 const DEFEAT_VIGNETTE: React.CSSProperties = {
   background:
-    'radial-gradient(ellipse at 50% 50%, transparent 25%, rgba(192, 55, 68, 0.12) 55%, rgba(192, 55, 68, 0.25) 85%)',
+    'radial-gradient(ellipse at 50% 50%, transparent 25%, rgba(var(--rgb-crimson), 0.12) 55%, rgba(var(--rgb-crimson), 0.25) 85%)',
 };
 
 // DESIGN_REFERENCE.md §3.6 — two-layer bloom at the title position.
 const VICTORY_GOLD_BLOOM: React.CSSProperties = {
   background:
-    'radial-gradient(circle, rgba(232, 184, 48, 0.15) 0%, rgba(232, 184, 48, 0.06) 45%, transparent 70%)',
+    'radial-gradient(circle, rgba(var(--rgb-gold-victory), 0.15) 0%, rgba(var(--rgb-gold-victory), 0.06) 45%, transparent 70%)',
 };
 const VICTORY_WHITE_BLOOM: React.CSSProperties = {
   background:
-    'radial-gradient(circle, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.06) 40%, transparent 65%)',
+    'radial-gradient(circle, rgba(var(--rgb-white), 0.22) 0%, rgba(var(--rgb-white), 0.06) 40%, transparent 65%)',
 };
 
-// DESIGN_REFERENCE.md §3.4 — multi-layered Cinzel text-shadow per outcome.
-const VICTORY_TITLE_SHADOW =
-  '0 0 30px rgba(255,255,255,0.3), 0 0 60px rgba(232,184,48,0.5), 0 0 100px rgba(232,184,48,0.2)';
-const DEFEAT_TITLE_SHADOW =
-  '0 0 40px rgba(192,55,68,0.6), 0 0 80px rgba(192,55,68,0.25)';
-const NEUTRAL_TITLE_SHADOW = '0 2px 16px rgba(201, 162, 90, 0.25)';
+// DESIGN_REFERENCE.md §3.4 — multi-layered display text-shadow per outcome.
+const VICTORY_TITLE_SHADOW = 'var(--shadow-title-victory)';
+const DEFEAT_TITLE_SHADOW = 'var(--shadow-title-defeat)';
+const NEUTRAL_TITLE_SHADOW = 'var(--shadow-title-neutral)';
 
 // DESIGN_REFERENCE.md §3.9 — tapered wing lines flanking the title.
 const WING_LEFT_VICTORY: React.CSSProperties = {
-  background: 'linear-gradient(to right, transparent, rgba(232, 184, 48, 0.5))',
+  background: 'linear-gradient(to right, transparent, rgba(var(--rgb-gold-victory), 0.5))',
 };
 const WING_RIGHT_VICTORY: React.CSSProperties = {
-  background: 'linear-gradient(to left, transparent, rgba(232, 184, 48, 0.5))',
+  background: 'linear-gradient(to left, transparent, rgba(var(--rgb-gold-victory), 0.5))',
 };
 const WING_LEFT_DEFEAT: React.CSSProperties = {
-  background: 'linear-gradient(to right, transparent, rgba(192, 55, 68, 0.55))',
+  background: 'linear-gradient(to right, transparent, rgba(var(--rgb-crimson), 0.55))',
 };
 const WING_RIGHT_DEFEAT: React.CSSProperties = {
-  background: 'linear-gradient(to left, transparent, rgba(192, 55, 68, 0.55))',
+  background: 'linear-gradient(to left, transparent, rgba(var(--rgb-crimson), 0.55))',
 };
 const WING_LEFT_NEUTRAL: React.CSSProperties = {
-  background: 'linear-gradient(to right, transparent, rgba(154, 154, 168, 0.45))',
+  background: 'linear-gradient(to right, transparent, rgba(var(--rgb-moon-silver), 0.45))',
 };
 const WING_RIGHT_NEUTRAL: React.CSSProperties = {
-  background: 'linear-gradient(to left, transparent, rgba(154, 154, 168, 0.45))',
+  background: 'linear-gradient(to left, transparent, rgba(var(--rgb-moon-silver), 0.45))',
 };
 
 // DESIGN_REFERENCE.md §5.19 — top accent line on the glass result panel.
 const ACCENT_LINE_VICTORY: React.CSSProperties = {
   background:
-    'linear-gradient(to right, transparent, rgba(232, 184, 48, 0.75), transparent)',
+    'linear-gradient(to right, transparent, rgba(var(--rgb-gold-victory), 0.75), transparent)',
 };
 const ACCENT_LINE_DEFEAT: React.CSSProperties = {
   background:
-    'linear-gradient(to right, transparent, rgba(192, 55, 68, 0.75), transparent)',
+    'linear-gradient(to right, transparent, rgba(var(--rgb-crimson), 0.75), transparent)',
 };
 const ACCENT_LINE_NEUTRAL: React.CSSProperties = {
   background:
-    'linear-gradient(to right, transparent, rgba(201, 162, 90, 0.5), transparent)',
+    'linear-gradient(to right, transparent, rgba(var(--rgb-gold-accent), 0.5), transparent)',
 };
 
 // Screen-local atmosphere map. OUTCOME_TONE (outcome-tone.ts) is the shared
@@ -128,7 +126,7 @@ const ATMOSPHERE: Record<AtmosphereVariant, AtmosphereTokens> = {
     myRoleClass: 'text-victory-gold',
     oppRoleLabel: 'Defeated',
     oppRoleClass: 'text-text-muted',
-    finalExchangeBorder: 'rgba(232, 184, 48, 0.30)',
+    finalExchangeBorder: 'rgba(var(--rgb-gold-victory), 0.30)',
     subtitleTone: 'Triumph in Combat',
   },
   defeat: {
@@ -141,7 +139,7 @@ const ATMOSPHERE: Record<AtmosphereVariant, AtmosphereTokens> = {
     myRoleClass: 'text-kombats-crimson',
     oppRoleLabel: 'Victor',
     oppRoleClass: 'text-victory-gold',
-    finalExchangeBorder: 'rgba(192, 55, 68, 0.40)',
+    finalExchangeBorder: 'rgba(var(--rgb-crimson), 0.40)',
     subtitleTone: 'Your opponent prevailed',
   },
   neutral: {
@@ -154,7 +152,7 @@ const ATMOSPHERE: Record<AtmosphereVariant, AtmosphereTokens> = {
     myRoleClass: 'text-text-secondary',
     oppRoleLabel: 'Opponent',
     oppRoleClass: 'text-text-secondary',
-    finalExchangeBorder: 'rgba(201, 162, 90, 0.25)',
+    finalExchangeBorder: 'rgba(var(--rgb-gold-accent), 0.25)',
     subtitleTone: 'The match has concluded',
   },
 };
@@ -324,27 +322,27 @@ export function BattleResultScreen() {
           >
             <line
               x1="1350" y1="-50" x2="400" y2="1130"
-              stroke="#c03744" strokeWidth="40" strokeLinecap="round" opacity="0.7"
+              stroke="var(--color-kombats-crimson)" strokeWidth="40" strokeLinecap="round" opacity="0.7"
             />
             <line
               x1="1350" y1="-50" x2="400" y2="1130"
-              stroke="#ff2244" strokeWidth="8" strokeLinecap="round" opacity="0.5"
+              stroke="var(--color-kombats-crimson-bright)" strokeWidth="8" strokeLinecap="round" opacity="0.5"
             />
             <line
               x1="1500" y1="-30" x2="550" y2="1110"
-              stroke="#c03744" strokeWidth="32" strokeLinecap="round" opacity="0.6"
+              stroke="var(--color-kombats-crimson)" strokeWidth="32" strokeLinecap="round" opacity="0.6"
             />
             <line
               x1="1500" y1="-30" x2="550" y2="1110"
-              stroke="#ff2244" strokeWidth="6" strokeLinecap="round" opacity="0.4"
+              stroke="var(--color-kombats-crimson-bright)" strokeWidth="6" strokeLinecap="round" opacity="0.4"
             />
             <line
               x1="1650" y1="-70" x2="700" y2="1150"
-              stroke="#c03744" strokeWidth="44" strokeLinecap="round" opacity="0.5"
+              stroke="var(--color-kombats-crimson)" strokeWidth="44" strokeLinecap="round" opacity="0.5"
             />
             <line
               x1="1650" y1="-70" x2="700" y2="1150"
-              stroke="#ff2244" strokeWidth="10" strokeLinecap="round" opacity="0.4"
+              stroke="var(--color-kombats-crimson-bright)" strokeWidth="10" strokeLinecap="round" opacity="0.4"
             />
           </svg>
         </>
@@ -432,7 +430,7 @@ export function BattleResultScreen() {
             <div
               aria-hidden
               style={{
-                borderTop: '1px solid rgba(255, 255, 255, 0.04)',
+                borderTop: '1px solid var(--color-border-divider)',
               }}
             />
 

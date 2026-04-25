@@ -1,7 +1,7 @@
 /* Kombats font registration.
- * The Google Fonts @import url for Inter + Noto Sans JP lives at the top of
- * index.css to satisfy CSS @import ordering. The Cinzel display chain is
- * system-fallback only and not fetched. */
+ * Inter + Noto Sans JP are loaded via @import in index.css (must come before
+ * any Tailwind import per CSS rules). The font-family bindings below mirror
+ * the design system reference (Inter for body/buttons, Noto Sans JP for h1-h6). */
 
 :root {
   font-family: var(--font-primary);
@@ -14,10 +14,10 @@ h4,
 h5,
 h6 {
   font-family: var(--font-jp);
-  letter-spacing: 0.03em;
+  letter-spacing: var(--heading-tracking);
 }
 
 button {
   font-family: var(--font-primary);
-  letter-spacing: 0.05em;
+  letter-spacing: var(--button-tracking);
 }

@@ -5,11 +5,11 @@ import mitsudamoeSrc from '@/ui/assets/icons/mitsudamoe.png';
 // as Tailwind utilities — scoped style blocks copy the CSS from DESIGN_REFERENCE §3.12.
 const glowStyle = {
   background:
-    'radial-gradient(circle, rgba(201, 162, 90, 0.18) 0%, rgba(201, 162, 90, 0.08) 35%, rgba(201, 162, 90, 0.03) 60%, transparent 80%)',
+    'radial-gradient(circle, rgba(var(--rgb-gold-accent), 0.18) 0%, rgba(var(--rgb-gold-accent), 0.08) 35%, rgba(var(--rgb-gold-accent), 0.03) 60%, transparent 80%)',
 };
 
 const ringStyle = {
-  border: '1px solid rgba(201, 162, 90, 0.15)',
+  border: '1px solid rgba(var(--rgb-gold-accent), 0.15)',
 };
 
 export function SplashScreen() {

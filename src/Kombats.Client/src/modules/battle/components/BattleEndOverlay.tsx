@@ -44,7 +44,7 @@ export function BattleEndOverlay() {
                 fontSize: 28,
                 fontWeight: 700,
                 letterSpacing: '0.28em',
-                textShadow: '0 2px 16px rgba(201, 162, 90, 0.25)',
+                textShadow: 'var(--shadow-title-neutral)',
               }}
             >
               {title.replace(/!$/, '')}

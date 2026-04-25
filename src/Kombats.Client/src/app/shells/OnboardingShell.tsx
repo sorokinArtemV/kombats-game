@@ -5,7 +5,7 @@ import bgScene from '@/ui/assets/backgrounds/bg-1.png';
 // DESIGN_REFERENCE.md §1.2 — top-to-bottom darken + bottom-to-top lighten.
 const sceneOverlayStyle = {
   background:
-    'linear-gradient(to bottom, rgba(15, 20, 25, 0.55) 0%, rgba(15, 20, 25, 0.20) 45%, rgba(15, 20, 25, 0.85) 100%), linear-gradient(to top, rgba(15, 20, 25, 0.65) 0%, transparent 60%)',
+    'linear-gradient(to bottom, rgba(var(--rgb-ink-navy), 0.55) 0%, rgba(var(--rgb-ink-navy), 0.20) 45%, rgba(var(--rgb-ink-navy), 0.85) 100%), linear-gradient(to top, rgba(var(--rgb-ink-navy), 0.65) 0%, transparent 60%)',
 };
 
 // Glass header surface — gradient-to-transparent per the TopNavBar pattern
@@ -13,12 +13,12 @@ const sceneOverlayStyle = {
 // the wordmark, but the surface treatment matches the rest of the shell.
 const headerSurfaceStyle = {
   background:
-    'linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0%, rgba(15, 20, 28, 0.35) 50%, transparent 100%)',
+    'linear-gradient(to bottom, rgba(var(--rgb-black), 0.55) 0%, rgba(var(--rgb-ink-navy), 0.35) 50%, transparent 100%)',
 };
 
-// Cinzel wordmark gold halo — DESIGN_REFERENCE.md §3.4 / §5.8.
+// Display wordmark gold halo — DESIGN_REFERENCE.md §3.4 / §5.8.
 const wordmarkBloomStyle = {
-  textShadow: '0 2px 12px rgba(201, 162, 90, 0.30)',
+  textShadow: 'var(--shadow-title-soft)',
 };
 
 export function OnboardingShell() {
@@ -53,10 +53,11 @@ export function OnboardingShell() {
           </div>
         </header>
 
-        <main className="flex flex-1 items-center justify-center p-6">
-          <div className="w-full max-w-lg rounded-md border-[0.5px] border-border-subtle bg-glass p-8 shadow-[var(--shadow-panel)] backdrop-blur-[20px] sm:p-10">
-            <Outlet />
-          </div>
+        {/* Each onboarding screen owns its own layout — NameSelectionScreen
+            uses a full-bleed scene with an anchored fighter sprite, while
+            InitialStatsScreen renders a centered glass card. */}
+        <main className="relative flex flex-1 flex-col">
+          <Outlet />
         </main>
       </div>
     </div>

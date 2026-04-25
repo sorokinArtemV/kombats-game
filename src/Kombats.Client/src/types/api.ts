@@ -52,6 +52,7 @@ export interface CharacterResponse {
   revision: number;
   totalXp: number;
   level: number;
+  avatarId: string;
 }
 
 export type OnboardResponse = CharacterResponse;
@@ -103,5 +104,15 @@ export interface AllocateStatsResponse {
   intuition: number;
   vitality: number;
   unspentPoints: number;
+  revision: number;
+}
+
+export interface ChangeAvatarRequest {
+  expectedRevision: number;
+  avatarId: string;
+}
+
+export interface ChangeAvatarResponse {
+  avatarId: string;
   revision: number;
 }

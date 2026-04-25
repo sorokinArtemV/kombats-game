@@ -30,12 +30,12 @@ interface FighterCardProps {
 const haloStyle: React.CSSProperties = {
   inset: '-38px -56px',
   background:
-    'radial-gradient(ellipse 68% 62% at center, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.38) 48%, rgba(0,0,0,0) 88%)',
+    'radial-gradient(ellipse 68% 62% at center, rgba(var(--rgb-black), 0.62) 0%, rgba(var(--rgb-black), 0.38) 48%, rgba(var(--rgb-black), 0) 88%)',
   filter: 'blur(22px)',
 };
 
 const nameShadow: React.CSSProperties = {
-  textShadow: '0 2px 8px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.7)',
+  textShadow: '0 2px 8px rgba(var(--rgb-black), 0.95), 0 0 20px rgba(var(--rgb-black), 0.7)',
 };
 
 function tileStyle(t: 'jade' | 'crimson'): React.CSSProperties {
@@ -186,7 +186,7 @@ export function FighterCard({
             aria-expanded={open}
             aria-label={open ? 'Hide fighter stats' : 'Show fighter stats'}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-kombats-moon-silver transition-colors duration-150 hover:text-accent-text focus:outline-none focus-visible:text-accent-text"
-            style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.9))' }}
+            style={{ filter: 'drop-shadow(0 2px 4px rgba(var(--rgb-black), 0.9))' }}
           >
             <Chevron open={open} />
           </button>
@@ -216,16 +216,16 @@ function HpBar({ hp, maxHp, color, mirror }: HpBarProps) {
 
   const fillBackground =
     color === 'crimson'
-      ? 'linear-gradient(180deg, #aa4c4c 0%, #a04545 55%, #883a3a 100%)'
-      : 'linear-gradient(180deg, #648f73 0%, #5a8a6a 55%, #4a7a5a 100%)';
+      ? 'linear-gradient(180deg, var(--palette-hp-crimson-1) 0%, var(--palette-hp-crimson-2) 55%, var(--palette-hp-crimson-3) 100%)'
+      : 'linear-gradient(180deg, var(--palette-hp-jade-1) 0%, var(--palette-hp-jade-2) 55%, var(--palette-hp-jade-3) 100%)';
 
   return (
     <div
       className="relative h-7 w-full"
       style={{
         clipPath: mirror ? skewRight : skewLeft,
-        background: 'rgba(15, 20, 28, 0.75)',
-        border: '0.5px solid rgba(255, 255, 255, 0.08)',
+        background: 'rgba(var(--rgb-ink-navy), 0.75)',
+        border: '0.5px solid rgba(var(--rgb-white), 0.08)',
       }}
     >
       <div
@@ -249,7 +249,7 @@ function HpBar({ hp, maxHp, color, mirror }: HpBarProps) {
             width: 1,
             left: mirror ? 0 : 'auto',
             right: mirror ? 'auto' : 0,
-            background: 'rgba(255, 255, 255, 0.22)',
+            background: 'rgba(var(--rgb-white), 0.22)',
           }}
         />
       </div>
@@ -262,8 +262,8 @@ function HpBar({ hp, maxHp, color, mirror }: HpBarProps) {
           fontSize: 13,
           letterSpacing: '0.04em',
           fontFeatureSettings: '"tnum"',
-          color: '#e8e8f0',
-          textShadow: '0 1px 2px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.7)',
+          color: 'var(--color-text-primary)',
+          textShadow: 'var(--shadow-text-on-glass-strong)',
         }}
       >
         {safeHp} / {safeMax}

@@ -8,13 +8,13 @@ import { SplashScreen } from '@/ui/components/SplashScreen';
 // §3.3 — not expressible as a Tailwind utility.
 const ambientGlowStyle = {
   background:
-    'radial-gradient(circle, rgba(201, 162, 90, 0.08) 0%, rgba(201, 162, 90, 0.03) 40%, transparent 70%)',
+    'radial-gradient(circle, rgba(var(--rgb-gold-accent), 0.08) 0%, rgba(var(--rgb-gold-accent), 0.03) 40%, transparent 70%)',
 };
 
-// Cinzel title bloom per DESIGN_REFERENCE.md §3.4 — gold halo text-shadow
+// Display title bloom per DESIGN_REFERENCE.md §3.4 — gold halo text-shadow
 // has no static Tailwind counterpart.
 const titleBloomStyle = {
-  textShadow: '0 2px 16px rgba(201, 162, 90, 0.25)',
+  textShadow: 'var(--shadow-title-neutral)',
 };
 
 export function UnauthenticatedShell() {

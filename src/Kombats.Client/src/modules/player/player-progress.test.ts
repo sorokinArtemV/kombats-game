@@ -33,6 +33,7 @@ describe('snapshotCharacter', () => {
       revision: 3,
       totalXp: 1250,
       level: 5,
+      avatarId: 'shadow_oni',
     };
     expect(snapshotCharacter(character)).toEqual({
       totalXp: 1250,

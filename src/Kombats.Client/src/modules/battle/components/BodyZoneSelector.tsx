@@ -3,7 +3,7 @@ import { clsx } from 'clsx';
 import { motion, useReducedMotion } from 'motion/react';
 import { useBattlePhase, useBattleActions, useBattleConnectionState } from '../hooks';
 import { ALL_ZONES, VALID_BLOCK_PAIRS, isValidBlockPair } from '../zones';
-import silhouetteSrc from '@/ui/assets/fighters/silhouette.png';
+import silhouetteSrc from '@/ui/assets/silhouette.png';
 import mitsudamoeSrc from '@/ui/assets/icons/mitsudamoe.png';
 import type { BattleZone } from '@/types/battle';
 
@@ -93,20 +93,20 @@ const silhouetteOnlyMask: React.CSSProperties = {
 
 const silhouetteBaseStyle: React.CSSProperties = {
   ...silhouetteOnlyMask,
-  background: 'rgb(10, 14, 22)',
+  background: 'var(--color-silhouette)',
   filter:
-    'drop-shadow(0 0 2px rgba(201, 162, 90, 0.15)) drop-shadow(0 10px 24px rgba(0,0,0,0.6))',
+    'drop-shadow(0 0 2px rgba(var(--rgb-gold-accent), 0.15)) drop-shadow(0 10px 24px rgba(var(--rgb-black), 0.6))',
 };
 
 const warmBackdropStyle: React.CSSProperties = {
   inset: '-8% -14%',
   background:
-    'radial-gradient(58% 55% at 50% 55%, rgba(201,169,97,0.05) 0%, rgba(15,20,25,0) 70%)',
+    'radial-gradient(58% 55% at 50% 55%, rgba(var(--rgb-gold), 0.05) 0%, rgba(var(--rgb-ink-navy), 0) 70%)',
 };
 
 const tacticalGridStyle: React.CSSProperties = {
   backgroundImage:
-    'radial-gradient(circle, rgba(201,162,90,0.12) 1px, transparent 1.5px)',
+    'radial-gradient(circle, rgba(var(--rgb-gold-accent), 0.12) 1px, transparent 1.5px)',
   backgroundSize: '12px 12px',
   WebkitMaskImage:
     'radial-gradient(ellipse at center, black 50%, transparent 90%)',
@@ -114,11 +114,12 @@ const tacticalGridStyle: React.CSSProperties = {
 };
 
 // DESIGN_REFERENCE.md §3.13 — selected radial fill + hover flat fill.
-function selectedFillBackground(rgb: string): string {
-  return `radial-gradient(ellipse at center, rgba(${rgb}, 0.7) 0%, rgba(${rgb}, 0.3) 60%, rgba(${rgb}, 0) 100%)`;
+// Token name (e.g. '--rgb-crimson') resolves to the channel triple at runtime.
+function selectedFillBackground(rgbVar: string): string {
+  return `radial-gradient(ellipse at center, rgba(var(${rgbVar}), 0.7) 0%, rgba(var(${rgbVar}), 0.3) 60%, rgba(var(${rgbVar}), 0) 100%)`;
 }
-const ATTACK_RGB = '192, 55, 68';
-const BLOCK_RGB = '90, 138, 122';
+const ATTACK_RGB = '--rgb-crimson';
+const BLOCK_RGB = '--rgb-jade';
 
 // Keyframes for the selected zone pulse. Injected via <style> inside the
 // component so this is self-contained and does not pollute global CSS.
@@ -208,7 +209,7 @@ export function BodyZoneSelector() {
               mode="attack"
               headerLabel="Attack"
               headerColor="var(--color-kombats-crimson-light)"
-              headerGlow="0 2px 14px rgba(192, 55, 68, 0.35)"
+              headerGlow="0 2px 14px rgba(var(--rgb-crimson), 0.35)"
               selected={
                 actions.selectedAttackZone
                   ? [actions.selectedAttackZone]
@@ -225,7 +226,7 @@ export function BodyZoneSelector() {
               mode="block"
               headerLabel="Block"
               headerColor="var(--color-kombats-jade-light)"
-              headerGlow="0 2px 14px rgba(90, 138, 122, 0.35)"
+              headerGlow="0 2px 14px rgba(var(--rgb-jade), 0.35)"
               selected={
                 actions.selectedBlockPair
                   ? [actions.selectedBlockPair[0], actions.selectedBlockPair[1]]
@@ -351,8 +352,8 @@ function SilhouetteColumn({
 
   const cornerColor =
     mode === 'attack'
-      ? 'rgba(192, 55, 68, 0.35)'
-      : 'rgba(90, 138, 122, 0.35)';
+      ? 'rgba(var(--rgb-crimson), 0.35)'
+      : 'rgba(var(--rgb-jade), 0.35)';
 
   return (
     <div className="relative flex flex-col items-center gap-3">
@@ -419,7 +420,7 @@ function SilhouetteColumn({
           <ZoneFill
             key={`hover-${hoverZone}`}
             zoneGradient={bandGradient(hoverZone)}
-            background={`rgba(${rgb}, 0.25)`}
+            background={`rgba(var(${rgb}), 0.25)`}
             hover
           />
         )}
@@ -472,7 +473,7 @@ function SilhouetteColumn({
             fontStyle: 'italic',
             fontWeight: 400,
             letterSpacing: '0.04em',
-            color: 'rgba(232,232,240,0.48)',
+            color: 'var(--color-text-muted)',
           }}
         >
           {placeholder}
@@ -578,12 +579,12 @@ function LockedInSpinner({ reduceMotion }: { reduceMotion: boolean }) {
         className="pointer-events-none absolute h-[200px] w-[200px] rounded-full"
         style={{
           background:
-            'radial-gradient(circle, rgba(201, 162, 90, 0.18) 0%, rgba(201, 162, 90, 0.08) 35%, rgba(201, 162, 90, 0.03) 60%, transparent 80%)',
+            'radial-gradient(circle, rgba(var(--rgb-gold-accent), 0.18) 0%, rgba(var(--rgb-gold-accent), 0.08) 35%, rgba(var(--rgb-gold-accent), 0.03) 60%, transparent 80%)',
         }}
       />
       <motion.div
         className="pointer-events-none absolute h-[140px] w-[140px] rounded-full"
-        style={{ border: '1px solid rgba(201, 162, 90, 0.15)' }}
+        style={{ border: '1px solid rgba(var(--rgb-gold-accent), 0.15)' }}
         animate={reduceMotion ? undefined : { rotate: -360 }}
         transition={
           reduceMotion

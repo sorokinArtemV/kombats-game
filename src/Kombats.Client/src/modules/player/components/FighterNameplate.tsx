@@ -12,14 +12,14 @@ import { usePlayerStore } from '../store';
 const halo: React.CSSProperties = {
   inset: '-38px -56px',
   background:
-    'radial-gradient(ellipse 68% 62% at center, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.38) 48%, rgba(0,0,0,0) 88%)',
+    'radial-gradient(ellipse 68% 62% at center, rgba(var(--rgb-black), 0.62) 0%, rgba(var(--rgb-black), 0.38) 48%, rgba(var(--rgb-black), 0) 88%)',
   filter: 'blur(22px)',
 };
 
 // DESIGN_REFERENCE.md §5.18 — double black drop-shadow on the display name.
 const nameShadow: React.CSSProperties = {
   textShadow:
-    '0 2px 8px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.7)',
+    '0 2px 8px rgba(var(--rgb-black), 0.95), 0 0 20px rgba(var(--rgb-black), 0.7)',
 };
 
 // DESIGN_REFERENCE.md §3.18 — color-mix KPI tile tint.
@@ -146,7 +146,7 @@ export function FighterNameplate() {
           aria-expanded={open}
           aria-label={open ? 'Hide fighter stats' : 'Show fighter stats'}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-kombats-moon-silver transition-colors duration-150 hover:text-accent-text focus:outline-none focus-visible:text-accent-text"
-          style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.9))' }}
+          style={{ filter: 'drop-shadow(0 2px 4px rgba(var(--rgb-black), 0.9))' }}
         >
           <Chevron open={open} />
         </button>

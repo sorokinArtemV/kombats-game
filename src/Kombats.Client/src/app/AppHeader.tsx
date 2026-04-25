@@ -8,13 +8,13 @@ import { usePlayerStore } from '@/modules/player/store';
 // utility (multi-stop linear-gradient with alpha values).
 const headerSurfaceStyle = {
   background:
-    'linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(15,20,28,0.35) 50%, transparent 100%)',
+    'linear-gradient(to bottom, rgba(var(--rgb-black), 0.55) 0%, rgba(var(--rgb-ink-navy), 0.35) 50%, transparent 100%)',
 };
 
-// Cinzel wordmark bloom (the gold halo behind the KOMBATS letters).
+// Display wordmark bloom (the gold halo behind the KOMBATS letters).
 // DESIGN_REFERENCE.md §3.4 / §5.8.
 const wordmarkBloomStyle = {
-  textShadow: '0 2px 12px rgba(201, 162, 90, 0.3)',
+  textShadow: 'var(--shadow-title-soft)',
 };
 
 export function AppHeader() {
@@ -48,8 +48,7 @@ export function AppHeader() {
               {
                 ['--kombats-diamond-size' as string]: '36px',
                 ['--kombats-diamond-glyph-size' as string]: '18px',
-                boxShadow:
-                  'inset 0 0 0 1px rgba(201, 162, 90, 0.08), 0 0 14px rgba(201, 162, 90, 0.18)',
+                boxShadow: 'var(--shadow-accent-soft)',
               } as React.CSSProperties
             }
           >

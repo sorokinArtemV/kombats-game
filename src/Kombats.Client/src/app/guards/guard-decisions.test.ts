@@ -44,6 +44,7 @@ function mkCharacter(state: CharacterResponse['onboardingState']): CharacterResp
     unspentPoints: 0,
     onboardingState: state,
     revision: 1,
+    avatarId: 'shadow_oni',
   };
 }
 

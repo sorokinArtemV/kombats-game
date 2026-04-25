@@ -20,7 +20,7 @@ function getErrorMessage(error: unknown): string {
 // Cinzel name bloom matching DESIGN_REFERENCE.md §3.4 — gold halo behind
 // the display name.
 const nameBloomStyle = {
-  textShadow: '0 2px 12px rgba(201, 162, 90, 0.3)',
+  textShadow: 'var(--shadow-title-soft)',
 };
 
 export function PlayerCard({ playerId, open, onClose }: PlayerCardProps) {

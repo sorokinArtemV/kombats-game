@@ -3,20 +3,21 @@ import { Button } from '@/ui/components/Button';
 import { SearchingIndicator } from '../components/SearchingIndicator';
 import { useMatchmaking, useMatchmakingPolling } from '../hooks';
 import { FighterNameplate } from '@/modules/player/components/FighterNameplate';
+import { usePlayerStore } from '@/modules/player/store';
+import { getAvatarAsset } from '@/modules/player/avatar-assets';
 import bgScene from '@/ui/assets/backgrounds/bg-1.png';
-import fighterSprite from '@/ui/assets/fighters/charackter.png';
 
 // DESIGN_REFERENCE.md §1.3 / §1.4 — same lobby scene + bottom ink-navy
 // gradient overlay, reused across the queue search screen so the transition
 // from lobby to matchmaking is visually seamless.
 const sceneOverlayStyle: React.CSSProperties = {
   background:
-    'linear-gradient(to bottom, rgba(15, 20, 25, 0.45) 0%, rgba(15, 20, 25, 0.15) 40%, rgba(15, 20, 25, 0.88) 100%)',
+    'linear-gradient(to bottom, rgba(var(--rgb-ink-navy), 0.45) 0%, rgba(var(--rgb-ink-navy), 0.15) 40%, rgba(var(--rgb-ink-navy), 0.88) 100%)',
 };
 
 // DESIGN_REFERENCE.md §3.16 — oversized sprite drop shadow.
 const spriteStyle: React.CSSProperties = {
-  filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.9))',
+  filter: 'drop-shadow(0 25px 50px rgba(var(--rgb-black), 0.9))',
 };
 
 /**
@@ -36,6 +37,7 @@ export function SearchingScreen() {
   } = useMatchmaking();
   const [elapsed, setElapsed] = useState(0);
   const [cancelling, setCancelling] = useState(false);
+  const character = usePlayerStore((s) => s.character);
 
   useMatchmakingPolling();
 
@@ -93,7 +95,7 @@ export function SearchingScreen() {
         <div className="pointer-events-auto flex flex-col items-start gap-4">
           <FighterNameplate />
           <img
-            src={fighterSprite}
+            src={getAvatarAsset(character?.avatarId)}
             alt=""
             aria-hidden
             className="pointer-events-none h-[min(82vh,720px)] w-auto object-contain"
@@ -110,7 +112,7 @@ export function SearchingScreen() {
             </span>
             <h1
               className="font-display text-[16px] font-semibold uppercase tracking-[0.24em] text-accent-text"
-              style={{ textShadow: '0 2px 12px rgba(201, 162, 90, 0.3)' }}
+              style={{ textShadow: 'var(--shadow-title-soft)' }}
             >
               {headerText}
             </h1>

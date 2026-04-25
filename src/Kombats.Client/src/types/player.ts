@@ -10,4 +10,5 @@ export interface PlayerCardResponse {
   vitality: number;
   wins: number;
   losses: number;
+  avatarId: string;
 }
