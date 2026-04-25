@@ -164,7 +164,7 @@ function NavPlaceholder({ icon, label }: NavPlaceholderProps) {
     <span
       aria-disabled="true"
       title="Coming soon"
-      className="nav-item relative inline-flex cursor-not-allowed items-center gap-1.5 px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-text-muted transition-colors duration-200 hover:text-accent-primary"
+      className="nav-item relative inline-flex cursor-not-allowed items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-text-muted transition-colors duration-200 hover:text-accent-primary"
     >
       {icon}
       <span>{label}</span>

@@ -66,7 +66,7 @@ export function LobbyScreen() {
       </div>
 
       <div
-        className="absolute left-1/2 top-1/2 z-20 w-80 max-w-[calc(100%-3rem)] -translate-x-1/2"
+        className="absolute left-1/2 top-1/2 z-20 w-80 max-w-[calc(100%-3rem)]"
         style={{ transform: 'translate(-50%, -55%)' }}
       >
         {hasUnspentPoints ? (

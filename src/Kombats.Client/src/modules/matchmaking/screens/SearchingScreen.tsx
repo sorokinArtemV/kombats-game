@@ -7,23 +7,22 @@ import { usePlayerStore } from '@/modules/player/store';
 import { getAvatarAsset } from '@/modules/player/avatar-assets';
 import bgScene from '@/ui/assets/backgrounds/bg-1.png';
 
-// DESIGN_REFERENCE.md §1.3 / §1.4 — same lobby scene + bottom ink-navy
-// gradient overlay, reused across the queue search screen so the transition
-// from lobby to matchmaking is visually seamless.
+// DESIGN_REFERENCE.md §1.3 — identical to LobbyScreen so the search state
+// reads as a center-overlay swap, not a scene change.
 const sceneOverlayStyle: React.CSSProperties = {
   background:
-    'linear-gradient(to bottom, rgba(var(--rgb-ink-navy), 0.45) 0%, rgba(var(--rgb-ink-navy), 0.15) 40%, rgba(var(--rgb-ink-navy), 0.88) 100%)',
+    'linear-gradient(to bottom, transparent 0%, rgba(var(--rgb-ink-navy), 0.30) 60%, rgba(var(--rgb-ink-navy), 0.60) 100%)',
 };
 
 // DESIGN_REFERENCE.md §3.16 — oversized sprite drop shadow.
 const spriteStyle: React.CSSProperties = {
   filter: 'drop-shadow(0 25px 50px rgba(var(--rgb-black), 0.9))',
+  marginBottom: '-17vh',
 };
 
 /**
- * Queue search screen — same scene composition as LobbyScreen with the
- * centered `QueueCard` switched to its `searching` state
- * (DESIGN_REFERENCE.md §1.4 + §5.10).
+ * Queue search screen — pixel-identical to LobbyScreen with the centered
+ * QueueCard swapped to its searching variant (DESIGN_REFERENCE.md §5.10).
  *
  * `useMatchmakingPolling()` must stay at the top of the component so the
  * poller's lifecycle tracks the mount, not any conditional branch.
@@ -62,19 +61,6 @@ export function SearchingScreen() {
     }
   };
 
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
-  const timeDisplay = `${minutes}:${String(seconds).padStart(2, '0')}`;
-
-  const headerText =
-    status === 'matched'
-      ? 'Opponent found — preparing battle…'
-      : status === 'battleTransition'
-        ? 'Entering battle…'
-        : 'Searching for opponent…';
-
-  const canCancel = status === 'searching' || status === 'matched';
-
   return (
     // `-m-3` cancels LobbyShell's p-3 so the scene reaches the edges of the
     // available region, matching the lobby's full-bleed composition.
@@ -91,80 +77,120 @@ export function SearchingScreen() {
         style={sceneOverlayStyle}
       />
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-start pl-6 sm:pl-10">
-        <div className="pointer-events-auto flex flex-col items-start gap-4">
+      <div className="pointer-events-none absolute bottom-0 left-0 z-10 flex flex-col items-center">
+        <div className="pointer-events-auto">
           <FighterNameplate />
-          <img
-            src={getAvatarAsset(character?.avatarId)}
-            alt=""
-            aria-hidden
-            className="pointer-events-none h-[min(82vh,720px)] w-auto object-contain"
-            style={spriteStyle}
-          />
         </div>
+        <img
+          src={getAvatarAsset(character?.avatarId)}
+          alt=""
+          aria-hidden
+          className="pointer-events-none h-[82vh] w-auto object-contain"
+          style={spriteStyle}
+        />
       </div>
 
-      <div className="absolute left-1/2 top-1/2 z-20 w-[min(420px,calc(100%-3rem))] -translate-x-1/2 -translate-y-[55%]">
-        <section className="rounded-md border-[0.5px] border-border-subtle bg-glass p-6 shadow-[var(--shadow-panel-lift)] backdrop-blur-[20px]">
-          <header className="flex flex-col items-center gap-1 pb-5 text-center">
-            <span className="text-[10px] font-medium uppercase tracking-[0.32em] text-text-muted">
-              Arena
-            </span>
-            <h1
-              className="font-display text-[16px] font-semibold uppercase tracking-[0.24em] text-accent-text"
-              style={{ textShadow: 'var(--shadow-title-soft)' }}
-            >
-              {headerText}
-            </h1>
-          </header>
-
-          <div className="flex flex-col items-center gap-4">
-            <SearchingIndicator />
-
-            {status === 'searching' && (
-              <div
-                className="flex items-center gap-2 font-display text-[13px] tabular-nums text-accent-text"
-                aria-live="polite"
-              >
-                <ClockIcon />
-                <span>{timeDisplay}</span>
-              </div>
-            )}
-
-            {consecutiveFailures >= 3 && (
-              <p
-                className="text-center text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light"
-                role="alert"
-              >
-                Connection issues — retrying…
-              </p>
-            )}
-
-            {canCancel && (
-              <Button
-                variant="secondary"
-                onClick={handleCancel}
-                loading={cancelling}
-                disabled={cancelling}
-              >
-                Cancel Search
-              </Button>
-            )}
-          </div>
-
-          <div className="my-5 h-px bg-border-divider" aria-hidden />
-
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-text-muted">
-              Finding
-            </span>
-            <span className="font-display text-[11px] uppercase tracking-[0.18em] text-accent-text">
-              Worthy Challenger
-            </span>
-          </div>
-        </section>
+      <div
+        className="absolute left-1/2 top-1/2 z-20 w-80 max-w-[calc(100%-3rem)]"
+        style={{ transform: 'translate(-50%, -55%)' }}
+      >
+        <SearchingCard
+          status={status}
+          elapsedSeconds={elapsed}
+          consecutiveFailures={consecutiveFailures}
+          cancelling={cancelling}
+          onCancel={handleCancel}
+        />
       </div>
     </div>
+  );
+}
+
+interface SearchingCardProps {
+  status: ReturnType<typeof useMatchmaking>['status'];
+  elapsedSeconds: number;
+  consecutiveFailures: number;
+  cancelling: boolean;
+  onCancel: () => void;
+}
+
+/**
+ * DESIGN_REFERENCE.md §5.10 (searching state). Glass panel mirroring the
+ * lobby QueueCard geometry with a Mitsudomoe spinner, elapsed timer, cancel
+ * action, and the same Finding / Worthy Challenger footer.
+ */
+function SearchingCard({
+  status,
+  elapsedSeconds,
+  consecutiveFailures,
+  cancelling,
+  onCancel,
+}: SearchingCardProps) {
+  const title =
+    status === 'matched'
+      ? 'Opponent Found'
+      : status === 'battleTransition'
+        ? 'Entering Battle'
+        : 'Searching for Opponent';
+  const showElapsed = status === 'searching';
+  const canCancel = status === 'searching' || status === 'matched';
+
+  return (
+    <section className="rounded-md border-[0.5px] border-border-subtle bg-glass shadow-[var(--shadow-panel)] backdrop-blur-[20px]">
+      <div className="p-6">
+        <div className="mb-4 px-0 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-accent-text">
+          {title}
+        </div>
+
+        <div className="mb-4 flex justify-center">
+          <SearchingIndicator />
+        </div>
+
+        {showElapsed && (
+          <div
+            className="mb-4 flex items-center justify-center gap-2 text-text-secondary"
+            aria-live="polite"
+          >
+            <ClockIcon />
+            <span className="text-[18px] tabular-nums">{elapsedSeconds}s</span>
+          </div>
+        )}
+
+        {consecutiveFailures >= 3 && (
+          <p
+            className="mb-4 text-center text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light"
+            role="alert"
+          >
+            Connection issues — retrying…
+          </p>
+        )}
+
+        {canCancel && (
+          <div className="flex justify-center">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={onCancel}
+              loading={cancelling}
+              disabled={cancelling}
+            >
+              Cancel Search
+            </Button>
+          </div>
+        )}
+
+        <div className="my-4 border-t border-border-divider" aria-hidden />
+
+        <div className="text-center">
+          <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-text-muted">
+            Finding
+          </span>
+          <span className="mt-1 block text-[16px] font-medium uppercase tracking-[0.08em] text-accent-text">
+            Worthy Challenger
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }
 

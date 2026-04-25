@@ -38,7 +38,7 @@ export function SearchingIndicator() {
       <motion.img
         src={mitsudamoeSrc}
         alt=""
-        className="pointer-events-none h-[88px] w-[88px] opacity-50 mix-blend-screen"
+        className="pointer-events-none h-[88px] w-[88px] opacity-50"
         animate={reduceMotion ? undefined : { rotate: 360 }}
         transition={
           reduceMotion

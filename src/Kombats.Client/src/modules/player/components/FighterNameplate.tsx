@@ -7,6 +7,7 @@ import { playerKeys } from '@/app/query-client';
 import * as playersApi from '@/transport/http/endpoints/players';
 import { useAuthStore } from '@/modules/auth/store';
 import { usePlayerStore } from '../store';
+import { deriveMaxHp } from '../hp-formula';
 
 // DESIGN_REFERENCE.md §5.18 — soft elliptical black halo behind the name so
 // text stays legible over bright scene art. Cannot be expressed as a Tailwind
@@ -70,6 +71,9 @@ export function FighterNameplate() {
   const losses = cardQuery.data?.losses ?? 0;
   const total = wins + losses;
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+  const maxHp = deriveMaxHp(character.vitality);
+  const hp = maxHp;
 
   return (
     <div className="relative z-20 mb-3 w-[420px] max-w-[calc(100vw-3rem)]">
@@ -137,7 +141,8 @@ export function FighterNameplate() {
           </h2>
         </div>
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center gap-2">
+          <HpBar hp={hp} maxHp={maxHp} />
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -150,6 +155,53 @@ export function FighterNameplate() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// DESIGN_REFERENCE.md §3.11 — parallelogram HP bar with jade gradient fill.
+// Matches design_V2/GameScreens.tsx lobby HpBar (non-mirrored variant).
+function HpBar({ hp, maxHp }: { hp: number; maxHp: number }) {
+  const pct = maxHp > 0 ? Math.max(0, Math.min(100, (hp / maxHp) * 100)) : 0;
+  return (
+    <div
+      className="relative h-7 flex-1"
+      style={{
+        clipPath: 'polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)',
+        background: 'rgba(var(--rgb-ink-navy), 0.75)',
+        border: '0.5px solid rgba(var(--rgb-white), 0.08)',
+      }}
+    >
+      <div
+        aria-hidden
+        className="absolute inset-y-0 left-0 transition-[width] duration-300 ease-out"
+        style={{
+          width: `${pct}%`,
+          background:
+            'linear-gradient(180deg, var(--palette-hp-jade-1) 0%, var(--palette-hp-jade-2) 55%, var(--palette-hp-jade-3) 100%)',
+        }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-px"
+          style={{ background: 'rgba(var(--rgb-white), 0.22)' }}
+        />
+      </div>
+      <span
+        className="absolute inset-0 flex items-center justify-end font-display tabular-nums text-text-primary"
+        style={{
+          padding: '0 14px',
+          fontStyle: 'italic',
+          fontSize: 13,
+          letterSpacing: '0.04em',
+          fontFeatureSettings: '"tnum"',
+          textShadow: 'var(--shadow-text-on-glass-strong)',
+        }}
+      >
+        {hp}
+        <span className="mx-[3px] opacity-55">/</span>
+        {maxHp}
+      </span>
     </div>
   );
 }
