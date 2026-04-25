@@ -12,14 +12,13 @@ interface DirectMessagePanelProps {
   otherPlayerId: string;
   displayName: string;
   onViewProfile: (playerId: string) => void;
-  onBack: () => void;
+  // Optional — only the legacy Sheet-based mount needs a back button. When the
+  // panel is rendered inline as a tab, the tab's own × handles dismissal.
+  onBack?: () => void;
 }
 
 export function DirectMessagePanel({
   otherPlayerId,
-  displayName,
-  onViewProfile,
-  onBack,
 }: DirectMessagePanelProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -93,27 +92,6 @@ export function DirectMessagePanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b-[0.5px] border-border-subtle px-4 py-3">
-        <button
-          onClick={onBack}
-          className="rounded-sm p-1 text-text-muted transition-colors duration-150 hover:text-kombats-gold"
-          aria-label="Back to conversations"
-        >
-          &#x2190;
-        </button>
-        <span
-          aria-hidden
-          className="h-1.5 w-1.5 shrink-0 rounded-full bg-kombats-jade"
-          style={{ boxShadow: '0 0 6px var(--color-kombats-jade)' }}
-        />
-        <button
-          onClick={() => onViewProfile(otherPlayerId)}
-          className="flex-1 truncate text-left text-[11px] font-medium uppercase tracking-[0.18em] text-text-secondary transition-colors duration-150 hover:text-kombats-gold"
-        >
-          {displayName}
-        </button>
-      </div>
-
       <div className="kombats-scroll flex-1 overflow-y-auto px-4 py-3">
         {historyQuery.isPending ? (
           <div className="flex items-center justify-center py-8">
@@ -124,7 +102,7 @@ export function DirectMessagePanel({
             No messages yet. Say hello!
           </p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {effectiveHasMore && (
               <button
                 onClick={handleLoadMore}
@@ -135,18 +113,19 @@ export function DirectMessagePanel({
               </button>
             )}
             {messages.map((msg) => (
-              <div key={msg.messageId} className="flex flex-col gap-0.5">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xs font-semibold text-accent-text">
-                    {msg.sender.displayName}
-                  </span>
-                  <span className="text-[10px] text-text-muted tabular-nums">
-                    {formatTimestamp(msg.sentAt)}
-                  </span>
-                </div>
-                <p className="break-words pl-2 text-sm text-text-secondary">
+              <div
+                key={msg.messageId}
+                className="flex items-baseline py-0.5"
+              >
+                <span className="shrink-0 text-xs font-semibold text-accent-text">
+                  {msg.sender.displayName}
+                </span>
+                <span className="ml-2 min-w-0 flex-1 break-words text-sm text-text-primary">
                   {msg.content}
-                </p>
+                </span>
+                <span className="ml-2 shrink-0 text-[11px] text-text-muted tabular-nums">
+                  {formatTimestamp(msg.sentAt)}
+                </span>
               </div>
             ))}
             <div ref={messagesEndRef} />

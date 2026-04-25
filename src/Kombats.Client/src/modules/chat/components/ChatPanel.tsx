@@ -36,20 +36,21 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps = {}) {
             No messages yet
           </p>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {messages.map((msg) => (
-              <div key={msg.messageId} className="flex flex-col gap-0.5">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xs font-semibold text-accent-text">
-                    {msg.sender.displayName}
-                  </span>
-                  <span className="text-[10px] text-text-muted tabular-nums">
-                    {formatTimestamp(msg.sentAt)}
-                  </span>
-                </div>
-                <p className="break-words pl-2 text-sm text-text-secondary">
+              <div
+                key={msg.messageId}
+                className="flex items-baseline py-0.5"
+              >
+                <span className="shrink-0 text-xs font-semibold text-accent-text">
+                  {msg.sender.displayName}
+                </span>
+                <span className="ml-2 min-w-0 flex-1 break-words text-sm text-text-primary">
                   {msg.content}
-                </p>
+                </span>
+                <span className="ml-2 shrink-0 text-[11px] text-text-muted tabular-nums">
+                  {formatTimestamp(msg.sentAt)}
+                </span>
               </div>
             ))}
             <div ref={messagesEndRef} />

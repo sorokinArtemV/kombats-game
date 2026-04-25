@@ -1,4 +1,6 @@
+import { MessageCircle } from 'lucide-react';
 import { usePlayerCard } from '../hooks';
+import { useAuthStore } from '@/modules/auth/store';
 import { Sheet } from '@/ui/components/Sheet';
 import { Spinner } from '@/ui/components/Spinner';
 import type { ApiError } from '@/types/api';
@@ -7,6 +9,7 @@ interface PlayerCardProps {
   playerId: string;
   open: boolean;
   onClose: () => void;
+  onSendMessage?: (playerId: string, displayName: string) => void;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -23,8 +26,16 @@ const nameBloomStyle = {
   textShadow: 'var(--shadow-title-soft)',
 };
 
-export function PlayerCard({ playerId, open, onClose }: PlayerCardProps) {
+export function PlayerCard({
+  playerId,
+  open,
+  onClose,
+  onSendMessage,
+}: PlayerCardProps) {
   const { data, isPending, isError, error } = usePlayerCard(playerId, open);
+  const currentIdentityId = useAuthStore((s) => s.userIdentityId);
+  const isSelf = currentIdentityId !== null && currentIdentityId === playerId;
+  const canSendMessage = !!onSendMessage && !isSelf;
 
   return (
     <Sheet open={open} onClose={onClose} title="Player Profile">
@@ -45,7 +56,7 @@ export function PlayerCard({ playerId, open, onClose }: PlayerCardProps) {
           <div className="flex flex-col gap-5">
             <div className="flex flex-col items-center gap-2 border-b-[0.5px] border-border-divider pb-5">
               <h3
-                className="font-display text-[22px] font-semibold uppercase tracking-[0.20em] text-kombats-gold"
+                className="font-display text-[22px] font-semibold uppercase tracking-[0.20em] text-accent-primary"
                 style={nameBloomStyle}
               >
                 {data.displayName}
@@ -76,6 +87,20 @@ export function PlayerCard({ playerId, open, onClose }: PlayerCardProps) {
                 <KpiTile label="Losses" value={data.losses} tone="crimson" />
               </div>
             </div>
+
+            {canSendMessage && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSendMessage!(playerId, data.displayName);
+                  onClose();
+                }}
+                className="flex items-center justify-center gap-2 rounded-sm border-[0.5px] border-kombats-gold/50 px-4 py-2.5 text-[11px] font-medium uppercase tracking-[0.24em] text-kombats-gold transition-colors duration-150 hover:bg-kombats-gold/10 focus:outline-none focus-visible:bg-kombats-gold/10"
+              >
+                <MessageCircle className="h-3.5 w-3.5" aria-hidden />
+                <span>Send Message</span>
+              </button>
+            )}
           </div>
         )}
       </div>

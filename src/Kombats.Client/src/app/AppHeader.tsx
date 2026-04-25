@@ -1,44 +1,98 @@
-import { useState } from 'react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { useCallback, useState, type FocusEvent } from 'react';
+import {
+  Bell,
+  Info,
+  LogOut,
+  Settings,
+  Store,
+  Swords,
+  Trophy,
+  UserCircle,
+} from 'lucide-react';
 import { useAuth } from '@/modules/auth/hooks';
-import { usePlayerStore } from '@/modules/player/store';
 
-// Glass header surface — fade-from-black gradient that lets scene content
-// peek through. DESIGN_REFERENCE.md §5.8 — not expressible as a Tailwind
-// utility (multi-stop linear-gradient with alpha values).
+// Glass header surface — multi-stop alpha gradient that can't be expressed
+// as a Tailwind utility, plus the `ease` timing curve for the border-color
+// reveal (Tailwind's default is ease-in-out). Mirrors the panelStyle in
+// design_V2/composed/TopNavBar.tsx exactly.
 const headerSurfaceStyle = {
   background:
-    'linear-gradient(to bottom, rgba(var(--rgb-black), 0.55) 0%, rgba(var(--rgb-ink-navy), 0.35) 50%, transparent 100%)',
+    'linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0%, rgba(15, 20, 28, 0.35) 50%, transparent 100%)',
+  transition: 'border-color 300ms ease',
 };
 
-// Display wordmark bloom (the gold halo behind the KOMBATS letters).
-// DESIGN_REFERENCE.md §3.4 / §5.8.
+// Content-row opacity transition uses ease (300ms) to match design_V2.
+const contentRowStyle = {
+  transition: 'opacity 300ms ease',
+};
+
+// Wordmark gold halo behind the KOMBATS letters.
 const wordmarkBloomStyle = {
   textShadow: 'var(--shadow-title-soft)',
 };
 
-export function AppHeader() {
-  const { displayName, logout } = useAuth();
-  const character = usePlayerStore((s) => s.character);
-  const [revealed, setRevealed] = useState(false);
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+}
 
-  const profileLabel = character?.name ?? displayName ?? 'Profile';
+const NAV_ITEMS: NavItem[] = [
+  {
+    id: 'game-info',
+    label: 'Game Info',
+    icon: <Info className="h-3.5 w-3.5" aria-hidden />,
+  },
+  {
+    id: 'leaderboard',
+    label: 'Leaderboard',
+    icon: <Trophy className="h-3.5 w-3.5" aria-hidden />,
+  },
+  {
+    id: 'shop',
+    label: 'Shop',
+    icon: <Store className="h-3.5 w-3.5" aria-hidden />,
+  },
+  {
+    id: 'training',
+    label: 'Training',
+    icon: <Swords className="h-3.5 w-3.5" aria-hidden />,
+  },
+  {
+    id: 'profile',
+    label: 'Profile',
+    icon: <UserCircle className="h-3.5 w-3.5" aria-hidden />,
+  },
+];
+
+export function AppHeader() {
+  const { logout } = useAuth();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const revealed = hovered || focused;
+
+  const handleBlur = useCallback((e: FocusEvent<HTMLElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setFocused(false);
+    }
+  }, []);
 
   return (
     <header
-      onMouseEnter={() => setRevealed(true)}
-      onMouseLeave={() => setRevealed(false)}
-      onFocus={() => setRevealed(true)}
-      onBlur={() => setRevealed(false)}
-      className={`relative w-full border-b transition-[border-color,opacity] duration-300 ${
-        revealed ? 'border-kombats-gold/40' : 'border-border-subtle'
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={handleBlur}
+      className={`relative w-full border-b backdrop-blur-[20px] ${
+        revealed ? 'border-accent-primary/40' : 'border-border-subtle'
       }`}
       style={headerSurfaceStyle}
     >
       <div
-        className={`flex items-center justify-between px-8 py-3 transition-opacity duration-300 ${
+        className={`flex items-center justify-between px-8 py-3 ${
           revealed ? 'opacity-100' : 'opacity-70'
         }`}
+        style={contentRowStyle}
       >
         <div className="flex items-center gap-3">
           <div
@@ -59,7 +113,7 @@ export function AppHeader() {
               The
             </span>
             <span
-              className="mt-1.5 font-display text-[22px] font-semibold uppercase leading-none tracking-[0.34em] text-kombats-gold"
+              className="mt-1.5 font-wordmark text-[22px] font-semibold leading-none tracking-[0.34em] text-accent-primary"
               style={wordmarkBloomStyle}
             >
               KOMBATS
@@ -67,83 +121,93 @@ export function AppHeader() {
           </div>
         </div>
 
-        <nav className="hidden flex-1 items-center justify-center gap-8 sm:flex">
-          <NavLink>News</NavLink>
-          <NavLink>Rules</NavLink>
-          <NavLink>FAQ</NavLink>
-          <NavLink>Community</NavLink>
-        </nav>
+        <nav className="flex items-center">
+          {NAV_ITEMS.map((item) => (
+            <NavPlaceholder
+              key={item.id}
+              icon={item.icon}
+              label={item.label}
+            />
+          ))}
 
-        <div className="flex items-center gap-4">
           <span
             aria-hidden
-            className="hidden h-5 w-px bg-border-subtle sm:block"
+            className="mx-2 h-5 w-px bg-border-subtle"
           />
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button
-                type="button"
-                className="flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-text-secondary transition-colors duration-150 hover:text-kombats-gold focus:outline-none focus-visible:text-kombats-gold data-[state=open]:text-kombats-gold"
-              >
-                <ProfileIcon />
-                <span className="max-w-[10rem] truncate normal-case tracking-normal">
-                  {profileLabel}
-                </span>
-              </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content
-                align="end"
-                sideOffset={8}
-                className="z-30 min-w-[10rem] overflow-hidden rounded-md border-[0.5px] border-border-subtle bg-glass py-1 shadow-[var(--shadow-panel)] backdrop-blur-[20px]"
-              >
-                <DropdownMenu.Item
-                  onSelect={() => {
-                    logout();
-                  }}
-                  className="block w-full cursor-pointer px-3 py-2 text-left text-[11px] uppercase tracking-[0.18em] text-text-secondary outline-none transition-colors duration-150 data-[highlighted]:bg-white/[0.04] data-[highlighted]:text-kombats-gold"
-                >
-                  Sign out
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-        </div>
+
+          <IconActionPlaceholder
+            icon={<Bell className="h-4 w-4" aria-hidden />}
+            label="Notifications"
+          />
+          <IconActionPlaceholder
+            icon={<Settings className="h-4 w-4" aria-hidden />}
+            label="Settings"
+          />
+          <IconActionButton
+            icon={<LogOut className="h-4 w-4" aria-hidden />}
+            label="Logout"
+            onClick={logout}
+          />
+        </nav>
       </div>
     </header>
   );
 }
 
-function NavLink({ children }: { children: React.ReactNode }) {
+interface NavPlaceholderProps {
+  icon: React.ReactNode;
+  label: string;
+}
+
+function NavPlaceholder({ icon, label }: NavPlaceholderProps) {
   return (
-    <button
-      type="button"
-      className="group relative px-1 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-text-muted transition-colors duration-150 hover:text-kombats-gold focus:outline-none focus-visible:text-kombats-gold"
+    <span
+      aria-disabled="true"
+      title="Coming soon"
+      className="nav-item relative inline-flex cursor-not-allowed items-center gap-1.5 px-3 py-1.5 text-[11px] uppercase tracking-[0.18em] text-text-muted transition-colors duration-200 hover:text-accent-primary"
     >
-      {children}
+      {icon}
+      <span>{label}</span>
       <span
         aria-hidden
-        className="absolute -bottom-0.5 left-1/2 h-px w-0 -translate-x-1/2 bg-kombats-gold transition-all duration-300 group-hover:w-full group-focus-visible:w-full"
+        className="pointer-events-none absolute bottom-0 left-1/2 h-px w-0 -translate-x-1/2 bg-accent-primary transition-all duration-300 [.nav-item:hover_&]:w-full [.nav-item:focus_&]:w-full"
       />
-    </button>
+    </span>
   );
 }
 
-function ProfileIcon() {
+interface IconActionProps {
+  icon: React.ReactNode;
+  label: string;
+}
+
+function IconActionPlaceholder({ icon, label }: IconActionProps) {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
+    <span
+      role="button"
+      aria-label={label}
+      aria-disabled="true"
+      title="Coming soon"
+      className="cursor-not-allowed p-2 text-text-muted"
     >
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
+      {icon}
+    </span>
+  );
+}
+
+interface IconActionButtonProps extends IconActionProps {
+  onClick: () => void;
+}
+
+function IconActionButton({ icon, label, onClick }: IconActionButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="p-2 text-text-muted transition-colors hover:text-accent-primary focus:text-accent-primary focus:outline-none"
+    >
+      {icon}
+    </button>
   );
 }

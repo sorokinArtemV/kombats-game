@@ -52,7 +52,7 @@ export function UnauthenticatedShell() {
 
         <div className="flex flex-col items-center gap-2">
           <h1
-            className="font-display text-[28px] font-bold uppercase leading-none tracking-[0.20em] text-kombats-gold"
+            className="font-display text-[28px] font-bold uppercase leading-none tracking-[0.20em] text-accent-primary"
             style={titleBloomStyle}
           >
             The Kombats

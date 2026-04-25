@@ -202,6 +202,7 @@
   --font-display: 'Noto Sans JP', 'Inter', sans-serif;
   --font-jp: 'Noto Sans JP', 'Inter', sans-serif;
   --font-glyph: 'Noto Serif JP', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  --font-wordmark: 'Cinzel', 'Trajan Pro', 'Noto Serif JP', serif;
   --font-mono: 'JetBrains Mono', monospace;
 
   /* Label typography */

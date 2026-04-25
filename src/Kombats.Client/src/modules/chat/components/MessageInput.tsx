@@ -70,7 +70,7 @@ export function MessageInput({
 
   return (
     <div className={clsx('flex flex-col gap-1.5', className)}>
-      <div className="flex items-center gap-2 rounded-full border-[0.5px] border-border-subtle bg-glass-subtle px-4 py-1.5 transition-colors focus-within:border-accent-muted">
+      <div className="flex items-center gap-2 rounded-full border border-border-subtle bg-glass px-3.5 py-1.5 transition-colors focus-within:border-accent-muted">
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
@@ -94,23 +94,13 @@ export function MessageInput({
           Send
         </button>
       </div>
-      <div className="flex justify-between px-1 text-[10px]">
-        {rateLimitState.isLimited ? (
+      {rateLimitState.isLimited && (
+        <div className="px-1 text-[10px]">
           <span className="uppercase tracking-[0.18em] text-warning">
             Rate limited — wait a moment
           </span>
-        ) : (
-          <span />
-        )}
-        <span
-          className={clsx(
-            'tabular-nums',
-            content.length > MAX_MESSAGE_LENGTH ? 'text-error' : 'text-text-muted',
-          )}
-        >
-          {content.length}/{MAX_MESSAGE_LENGTH}
-        </span>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

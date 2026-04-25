@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap');
 @import 'tailwindcss';
 @import './ui/theme/tokens.css';
 @import './ui/theme/fonts.css';
@@ -110,6 +110,7 @@
   --font-display: var(--font-display);
   --font-jp: var(--font-jp);
   --font-glyph: var(--font-glyph);
+  --font-wordmark: var(--font-wordmark);
   --font-mono: var(--font-mono);
 
   /* ---- Geometry ---- */
@@ -189,7 +190,7 @@ body {
 }
 .kombats-diamond-glyph {
   transform: rotate(-45deg);
-  color: var(--color-kombats-gold);
+  color: var(--color-accent-primary);
   font-family: var(--font-glyph);
   font-size: var(--kombats-diamond-glyph-size, 30px);
   line-height: 1;

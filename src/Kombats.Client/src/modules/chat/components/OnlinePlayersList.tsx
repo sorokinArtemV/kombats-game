@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useOnlinePlayers, useOnlineCount } from '../hooks';
+import { useAuthStore } from '@/modules/auth/store';
 import type { OnlinePlayerResponse } from '@/types/chat';
 
 interface OnlinePlayersListProps {
@@ -10,6 +11,7 @@ interface OnlinePlayersListProps {
 export function OnlinePlayersList({ onSendMessage, onViewProfile }: OnlinePlayersListProps) {
   const onlinePlayers = useOnlinePlayers();
   const onlineCount = useOnlineCount();
+  const currentIdentityId = useAuthStore((s) => s.userIdentityId);
 
   const playerList = useMemo<OnlinePlayerResponse[]>(
     () => Array.from(onlinePlayers.values()),
@@ -35,14 +37,20 @@ export function OnlinePlayersList({ onSendMessage, onViewProfile }: OnlinePlayer
           </p>
         ) : (
           <ul className="flex flex-col px-2">
-            {playerList.map((player) => (
-              <PlayerRow
-                key={player.playerId}
-                player={player}
-                onViewProfile={onViewProfile}
-                onSendMessage={onSendMessage}
-              />
-            ))}
+            {playerList.map((player) => {
+              const isSelf =
+                currentIdentityId !== null &&
+                player.playerId.toLowerCase() === currentIdentityId.toLowerCase();
+              return (
+                <PlayerRow
+                  key={player.playerId}
+                  player={player}
+                  isSelf={isSelf}
+                  onViewProfile={onViewProfile}
+                  onSendMessage={onSendMessage}
+                />
+              );
+            })}
           </ul>
         )}
       </div>
@@ -52,10 +60,12 @@ export function OnlinePlayersList({ onSendMessage, onViewProfile }: OnlinePlayer
 
 function PlayerRow({
   player,
+  isSelf,
   onViewProfile,
   onSendMessage,
 }: {
   player: OnlinePlayerResponse;
+  isSelf: boolean;
   onViewProfile?: (playerId: string) => void;
   onSendMessage?: (playerId: string, displayName: string) => void;
 }) {
@@ -75,7 +85,7 @@ function PlayerRow({
           {player.displayName}
         </span>
       </button>
-      {onSendMessage && (
+      {onSendMessage && !isSelf && (
         <button
           type="button"
           onClick={() => onSendMessage(player.playerId, player.displayName)}

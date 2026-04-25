@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'motion/react';
+import { Sword, Zap, TrendingUp, Heart } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { playerKeys } from '@/app/query-client';
 import * as playersApi from '@/transport/http/endpoints/players';
 import { useAuthStore } from '@/modules/auth/store';
@@ -22,6 +24,11 @@ const nameShadow: React.CSSProperties = {
     '0 2px 8px rgba(var(--rgb-black), 0.95), 0 0 20px rgba(var(--rgb-black), 0.7)',
 };
 
+// Chevron drop-shadow per design — softer (1px / 3px) than the battle FighterCard.
+const chevronShadow: React.CSSProperties = {
+  filter: 'drop-shadow(0 1px 3px rgba(var(--rgb-black), 0.9))',
+};
+
 // DESIGN_REFERENCE.md §3.18 — color-mix KPI tile tint.
 function tileStyle(tone: 'jade' | 'crimson'): React.CSSProperties {
   const toneVar = tone === 'jade' ? 'var(--color-kombats-jade)' : 'var(--color-kombats-crimson)';
@@ -30,6 +37,15 @@ function tileStyle(tone: 'jade' | 'crimson'): React.CSSProperties {
     border: `1px solid color-mix(in srgb, ${toneVar} 30%, transparent)`,
   };
 }
+
+type AttrTone = 'crimson' | 'gold' | 'jade' | 'silver';
+
+const ATTR_COLOR: Record<AttrTone, string> = {
+  crimson: 'var(--color-kombats-crimson)',
+  gold: 'var(--color-kombats-gold)',
+  jade: 'var(--color-kombats-jade)',
+  silver: 'var(--color-kombats-moon-silver)',
+};
 
 /**
  * Lobby-side fighter nameplate — reads from the player's own character +
@@ -56,7 +72,7 @@ export function FighterNameplate() {
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
   return (
-    <div className="relative w-[280px]">
+    <div className="relative z-20 mb-3 w-[420px] max-w-[calc(100vw-3rem)]">
       <AnimatePresence>
         {open && (
           <motion.div
@@ -67,58 +83,41 @@ export function FighterNameplate() {
             transition={{ duration: 0.2 }}
             className="absolute bottom-full left-0 right-0 mb-3 overflow-hidden rounded-md border-[0.5px] border-border-subtle bg-glass shadow-[var(--shadow-panel)] backdrop-blur-[20px]"
           >
-            <div className="flex items-center justify-between border-b-[0.5px] border-border-divider px-4 py-2.5">
-              <span className="text-[10px] font-medium uppercase tracking-[0.24em] text-text-muted">
+            <div className="flex items-center justify-between border-b border-border-divider px-4 py-2">
+              <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-text-muted">
                 Fighter Profile
               </span>
-              <span className="font-display text-[11px] uppercase tracking-[0.18em] text-accent-text">
+              <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-kombats-gold">
                 Lv {character.level}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 p-4">
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted">
+            <div className="grid grid-cols-2 gap-x-6 px-4 py-3">
+              <div>
+                <div className="mb-2 text-[9px] uppercase tracking-[0.05em] text-text-muted">
                   Attributes
-                </span>
-                <AttrRow tone="crimson" label="Strength" value={character.strength} />
-                <AttrRow tone="gold" label="Agility" value={character.agility} />
-                <AttrRow tone="jade" label="Intuition" value={character.intuition} />
-                <AttrRow tone="silver" label="Vitality" value={character.vitality} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted">
-                  Record
-                </span>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <div
-                    className="flex flex-col items-center rounded-sm py-1.5"
-                    style={tileStyle('jade')}
-                  >
-                    <span className="text-[9px] uppercase tracking-[0.2em] text-text-muted">
-                      Wins
-                    </span>
-                    <span className="text-sm font-semibold tabular-nums text-kombats-jade-light">
-                      {wins}
-                    </span>
-                  </div>
-                  <div
-                    className="flex flex-col items-center rounded-sm py-1.5"
-                    style={tileStyle('crimson')}
-                  >
-                    <span className="text-[9px] uppercase tracking-[0.2em] text-text-muted">
-                      Losses
-                    </span>
-                    <span className="text-sm font-semibold tabular-nums text-kombats-crimson-light">
-                      {losses}
-                    </span>
-                  </div>
                 </div>
-                <div className="mt-1.5 flex items-center justify-between text-[10px] uppercase tracking-[0.2em]">
-                  <span className="text-text-muted">Win Rate</span>
-                  <span className="font-semibold tabular-nums text-accent-text">
-                    {total > 0 ? `${winRate}%` : '—'}
-                  </span>
+                <div className="flex flex-col gap-1.5">
+                  <AttrRow icon={Sword} tone="crimson" label="Strength" value={character.strength} />
+                  <AttrRow icon={Zap} tone="gold" label="Agility" value={character.agility} />
+                  <AttrRow icon={TrendingUp} tone="jade" label="Intuition" value={character.intuition} />
+                  <AttrRow icon={Heart} tone="silver" label="Vitality" value={character.vitality} />
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 text-[9px] uppercase tracking-[0.05em] text-text-muted">
+                  Record
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <KpiTile value={wins} label="Wins" tone="jade" />
+                  <KpiTile value={losses} label="Losses" tone="crimson" />
+                </div>
+                <div className="mt-2 flex flex-col gap-1">
+                  <AuxRow
+                    label="Winrate"
+                    value={total > 0 ? `${winRate}%` : '—'}
+                    valueColor="var(--color-kombats-gold)"
+                  />
                 </div>
               </div>
             </div>
@@ -128,61 +127,101 @@ export function FighterNameplate() {
 
       <div aria-hidden className="pointer-events-none absolute" style={halo} />
 
-      <div className="relative flex items-end justify-between gap-3">
-        <div className="flex min-w-0 flex-col gap-1">
-          <span className="text-[10px] font-medium uppercase tracking-[0.28em] text-accent-text">
-            Lv {character.level}
-          </span>
+      <div className="relative">
+        <div className="mb-2 flex">
           <h2
-            className="truncate font-display text-2xl font-semibold uppercase tracking-[0.1em] text-text-primary"
+            className="text-2xl leading-none tracking-wide text-text-primary"
             style={nameShadow}
           >
             {character.name ?? 'Unknown'}
           </h2>
         </div>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label={open ? 'Hide fighter stats' : 'Show fighter stats'}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-kombats-moon-silver transition-colors duration-150 hover:text-accent-text focus:outline-none focus-visible:text-accent-text"
-          style={{ filter: 'drop-shadow(0 2px 4px rgba(var(--rgb-black), 0.9))' }}
-        >
-          <Chevron open={open} />
-        </button>
+
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-label={open ? 'Hide fighter stats' : 'Show fighter stats'}
+            className="flex h-7 w-7 shrink-0 items-center justify-center text-kombats-moon-silver transition-colors duration-150 hover:text-kombats-gold focus:outline-none focus-visible:text-kombats-gold"
+            style={chevronShadow}
+          >
+            <Chevron open={open} />
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 function AttrRow({
+  icon: Icon,
   tone,
   label,
   value,
 }: {
-  tone: 'crimson' | 'gold' | 'jade' | 'silver';
+  icon: LucideIcon;
+  tone: AttrTone;
   label: string;
   value: number;
 }) {
-  const toneVar =
-    tone === 'crimson'
-      ? 'var(--color-kombats-crimson)'
-      : tone === 'gold'
-        ? 'var(--color-kombats-gold)'
-        : tone === 'jade'
-          ? 'var(--color-kombats-jade)'
-          : 'var(--color-kombats-moon-silver)';
   return (
-    <div className="flex items-center justify-between text-[11px]">
-      <span className="flex items-center gap-2 text-text-secondary">
-        <span
-          aria-hidden
-          className="inline-block h-1.5 w-1.5 rounded-full"
-          style={{ background: toneVar }}
-        />
-        {label}
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <Icon className="h-3.5 w-3.5" style={{ color: ATTR_COLOR[tone] }} />
+        <span className="text-[12px] text-text-secondary">{label}</span>
+      </div>
+      <span className="text-[12px] font-medium tabular-nums text-text-primary">
+        {value}
       </span>
-      <span className="font-semibold tabular-nums text-text-primary">{value}</span>
+    </div>
+  );
+}
+
+function KpiTile({
+  value,
+  label,
+  tone,
+}: {
+  value: number;
+  label: string;
+  tone: 'jade' | 'crimson';
+}) {
+  const toneVar =
+    tone === 'jade' ? 'var(--color-kombats-jade)' : 'var(--color-kombats-crimson)';
+  return (
+    <div
+      className="rounded-sm py-1.5 text-center"
+      style={tileStyle(tone)}
+    >
+      <div
+        className="leading-none tabular-nums"
+        style={{ fontSize: 18, color: toneVar }}
+      >
+        {value}
+      </div>
+      <div className="mt-1 text-[9px] uppercase tracking-[0.05em] text-text-muted">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function AuxRow({
+  label,
+  value,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  valueColor: string;
+}) {
+  return (
+    <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.05em]">
+      <span className="text-text-muted">{label}</span>
+      <span className="font-medium tabular-nums" style={{ color: valueColor }}>
+        {value}
+      </span>
     </div>
   );
 }

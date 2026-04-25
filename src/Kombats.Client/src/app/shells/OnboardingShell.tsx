@@ -44,7 +44,7 @@ export function OnboardingShell() {
             <div className="flex flex-col leading-none">
               <span className="text-[9px] uppercase tracking-[0.5em] text-text-muted">The</span>
               <span
-                className="mt-1.5 font-display text-[22px] font-semibold uppercase leading-none tracking-[0.34em] text-kombats-gold"
+                className="mt-1.5 font-display text-[22px] font-semibold uppercase leading-none tracking-[0.34em] text-accent-primary"
                 style={wordmarkBloomStyle}
               >
                 Kombats

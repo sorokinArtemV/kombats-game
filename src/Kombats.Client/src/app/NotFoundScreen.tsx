@@ -25,7 +25,7 @@ export function NotFoundScreen() {
 
         <h1
           id="not-found-title"
-          className="font-display text-[64px] font-bold uppercase leading-none tracking-[0.16em] text-kombats-gold"
+          className="font-display text-[64px] font-bold uppercase leading-none tracking-[0.16em] text-accent-primary"
           // Cinzel title bloom per DESIGN_REFERENCE.md §3.4 — gold halo
           // text-shadow isn't expressible via a static Tailwind utility.
           style={{ textShadow: 'var(--shadow-title-neutral)' }}

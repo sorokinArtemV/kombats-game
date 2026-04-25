@@ -6,6 +6,7 @@ import type {
   ChatErrorEvent,
 } from '@/types/chat';
 import type { Uuid } from '@/types/common';
+import { useAuthStore } from '@/modules/auth/store';
 
 const MAX_GLOBAL_MESSAGES = 500;
 // Per-conversation cap on real-time DM buffer. HTTP history backfills older
@@ -26,6 +27,13 @@ interface DirectConversation {
   lastMessageAt: string | null;
 }
 
+export interface OpenDmTab {
+  otherPlayerId: Uuid;
+  displayName: string;
+}
+
+export type ChatTabId = 'general' | Uuid;
+
 interface ChatState {
   connectionState: ConnectionState;
   globalConversationId: Uuid | null;
@@ -36,6 +44,15 @@ interface ChatState {
   rateLimitState: RateLimitState;
   suppressedOpponentId: Uuid | null;
   lastError: ChatErrorEvent | null;
+
+  // Tab strip state — drives the BottomDock chat tabs.
+  // `activeTabId === 'general'` shows global chat; otherwise it's the
+  // `otherPlayerId` of the focused DM tab. `unreadByPlayerId` is keyed by the
+  // other player's id and only populated for DM senders, never for echoed
+  // outbound messages.
+  openDmTabs: OpenDmTab[];
+  activeTabId: ChatTabId;
+  unreadByPlayerId: Map<Uuid, number>;
 
   setConnectionState: (state: ConnectionState) => void;
   setGlobalSession: (
@@ -52,10 +69,22 @@ interface ChatState {
   handleConnectionLost: () => void;
   clearRateLimit: () => void;
   clearStore: () => void;
+
+  openDmTab: (otherPlayerId: Uuid, displayName: string) => void;
+  closeDmTab: (otherPlayerId: Uuid) => void;
+  setActiveTab: (tabId: ChatTabId) => void;
 }
 
 function isDuplicate(messages: ChatMessageResponse[], messageId: Uuid): boolean {
   return messages.some((m) => m.messageId === messageId);
+}
+
+// Keycloak `sub` and .NET `Guid` both serialize lowercase, but we've seen
+// mixed-case values surface from the JWT layer. Treat tab keys / unread keys /
+// active-tab comparisons as case-insensitive throughout.
+function sameId(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
 }
 
 export const useChatStore = create<ChatState>()((set, get) => ({
@@ -68,6 +97,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   rateLimitState: { isLimited: false, retryAfterMs: null, limitedAt: null },
   suppressedOpponentId: null,
   lastError: null,
+
+  openDmTabs: [],
+  activeTabId: 'general',
+  unreadByPlayerId: new Map(),
 
   setConnectionState: (connectionState) => set({ connectionState }),
 
@@ -130,7 +163,25 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       });
     }
 
-    set({ directConversations: updated });
+    // Per-tab unread badge. Echoes of outbound DMs route through this same
+    // handler (server fans out to both participants' identity groups), so we
+    // skip self-sent messages. We also skip the increment when the recipient
+    // tab is currently active — the user is already looking at it.
+    const currentIdentityId = useAuthStore.getState().userIdentityId;
+    const isInbound = !sameId(senderId, currentIdentityId);
+    const isFocusedOnSender = sameId(state.activeTabId, senderId);
+
+    let nextUnread = state.unreadByPlayerId;
+    if (isInbound && !isFocusedOnSender) {
+      const current = state.unreadByPlayerId.get(senderId) ?? 0;
+      nextUnread = new Map(state.unreadByPlayerId);
+      nextUnread.set(senderId, current + 1);
+    }
+
+    set({
+      directConversations: updated,
+      ...(nextUnread !== state.unreadByPlayerId ? { unreadByPlayerId: nextUnread } : {}),
+    });
     return { suppressed };
   },
 
@@ -188,5 +239,83 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       rateLimitState: { isLimited: false, retryAfterMs: null, limitedAt: null },
       suppressedOpponentId: null,
       lastError: null,
+      openDmTabs: [],
+      activeTabId: 'general',
+      unreadByPlayerId: new Map(),
     }),
+
+  openDmTab: (otherPlayerId, displayName) => {
+    const state = get();
+    const existingIdx = state.openDmTabs.findIndex((t) =>
+      sameId(t.otherPlayerId, otherPlayerId),
+    );
+
+    let nextTabs = state.openDmTabs;
+    if (existingIdx >= 0) {
+      // Refresh the cached display name in case it changed since the tab was
+      // first opened (rare, but cheap and keeps the strip honest).
+      const existing = state.openDmTabs[existingIdx];
+      if (existing.displayName !== displayName) {
+        nextTabs = [...state.openDmTabs];
+        nextTabs[existingIdx] = { otherPlayerId, displayName };
+      }
+    } else {
+      nextTabs = [...state.openDmTabs, { otherPlayerId, displayName }];
+    }
+
+    // Focusing the tab clears its unread badge.
+    let nextUnread = state.unreadByPlayerId;
+    if (state.unreadByPlayerId.has(otherPlayerId)) {
+      nextUnread = new Map(state.unreadByPlayerId);
+      nextUnread.delete(otherPlayerId);
+    }
+
+    set({
+      openDmTabs: nextTabs,
+      activeTabId: otherPlayerId,
+      unreadByPlayerId: nextUnread,
+    });
+  },
+
+  closeDmTab: (otherPlayerId) => {
+    const state = get();
+    const nextTabs = state.openDmTabs.filter(
+      (t) => !sameId(t.otherPlayerId, otherPlayerId),
+    );
+    if (nextTabs.length === state.openDmTabs.length) return;
+
+    let nextUnread = state.unreadByPlayerId;
+    if (state.unreadByPlayerId.has(otherPlayerId)) {
+      nextUnread = new Map(state.unreadByPlayerId);
+      nextUnread.delete(otherPlayerId);
+    }
+
+    // Closing the focused tab falls back to General — never leave activeTabId
+    // pointing at a tab that no longer exists.
+    const nextActive: ChatTabId = sameId(state.activeTabId, otherPlayerId)
+      ? 'general'
+      : state.activeTabId;
+
+    set({
+      openDmTabs: nextTabs,
+      activeTabId: nextActive,
+      unreadByPlayerId: nextUnread,
+    });
+  },
+
+  setActiveTab: (tabId) => {
+    const state = get();
+    if (tabId === 'general') {
+      set({ activeTabId: 'general' });
+      return;
+    }
+
+    let nextUnread = state.unreadByPlayerId;
+    if (state.unreadByPlayerId.has(tabId)) {
+      nextUnread = new Map(state.unreadByPlayerId);
+      nextUnread.delete(tabId);
+    }
+
+    set({ activeTabId: tabId, unreadByPlayerId: nextUnread });
+  },
 }));
