@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { clsx } from 'clsx';
 import { motion, useReducedMotion } from 'motion/react';
 import { useBattlePhase, useBattleActions, useBattleConnectionState } from '../hooks';
-import { ALL_ZONES, VALID_BLOCK_PAIRS, isValidBlockPair } from '../zones';
+import { ALL_ZONES, VALID_BLOCK_PAIRS } from '../zones';
 import silhouetteSrc from '@/ui/assets/silhouette.png';
 import mitsudamoeSrc from '@/ui/assets/icons/mitsudamoe.png';
 import type { BattleZone } from '@/types/battle';
@@ -356,15 +356,22 @@ const BLOCK_FLOOD = 'rgb(90, 138, 122)';
 // Main component — keeps every production data binding intact.
 // ---------------------------------------------------------------------------
 
+// Auto-anchor lookup for block mode: derived from VALID_BLOCK_PAIRS so the
+// canonical pair list in zones.ts stays the single source of truth. Each
+// zone appears as the first member of exactly one valid pair, so the
+// mapping is unambiguous (Head→Head+Chest, Chest→Chest+Belly, …,
+// Legs→Legs+Head wraparound).
+function autoAnchoredBlockPair(
+  zone: BattleZone,
+): readonly [BattleZone, BattleZone] | null {
+  return VALID_BLOCK_PAIRS.find((p) => p[0] === zone) ?? null;
+}
+
 export function BodyZoneSelector() {
   const phase = useBattlePhase();
   const connectionState = useBattleConnectionState();
   const actions = useBattleActions();
   const reduceMotion = useReducedMotion();
-
-  // Two-click block flow: held locally because the store only accepts
-  // fully-formed (adjacent) pairs via `selectBlockPair`.
-  const [blockPrimary, setBlockPrimary] = useState<BattleZone | null>(null);
 
   const turnOpen = phase === 'TurnOpen';
   const connectionBlocked = connectionState !== 'connected';
@@ -379,25 +386,9 @@ export function BodyZoneSelector() {
 
   const handleBlockClick = (zone: BattleZone) => {
     if (disabled) return;
-    const committed = actions.selectedBlockPair;
-    if (committed && committed[0] === zone) {
-      setBlockPrimary(zone);
-      return;
-    }
-    if (!blockPrimary) {
-      setBlockPrimary(zone);
-      return;
-    }
-    if (blockPrimary === zone) {
-      setBlockPrimary(null);
-      return;
-    }
-    if (isValidBlockPair(blockPrimary, zone)) {
-      actions.selectBlockPair([blockPrimary, zone]);
-      setBlockPrimary(null);
-    } else {
-      setBlockPrimary(zone);
-    }
+    const pair = autoAnchoredBlockPair(zone);
+    if (!pair) return;
+    actions.selectBlockPair([pair[0], pair[1]]);
   };
 
   return (
@@ -433,17 +424,14 @@ export function BodyZoneSelector() {
               selected={
                 actions.selectedBlockPair
                   ? [actions.selectedBlockPair[0], actions.selectedBlockPair[1]]
-                  : blockPrimary
-                    ? [blockPrimary]
-                    : []
+                  : []
               }
               onZoneClick={handleBlockClick}
+              hoverPairFor={autoAnchoredBlockPair}
               selectionLabel={
                 actions.selectedBlockPair
                   ? `${actions.selectedBlockPair[0]} + ${actions.selectedBlockPair[1]}`
-                  : blockPrimary
-                    ? `${blockPrimary} + ?`
-                    : null
+                  : null
               }
               placeholder="Select pair"
               disabled={disabled}
@@ -459,7 +447,7 @@ export function BodyZoneSelector() {
           disabled={!canGo && !isWaiting}
           aria-label={isWaiting ? 'Locked in' : 'Lock in attack and block'}
           className={clsx(
-            'inline-flex items-center justify-center rounded-md px-10 py-2.5 font-display text-[13px] font-medium uppercase tracking-[0.24em] transition-[background-color,border-color,opacity] duration-150',
+            'inline-flex items-center justify-center rounded-md px-10 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.24em] transition-[background-color,border-color,opacity] duration-150',
             isWaiting
               ? 'cursor-not-allowed border-[0.5px] border-border-emphasis bg-transparent text-accent-text'
               : canGo
@@ -494,7 +482,6 @@ export function BodyZoneSelector() {
                 onChange={() => {
                   if (disabled) return;
                   actions.selectBlockPair(pair);
-                  setBlockPrimary(null);
                 }}
               />
               {`${pair[0]} + ${pair[1]}`}
@@ -518,9 +505,37 @@ interface SilhouetteColumnProps {
   headerGlow: string;
   selected: BattleZone[];
   onZoneClick: (zone: BattleZone) => void;
+  /**
+   * Block mode only: maps a hovered zone to the auto-anchored pair preview.
+   * Returning a 2-zone tuple drives a pair-shaped hover highlight (one
+   * seamless fill if adjacent, two singles if wraparound). Attack mode
+   * omits this prop and gets the single-zone hover preview.
+   */
+  hoverPairFor?: (zone: BattleZone) => readonly [BattleZone, BattleZone] | null;
   selectionLabel: string | null;
   placeholder: string;
   disabled: boolean;
+}
+
+type FilledItem =
+  | { kind: 'single'; zone: BattleZone }
+  | { kind: 'pair'; pair: ZonePair };
+
+function deriveItems(zones: BattleZone[]): FilledItem[] {
+  if (zones.length === 0) return [];
+  if (zones.length === 1) return [{ kind: 'single', zone: zones[0] }];
+  const pair = adjacentBlockPair(zones[0], zones[1]);
+  if (pair) return [{ kind: 'pair', pair }];
+  return [
+    { kind: 'single', zone: zones[0] },
+    { kind: 'single', zone: zones[1] },
+  ];
+}
+
+function flattenZones(items: FilledItem[]): BattleZone[] {
+  return items.flatMap((item) =>
+    item.kind === 'single' ? [item.zone] : [item.pair.upper, item.pair.lower],
+  );
 }
 
 function SilhouetteColumn({
@@ -530,6 +545,7 @@ function SilhouetteColumn({
   headerGlow,
   selected,
   onZoneClick,
+  hoverPairFor,
   selectionLabel,
   placeholder,
   disabled,
@@ -538,51 +554,63 @@ function SilhouetteColumn({
   const rgb = mode === 'attack' ? ATTACK_RGB : BLOCK_RGB;
   const flood = mode === 'attack' ? ATTACK_FLOOD : BLOCK_FLOOD;
 
-  // Selection: a committed pair (two adjacent zones) renders as one
-  // seamless fill via pairFeatherMaskStyle. A single zone (attack pick or
-  // block-primary) renders as one zoneFeatherMaskStyle item. Wraparound
-  // 'Legs + Head' is non-adjacent and falls back to two independent fills.
-  type FilledItem =
-    | { kind: 'single'; zone: BattleZone }
-    | { kind: 'pair'; pair: ZonePair };
-  const filledItems: FilledItem[] = (() => {
-    if (selected.length === 0) return [];
-    if (selected.length === 1) {
-      return [{ kind: 'single', zone: selected[0] }];
+  // Selection items: committed pair → seamless pair fill (or two singles
+  // for the non-adjacent Legs+Head wraparound). Single zone (attack pick)
+  // → one fill.
+  const filledItems: FilledItem[] = deriveItems(selected);
+  const visibleFilledZones: BattleZone[] = flattenZones(filledItems);
+
+  // Hover preview targets. Attack mode previews a single zone; block mode
+  // previews the auto-anchored pair (filtered to non-selected zones so we
+  // don't double-paint over a partially-overlapping selected pair). If the
+  // hover pair fully matches the selected pair, suppress the preview —
+  // the selection already shows it.
+  const hoverItems: FilledItem[] = (() => {
+    if (hover === null) return [];
+    if (hoverPairFor) {
+      const pair = hoverPairFor(hover);
+      if (!pair) return [];
+      const sameAsSelected =
+        selected.length === 2 &&
+        selected.includes(pair[0]) &&
+        selected.includes(pair[1]);
+      if (sameAsSelected) return [];
+      const remaining = (pair as readonly BattleZone[]).filter(
+        (z) => !visibleFilledZones.includes(z),
+      );
+      return deriveItems(remaining as BattleZone[]);
     }
-    const pair = adjacentBlockPair(selected[0], selected[1]);
-    if (pair) return [{ kind: 'pair', pair }];
-    return [
-      { kind: 'single', zone: selected[0] },
-      { kind: 'single', zone: selected[1] },
-    ];
+    if (visibleFilledZones.includes(hover)) return [];
+    return [{ kind: 'single', zone: hover }];
   })();
 
-  const visibleFilledZones: BattleZone[] = filledItems.flatMap((item) =>
-    item.kind === 'single' ? [item.zone] : [item.pair.upper, item.pair.lower],
-  );
+  const showHover = hoverItems.length > 0;
 
-  // Hover preview lives on the single hovered zone (single-zone hover for
-  // both attack and block columns, since the production block click flow
-  // is two-click rather than auto-anchor).
-  const showHover = hover !== null && !visibleFilledZones.includes(hover);
-
-  // Adjacency pass: if the hover target sits directly above/below a
-  // currently-selected zone, give that edge a hard cut extended by the
-  // selection's feather/2 so the two fills meet flush instead of leaving a
-  // partially-opacified seam between them.
-  const hoverHardEdges: HardEdges = {};
-  const hoverNeighbourFeathers: NeighbourFeathers = {};
-  if (showHover && hover) {
-    const above = zoneAbove(hover);
-    const below = zoneBelow(hover);
+  // Adjacency pass for SINGLE-zone hover items: if the target sits
+  // directly above/below a selected zone, give that edge a hard cut
+  // extended by the neighbour's feather/2 so the two fills meet flush.
+  // Pair hover items already render seamlessly on their interior boundary;
+  // skip them to keep the math simple.
+  const hardEdgesByZone: Partial<Record<BattleZone, HardEdges>> = {};
+  const neighbourFeathersByZone: Partial<Record<BattleZone, NeighbourFeathers>> = {};
+  for (const item of hoverItems) {
+    if (item.kind !== 'single') continue;
+    const z = item.zone;
+    const above = zoneAbove(z);
+    const below = zoneBelow(z);
+    const edges: HardEdges = {};
+    const feathers: NeighbourFeathers = {};
     if (above && visibleFilledZones.includes(above)) {
-      hoverHardEdges.top = true;
-      hoverNeighbourFeathers.top = zoneFeatherAmount(above);
+      edges.top = true;
+      feathers.top = zoneFeatherAmount(above);
     }
     if (below && visibleFilledZones.includes(below)) {
-      hoverHardEdges.bottom = true;
-      hoverNeighbourFeathers.bottom = zoneFeatherAmount(below);
+      edges.bottom = true;
+      feathers.bottom = zoneFeatherAmount(below);
+    }
+    if (edges.top || edges.bottom) {
+      hardEdgesByZone[z] = edges;
+      neighbourFeathersByZone[z] = feathers;
     }
   }
 
@@ -608,14 +636,8 @@ function SilhouetteColumn({
       <CornerMarks color={cornerColor} side={mode === 'attack' ? 'left' : 'right'} />
 
       <h3
-        className="font-display uppercase"
-        style={{
-          fontSize: 16,
-          fontWeight: 600,
-          letterSpacing: '0.24em',
-          color: headerColor,
-          textShadow: headerGlow,
-        }}
+        className="font-display text-[15px] font-black uppercase tracking-[0.24em]"
+        style={{ color: headerColor, textShadow: headerGlow }}
       >
         {headerLabel}
       </h3>
@@ -675,20 +697,44 @@ function SilhouetteColumn({
           );
         })}
 
-        {/* Hover preview fill — flat alpha, 150ms fade-in. Adjacency-aware
-            hard edges so it sits flush against any selected neighbour. */}
-        {showHover && hover && (
-          <div
-            key={`hover-${hover}`}
-            aria-hidden
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              ...zoneFeatherMaskStyle(hover, hoverHardEdges, hoverNeighbourFeathers),
-              background: hoverFillBackground(rgb),
-              animation: 'kombats-zone-outline-in 150ms ease-out both',
-            }}
-          />
-        )}
+        {/* Hover preview fill — flat alpha, 150ms fade-in. In block mode
+            the hover items shape the auto-anchored pair (one seamless
+            fill if adjacent, two singles for the wraparound pair).
+            Single-zone hover items get hard-edge adjacency so they sit
+            flush against any selected neighbour. */}
+        {hoverItems.map((item) => {
+          if (item.kind === 'single') {
+            const z = item.zone;
+            return (
+              <div
+                key={`hover-${z}`}
+                aria-hidden
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  ...zoneFeatherMaskStyle(
+                    z,
+                    hardEdgesByZone[z] ?? {},
+                    neighbourFeathersByZone[z] ?? {},
+                  ),
+                  background: hoverFillBackground(rgb),
+                  animation: 'kombats-zone-outline-in 150ms ease-out both',
+                }}
+              />
+            );
+          }
+          return (
+            <div
+              key={`hover-pair-${item.pair.upper}-${item.pair.lower}`}
+              aria-hidden
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                ...pairFeatherMaskStyle(item.pair),
+                background: hoverFillBackground(rgb),
+                animation: 'kombats-zone-outline-in 150ms ease-out both',
+              }}
+            />
+          );
+        })}
 
         {/* SVG outline + glow layer. The same silhouette PNG is rendered
             inside an <image> with a feMorphology-derived outline filter and
@@ -885,20 +931,30 @@ function SilhouetteColumn({
               );
             })}
 
-            {showHover && hover && (
-              <image
-                key={`hover-outline-${hover}`}
-                href={silhouetteSrc}
-                x="0"
-                y="0"
-                width="100"
-                height="100"
-                preserveAspectRatio="none"
-                mask={`url(#${zoneMaskId(hover)})`}
-                filter={`url(#${hoverFilterId})`}
-                style={{ animation: 'kombats-zone-outline-in 150ms ease-out' }}
-              />
-            )}
+            {hoverItems.map((item) => {
+              const maskHref =
+                item.kind === 'single'
+                  ? zoneMaskId(item.zone)
+                  : pairMaskId(`${item.pair.upper}-${item.pair.lower}`);
+              const key =
+                item.kind === 'single'
+                  ? `hover-outline-${item.zone}`
+                  : `hover-outline-pair-${item.pair.upper}-${item.pair.lower}`;
+              return (
+                <image
+                  key={key}
+                  href={silhouetteSrc}
+                  x="0"
+                  y="0"
+                  width="100"
+                  height="100"
+                  preserveAspectRatio="none"
+                  mask={`url(#${maskHref})`}
+                  filter={`url(#${hoverFilterId})`}
+                  style={{ animation: 'kombats-zone-outline-in 150ms ease-out' }}
+                />
+              );
+            })}
           </svg>
         )}
 
@@ -931,11 +987,8 @@ function SilhouetteColumn({
       {/* Selection value or placeholder caption below the silhouette. */}
       {selectionLabel ? (
         <div
-          className="font-display uppercase"
+          className="font-display text-[13px] font-black uppercase tracking-[0.08em]"
           style={{
-            fontSize: 13,
-            fontWeight: 600,
-            letterSpacing: '0.08em',
             color:
               mode === 'attack'
                 ? 'var(--color-kombats-crimson-light)'
@@ -945,15 +998,7 @@ function SilhouetteColumn({
           {selectionLabel}
         </div>
       ) : (
-        <div
-          style={{
-            fontSize: 13,
-            fontStyle: 'italic',
-            fontWeight: 400,
-            letterSpacing: '0.04em',
-            color: 'var(--color-text-muted)',
-          }}
-        >
+        <div className="text-[13px] font-normal italic tracking-[0.04em] text-text-muted">
           {placeholder}
         </div>
       )}

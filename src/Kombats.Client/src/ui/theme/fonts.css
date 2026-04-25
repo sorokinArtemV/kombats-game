@@ -1,7 +1,8 @@
 /* Kombats font registration.
- * Inter + Noto Sans JP are loaded via @import in index.css (must come before
- * any Tailwind import per CSS rules). The font-family bindings below mirror
- * the design system reference (Inter for body/buttons, Noto Sans JP for h1-h6). */
+ * Inter + Cinzel + Noto Sans JP are loaded via @import in index.css. Display
+ * font (Cinzel) is the source of truth for ceremonial/heading text, exposed
+ * through the --font-display token. Components can opt out of display on a
+ * specific heading by applying a different Tailwind font-* utility. */
 
 :root {
   font-family: var(--font-primary);
@@ -13,7 +14,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-jp);
+  font-family: var(--font-display);
   letter-spacing: var(--heading-tracking);
 }
 

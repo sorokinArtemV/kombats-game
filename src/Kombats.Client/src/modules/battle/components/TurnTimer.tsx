@@ -33,7 +33,7 @@ export function TurnTimer() {
   if (view.kind === 'resolving') {
     return (
       <span
-        className="inline-flex items-center gap-1.5 font-display text-[13px] uppercase tracking-[0.18em]"
+        className="inline-flex items-center gap-1.5 font-primary text-[13px] uppercase tracking-[0.18em]"
         style={{ color: 'var(--color-kombats-gold-light)' }}
       >
         <ClockIcon />
@@ -43,7 +43,7 @@ export function TurnTimer() {
   }
   if (view.kind === 'idle') {
     return (
-      <span className="inline-flex items-center gap-1.5 font-display text-[13px] tabular-nums text-text-muted">
+      <span className="inline-flex items-center gap-1.5 font-primary text-[13px] tabular-nums text-text-muted">
         <ClockIcon />
         <span>—</span>
       </span>
@@ -53,12 +53,12 @@ export function TurnTimer() {
   return (
     <span
       className={clsx(
-        'inline-flex items-center gap-1.5 font-display text-[13px] tabular-nums',
+        'inline-flex items-center gap-1.5 font-primary text-[13px] tabular-nums',
         urgencyClass(view.urgency),
       )}
     >
       <ClockIcon />
-      <span>{view.seconds}s</span>
+      <span>{view.seconds}</span>
     </span>
   );
 }

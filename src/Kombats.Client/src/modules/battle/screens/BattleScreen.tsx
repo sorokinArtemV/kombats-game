@@ -14,7 +14,6 @@ import { BattleEndOverlay } from '../components/BattleEndOverlay';
 import { FighterCard } from '../components/FighterCard';
 import { TurnTimer } from '../components/TurnTimer';
 import { Spinner } from '@/ui/components/Spinner';
-import { ConnectionIndicator } from '@/ui/components/ConnectionIndicator';
 import { ErrorBoundary } from '@/ui/components/ErrorBoundary';
 import { logger } from '@/app/logger';
 import { useBattleConnectionState } from '../hooks';
@@ -178,7 +177,7 @@ export function BattleScreen() {
 
       {/* Center combat panel. Offset up so it clears the nameplates on shorter
           viewports, with min-height safety. */}
-      <div className="absolute left-1/2 top-1/2 z-20 w-[min(540px,calc(100%-2rem))] -translate-x-1/2 -translate-y-[55%]">
+      <div className="absolute left-1/2 top-1/2 z-20 w-[min(380px,calc(100%-2rem))] -translate-x-1/2 -translate-y-[55%]">
         <section
           className="rounded-md border-[0.5px] border-border-subtle bg-glass p-5 shadow-[var(--shadow-panel-lift)]"
           style={{ backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
@@ -241,18 +240,12 @@ function CombatPanelHeader() {
         : 'Select Attack & Block';
   return (
     <header className="mb-3 text-center">
-      <h1
-        className="font-display uppercase"
-        style={{
-          fontSize: 18,
-          fontWeight: 600,
-          letterSpacing: '0.24em',
-          color: 'var(--color-accent-text)',
-          textShadow: 'var(--shadow-title-soft)',
-        }}
+      <h3
+        className="font-display text-[15px] font-black uppercase tracking-[0.24em] text-accent-text"
+        style={{ textShadow: 'var(--shadow-title-soft)' }}
       >
         {title}
-      </h1>
+      </h3>
     </header>
   );
 }
@@ -261,7 +254,6 @@ function CombatPanelHeader() {
 function CombatMetaRow() {
   const { turnIndex } = useBattleTurn();
   const phase = useBattlePhase();
-  const connectionState = useBattleConnectionState();
 
   const isYourTurn = phase === 'TurnOpen';
   const isWaiting = phase === 'Submitted' || phase === 'Resolving';
@@ -273,7 +265,7 @@ function CombatMetaRow() {
     >
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-text-muted">
         <span>Round</span>
-        <span className="font-display tabular-nums text-accent-text">
+        <span className="font-display font-black tabular-nums text-accent-text">
           {turnIndex > 0 ? turnIndex : '—'}
         </span>
       </div>
@@ -283,7 +275,6 @@ function CombatMetaRow() {
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <ConnectionIndicator state={connectionState} className="shrink-0" />
         <TurnIndicatorPill
           state={
             isYourTurn ? 'your_turn' : isWaiting ? 'opponent_turn' : 'idle'
