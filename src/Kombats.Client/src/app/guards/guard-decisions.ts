@@ -83,14 +83,17 @@ export function decideBattleGuard(
       queueStatus.status === 'Searching' ||
       (queueStatus.status === 'Matched' && !queueStatus.battleId)
     ) {
-      if (pathname !== '/matchmaking') {
-        return { type: 'navigate', to: '/matchmaking' };
+      // Searching / matched-without-battleId render inside the unified
+      // lobby screen — no separate route. Allow /lobby through; bounce
+      // any other in-app path back to it.
+      if (pathname !== '/lobby') {
+        return { type: 'navigate', to: '/lobby' };
       }
       return { type: 'allow' };
     }
   }
 
-  // No active queue state — block access to battle/matchmaking routes,
+  // No active queue state — block access to battle routes,
   // EXCEPT while the result screen is still being dismissed (hard gate
   // REQ-P1). The result screen itself clears state by navigating to /lobby.
   const onResultForEndedBattle =
@@ -98,10 +101,7 @@ export function decideBattleGuard(
     !!storeBattleId &&
     pathname === `/battle/${storeBattleId}/result`;
 
-  if (
-    !onResultForEndedBattle &&
-    (pathname.startsWith('/battle') || pathname === '/matchmaking')
-  ) {
+  if (!onResultForEndedBattle && pathname.startsWith('/battle')) {
     return { type: 'navigate', to: '/lobby' };
   }
 

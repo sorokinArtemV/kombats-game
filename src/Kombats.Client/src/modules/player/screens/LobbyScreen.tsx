@@ -1,7 +1,11 @@
+import { useState, useEffect } from 'react';
 import { StatAllocationPanel } from '../components/StatAllocationPanel';
 import { LevelUpBanner } from '../components/LevelUpBanner';
 import { FighterNameplate } from '../components/FighterNameplate';
 import { QueueButton } from '@/modules/matchmaking/components/QueueButton';
+import { SearchingIndicator } from '@/modules/matchmaking/components/SearchingIndicator';
+import { useMatchmaking, useMatchmakingPolling } from '@/modules/matchmaking/hooks';
+import { Button } from '@/ui/components/Button';
 import { usePlayerStore } from '../store';
 import { usePostBattleRefresh } from '../post-battle-refresh';
 import { getAvatarAsset } from '../avatar-assets';
@@ -22,23 +26,68 @@ const spriteStyle: React.CSSProperties = {
 };
 
 /**
- * Lobby landing — full-bleed scene with bottom-left fighter anchor and a
- * centered QueueCard (or the post-level-up stat allocation panel when the
- * character has unspent points).
+ * Lobby — full-bleed scene with bottom-left fighter anchor and a centered
+ * overlay that swaps based on queue UI status:
+ *   - searching/matched/battleTransition → SearchingCard
+ *   - unspent stat points → LevelUpBanner + StatAllocationPanel
+ *   - otherwise → QueueCard
  *
- * `usePostBattleRefresh()` runs once per mount to reconcile XP/level after
- * a battle (DEC-5). It MUST stay at the top of the component so it executes
- * regardless of the conditional branches below.
+ * Background, sprite, and nameplate stay mounted across the swap so the
+ * idle ↔ searching transition reads as a center-overlay change, not a
+ * scene change (no flicker, no remount).
+ *
+ * All hooks are called unconditionally at the top, before any branching.
+ *
+ * `usePostBattleRefresh()` runs once per arrival to reconcile XP/level
+ * after a battle (DEC-5). `useMatchmakingPolling()` is self-gating — it
+ * only starts the poller when the derived status is searching/matched.
  */
 export function LobbyScreen() {
   usePostBattleRefresh();
 
+  const {
+    status,
+    searchStartedAt,
+    consecutiveFailures,
+    leaveQueue,
+  } = useMatchmaking();
+  useMatchmakingPolling();
+
+  const [elapsed, setElapsed] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
+
   const character = usePlayerStore((s) => s.character);
   const hasUnspentPoints = (character?.unspentPoints ?? 0) > 0;
 
+  useEffect(() => {
+    if (!searchStartedAt) return;
+
+    setElapsed(Math.floor((Date.now() - searchStartedAt) / 1000));
+
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - searchStartedAt) / 1000));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [searchStartedAt]);
+
+  const handleCancel = async () => {
+    setCancelling(true);
+    try {
+      await leaveQueue();
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const isSearching =
+    status === 'searching' ||
+    status === 'matched' ||
+    status === 'battleTransition';
+
   return (
     // `-m-3` cancels LobbyShell's p-3 so the scene reaches the edges of the
-    // available lobby region (SearchingScreen still uses LobbyShell's padding).
+    // available lobby region.
     <div className="relative -m-3 h-[calc(100%+1.5rem)] min-h-0 overflow-hidden">
       <img
         src={bgScene}
@@ -69,7 +118,15 @@ export function LobbyScreen() {
         className="absolute left-1/2 top-1/2 z-20 w-80 max-w-[calc(100%-3rem)]"
         style={{ transform: 'translate(-50%, -55%)' }}
       >
-        {hasUnspentPoints ? (
+        {isSearching ? (
+          <SearchingCard
+            status={status}
+            elapsedSeconds={elapsed}
+            consecutiveFailures={consecutiveFailures}
+            cancelling={cancelling}
+            onCancel={handleCancel}
+          />
+        ) : hasUnspentPoints ? (
           <div className="flex flex-col gap-4">
             <LevelUpBanner />
             <StatAllocationPanel />
@@ -111,5 +168,112 @@ function QueueCard() {
         </div>
       </div>
     </section>
+  );
+}
+
+interface SearchingCardProps {
+  status: ReturnType<typeof useMatchmaking>['status'];
+  elapsedSeconds: number;
+  consecutiveFailures: number;
+  cancelling: boolean;
+  onCancel: () => void;
+}
+
+/**
+ * DESIGN_REFERENCE.md §5.10 (searching state). Glass panel mirroring the
+ * QueueCard geometry with a Mitsudomoe spinner, elapsed timer, cancel
+ * action, and the Finding / Worthy Challenger footer.
+ */
+function SearchingCard({
+  status,
+  elapsedSeconds,
+  consecutiveFailures,
+  cancelling,
+  onCancel,
+}: SearchingCardProps) {
+  const title =
+    status === 'matched'
+      ? 'Opponent Found'
+      : status === 'battleTransition'
+        ? 'Entering Battle'
+        : 'Searching for Opponent';
+  const showElapsed = status === 'searching';
+  const canCancel = status === 'searching' || status === 'matched';
+
+  return (
+    <section className="rounded-md border-[0.5px] border-border-subtle bg-glass shadow-[var(--shadow-panel)] backdrop-blur-[20px]">
+      <div className="p-6">
+        <div className="mb-4 px-0 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-accent-text">
+          {title}
+        </div>
+
+        <div className="mb-4 flex justify-center">
+          <SearchingIndicator />
+        </div>
+
+        {showElapsed && (
+          <div
+            className="mb-4 flex items-center justify-center gap-2 text-text-secondary"
+            aria-live="polite"
+          >
+            <ClockIcon />
+            <span className="text-[18px] tabular-nums">{elapsedSeconds}s</span>
+          </div>
+        )}
+
+        {consecutiveFailures >= 3 && (
+          <p
+            className="mb-4 text-center text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light"
+            role="alert"
+          >
+            Connection issues — retrying…
+          </p>
+        )}
+
+        {canCancel && (
+          <div className="flex justify-center">
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={onCancel}
+              loading={cancelling}
+              disabled={cancelling}
+            >
+              Cancel Search
+            </Button>
+          </div>
+        )}
+
+        <div className="my-4 border-t border-border-divider" aria-hidden />
+
+        <div className="text-center">
+          <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-text-muted">
+            Finding
+          </span>
+          <span className="mt-1 block text-[16px] font-medium uppercase tracking-[0.08em] text-accent-text">
+            Worthy Challenger
+          </span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
   );
 }

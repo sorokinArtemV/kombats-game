@@ -167,26 +167,25 @@ describe('decideBattleGuard', () => {
   });
 
   describe('queueStatus = Searching (or Matched without battleId)', () => {
-    it('redirects from the lobby onto /matchmaking when Searching', () => {
+    it('allows /lobby to render while Searching (overlay swap, not route swap)', () => {
       const q = queue({ status: 'Searching' });
       expect(decideBattleGuard(q, 'Idle', null, '/lobby')).toEqual({
-        type: 'navigate',
-        to: '/matchmaking',
+        type: 'allow',
       });
     });
 
-    it('redirects from the lobby onto /matchmaking when Matched-without-battleId', () => {
+    it('allows /lobby to render while Matched-without-battleId', () => {
       const q = queue({ status: 'Matched', matchId: 'm1', battleId: null });
       expect(decideBattleGuard(q, 'Idle', null, '/lobby')).toEqual({
-        type: 'navigate',
-        to: '/matchmaking',
+        type: 'allow',
       });
     });
 
-    it('allows /matchmaking to render while Searching', () => {
+    it('bounces non-lobby in-app paths back to /lobby while Searching', () => {
       const q = queue({ status: 'Searching' });
-      expect(decideBattleGuard(q, 'Idle', null, '/matchmaking')).toEqual({
-        type: 'allow',
+      expect(decideBattleGuard(q, 'Idle', null, '/battle/b1')).toEqual({
+        type: 'navigate',
+        to: '/lobby',
       });
     });
   });
@@ -194,13 +193,6 @@ describe('decideBattleGuard', () => {
   describe('queueStatus = null (no active queue)', () => {
     it('blocks /battle/:id from rendering and sends user to /lobby', () => {
       expect(decideBattleGuard(null, 'Idle', null, '/battle/b1')).toEqual({
-        type: 'navigate',
-        to: '/lobby',
-      });
-    });
-
-    it('blocks /matchmaking from rendering and sends user to /lobby', () => {
-      expect(decideBattleGuard(null, 'Idle', null, '/matchmaking')).toEqual({
         type: 'navigate',
         to: '/lobby',
       });
@@ -240,7 +232,7 @@ describe('decideBattleGuard', () => {
 
     it('treats NotQueued the same as null queueStatus', () => {
       const q = queue({ status: 'NotQueued' });
-      expect(decideBattleGuard(q, 'Idle', null, '/matchmaking')).toEqual({
+      expect(decideBattleGuard(q, 'Idle', null, '/battle/b1')).toEqual({
         type: 'navigate',
         to: '/lobby',
       });

@@ -14,7 +14,6 @@ import { NotFoundScreen } from './NotFoundScreen';
 import { NameSelectionScreen } from '@/modules/onboarding/screens/NameSelectionScreen';
 import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScreen';
 import { LobbyScreen } from '@/modules/player/screens/LobbyScreen';
-import { SearchingScreen } from '@/modules/matchmaking/screens/SearchingScreen';
 import { BattleScreen } from '@/modules/battle/screens/BattleScreen';
 import { BattleResultScreen } from '@/modules/battle/screens/BattleResultScreen';
 
@@ -72,14 +71,16 @@ export const router = createBrowserRouter([
                         ],
                       },
 
-                      // Lobby + matchmaking (normal authenticated flow) —
-                      // no per-group errorElement; lobby crashes bubble up
+                      // Lobby (normal authenticated flow) — single route
+                      // that switches its center overlay based on derived
+                      // queue UI status, so background/sprite stay mounted
+                      // across idle ↔ searching ↔ matched transitions.
+                      // No per-group errorElement; lobby crashes bubble up
                       // to the top-level ErrorBoundary in App.tsx.
                       {
                         element: <LobbyShell />,
                         children: [
                           { path: '/lobby', element: <LobbyScreen /> },
-                          { path: '/matchmaking', element: <SearchingScreen /> },
                         ],
                       },
                     ],
