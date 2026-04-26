@@ -14,6 +14,7 @@ import { DirectMessagePanel } from '@/modules/chat/components/DirectMessagePanel
 import { ChatErrorDisplay } from '@/modules/chat/components/ChatErrorDisplay';
 import { PlayerCard } from '@/modules/player/components/PlayerCard';
 import { formatTimestamp } from '@/modules/chat/format';
+import { getNickColor } from '@/modules/chat/nick-color';
 import type { OnlinePlayerResponse } from '@/types/chat';
 
 // Soft-hairline color — preserves the legacy panel-border cool-silver tint
@@ -554,7 +555,10 @@ function GlobalMessagesList() {
     <div className="flex flex-col gap-1">
       {messages.map((msg) => (
         <div key={msg.messageId} className="text-[13px] leading-relaxed">
-          <span className="font-medium text-accent-text">
+          <span
+            className="font-medium"
+            style={{ color: getNickColor(msg.sender.playerId) }}
+          >
             {msg.sender.displayName}:
           </span>{' '}
           <span className="text-text-primary">{msg.content}</span>
@@ -656,7 +660,10 @@ function PlayerRow({
           className="h-1.5 w-1.5 shrink-0 rounded-full bg-kombats-jade"
           style={{ boxShadow: ONLINE_DOT_SHADOW }}
         />
-        <span className="truncate text-xs text-text-secondary group-hover:text-text-primary">
+        <span
+          className="truncate text-xs"
+          style={{ color: getNickColor(player.playerId) }}
+        >
           {player.displayName}
         </span>
       </button>

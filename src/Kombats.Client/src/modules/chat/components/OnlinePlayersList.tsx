@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useOnlinePlayers, useOnlineCount } from '../hooks';
 import { useAuthStore } from '@/modules/auth/store';
+import { getNickColor } from '../nick-color';
 import type { OnlinePlayerResponse } from '@/types/chat';
 
 interface OnlinePlayersListProps {
@@ -81,7 +82,10 @@ function PlayerRow({
           className="h-1.5 w-1.5 shrink-0 rounded-full bg-kombats-jade"
           style={{ boxShadow: '0 0 6px var(--color-kombats-jade)' }}
         />
-        <span className="truncate text-xs text-text-secondary group-hover:text-text-primary">
+        <span
+          className="truncate text-xs"
+          style={{ color: getNickColor(player.playerId) }}
+        >
           {player.displayName}
         </span>
       </button>

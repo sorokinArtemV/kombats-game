@@ -3,6 +3,7 @@ import { useGlobalMessages, useChatConnectionState } from '../hooks';
 import { ConnectionIndicator } from '@/ui/components/ConnectionIndicator';
 import { MessageInput } from './MessageInput';
 import { formatTimestamp } from '../format';
+import { getNickColor } from '../nick-color';
 
 interface ChatPanelProps {
   hideHeader?: boolean;
@@ -42,7 +43,10 @@ export function ChatPanel({ hideHeader = false }: ChatPanelProps = {}) {
                 key={msg.messageId}
                 className="flex items-baseline py-0.5"
               >
-                <span className="shrink-0 text-xs font-semibold text-accent-text">
+                <span
+                  className="shrink-0 text-xs font-semibold"
+                  style={{ color: getNickColor(msg.sender.playerId) }}
+                >
                   {msg.sender.displayName}
                 </span>
                 <span className="ml-2 min-w-0 flex-1 break-words text-sm text-text-primary">
