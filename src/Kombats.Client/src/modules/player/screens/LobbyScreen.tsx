@@ -243,17 +243,6 @@ function SearchingCard({
             </Button>
           </div>
         )}
-
-        <div className="my-4 border-t border-border-divider" aria-hidden />
-
-        <div className="text-center">
-          <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-text-muted">
-            Finding
-          </span>
-          <span className="mt-1 block text-[16px] font-medium uppercase tracking-[0.08em] text-accent-text">
-            Worthy Challenger
-          </span>
-        </div>
       </div>
     </section>
   );

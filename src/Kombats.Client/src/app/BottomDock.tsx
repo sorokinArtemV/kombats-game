@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clsx } from 'clsx';
-import { ChevronDown, ChevronUp, MessageCircle, Users, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, MessageCircle, Swords, Users, X } from 'lucide-react';
 import {
   useGlobalMessages,
   useOnlinePlayers,
@@ -9,12 +9,19 @@ import {
 import { useChatStore } from '@/modules/chat/store';
 import type { ChatTabId, OpenDmTab } from '@/modules/chat/store';
 import { useAuthStore } from '@/modules/auth/store';
+import { useBattleStore } from '@/modules/battle/store';
+import { BattleLogList } from '@/modules/battle/components/BattleLogList';
+import { RoundMap } from '@/modules/battle/components/RoundMap';
 import { MessageInput } from '@/modules/chat/components/MessageInput';
 import { DirectMessagePanel } from '@/modules/chat/components/DirectMessagePanel';
 import { ChatErrorDisplay } from '@/modules/chat/components/ChatErrorDisplay';
 import { PlayerCard } from '@/modules/player/components/PlayerCard';
 import { formatTimestamp } from '@/modules/chat/format';
 import { getNickColor } from '@/modules/chat/nick-color';
+import type {
+  BattleFeedEntry,
+  TurnResolutionLogRealtime,
+} from '@/types/battle';
 import type { OnlinePlayerResponse } from '@/types/chat';
 
 // Soft-hairline color — preserves the legacy panel-border cool-silver tint
@@ -96,6 +103,63 @@ export function BottomDock() {
   const closeDmTab = useChatStore((s) => s.closeDmTab);
   const setActiveTab = useChatStore((s) => s.setActiveTab);
 
+  // Battle-log tab visibility comes from two signals on the battle store:
+  // - `battleId !== null` while BattleShell is mounted (live battle + result
+  //   screen). Source of entries is the live `feedEntries`.
+  // - `lastBattleLog !== null` after the user has returned to /lobby; this
+  //   archive is captured at BattleEnded and survives the BattleShell
+  //   unmount that resets the rest of the store. Source of entries is
+  //   `lastBattleLog.entries`. Cleared by the next startBattle (so a fresh
+  //   battle gets a fresh tab) or by the user clicking the tab's × button.
+  const battleId = useBattleStore((s) => s.battleId);
+  const liveFeedEntries = useBattleStore((s) => s.feedEntries);
+  const lastBattleLog = useBattleStore((s) => s.lastBattleLog);
+  const clearLastBattleLog = useBattleStore((s) => s.clearLastBattleLog);
+  const liveTurnHistory = useBattleStore((s) => s.turnHistory);
+  const lastTurnHistory = useBattleStore((s) => s.lastTurnHistory);
+  const clearLastTurnHistory = useBattleStore((s) => s.clearLastTurnHistory);
+  const battlePlayerAId = useBattleStore((s) => s.playerAId);
+  const battlePlayerBId = useBattleStore((s) => s.playerBId);
+  const battlePlayerAName = useBattleStore((s) => s.playerAName);
+  const battlePlayerBName = useBattleStore((s) => s.playerBName);
+  const battleActive = battleId !== null;
+  const archivedActive = !battleActive && lastBattleLog !== null;
+  const battleLogVisible = battleActive || archivedActive;
+  const battleLogEntries: readonly BattleFeedEntry[] = battleActive
+    ? liveFeedEntries
+    : lastBattleLog?.entries ?? [];
+  const roundMapEntries: readonly TurnResolutionLogRealtime[] = battleActive
+    ? liveTurnHistory
+    : lastTurnHistory ?? [];
+
+  // Local UI override that takes precedence over the chat store's activeTabId
+  // when set. Kept out of the chat store so its tab-id type doesn't have to
+  // grow a non-chat variant. Cleared whenever the user picks GENERAL or a DM,
+  // or dismisses the BATTLE LOG tab via its × button.
+  const [battleLogActive, setBattleLogActive] = useState(false);
+  const isBattleLogActive = battleLogActive && battleLogVisible;
+
+  // Auto-focus the BATTLE LOG tab whenever a battle starts (battleId
+  // transitions null → value). The previous-id ref keeps this a one-shot per
+  // battle — re-running the selector on unrelated store updates won't re-focus
+  // the tab if the user has clicked elsewhere in the meantime. We do NOT
+  // un-focus on battle end: the tab stays present (backed by lastBattleLog)
+  // and keeping focus matches the user's intent if they were just reading it.
+  const prevBattleIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevBattleIdRef.current;
+    prevBattleIdRef.current = battleId;
+    if (battleId && !prev) {
+      setBattleLogActive(true);
+    }
+  }, [battleId]);
+
+  const handleCloseBattleLog = () => {
+    setBattleLogActive(false);
+    clearLastBattleLog();
+    clearLastTurnHistory();
+  };
+
   // Defensive: if `activeTabId` references a DM that no longer exists in
   // openDmTabs (shouldn't happen — closeDmTab maintains the invariant), fall
   // back to General before reading.
@@ -168,6 +232,7 @@ export function BottomDock() {
   };
 
   const handleOpenDm = (otherPlayerId: string, displayName: string) => {
+    setBattleLogActive(false);
     openDmTab(otherPlayerId, displayName);
     if (isCollapsed) handleExpand();
   };
@@ -211,18 +276,34 @@ export function BottomDock() {
                 <div className="relative flex h-9 shrink-0 items-stretch">
                   <div className="kombats-scroll flex min-w-0 flex-1 items-stretch overflow-x-auto">
                     <ChatTabButton
-                      active={effectiveActiveTabId === 'general'}
-                      onClick={() => setActiveTab('general')}
+                      active={!isBattleLogActive && effectiveActiveTabId === 'general'}
+                      onClick={() => {
+                        setBattleLogActive(false);
+                        setActiveTab('general');
+                      }}
                       icon={<MessageCircle className="h-3.5 w-3.5" />}
                       label="General"
                     />
+                    {battleLogVisible && (
+                      <BattleLogTabButton
+                        active={isBattleLogActive}
+                        onActivate={() => setBattleLogActive(true)}
+                        onClose={archivedActive ? handleCloseBattleLog : undefined}
+                      />
+                    )}
                     {openDmTabs.map((tab) => (
                       <DmTabButton
                         key={tab.otherPlayerId}
                         tab={tab}
-                        active={sameTabId(effectiveActiveTabId, tab.otherPlayerId)}
+                        active={
+                          !isBattleLogActive &&
+                          sameTabId(effectiveActiveTabId, tab.otherPlayerId)
+                        }
                         unread={unreadByPlayerId.get(tab.otherPlayerId) ?? 0}
-                        onActivate={() => setActiveTab(tab.otherPlayerId)}
+                        onActivate={() => {
+                          setBattleLogActive(false);
+                          setActiveTab(tab.otherPlayerId);
+                        }}
                         onClose={() => closeDmTab(tab.otherPlayerId)}
                       />
                     ))}
@@ -234,7 +315,11 @@ export function BottomDock() {
                 </div>
 
                 {/* Tab content */}
-                {effectiveActiveTabId === 'general' ? (
+                {isBattleLogActive ? (
+                  <div className="kombats-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
+                    <BattleLogList entries={battleLogEntries} />
+                  </div>
+                ) : effectiveActiveTabId === 'general' ? (
                   <>
                     <div className="kombats-scroll flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-3">
                       <GlobalMessagesList />
@@ -260,14 +345,34 @@ export function BottomDock() {
                 )}
               </div>
 
-              {/* RIGHT — players column */}
+              {/* RIGHT — players column (or RoundMap when BATTLE LOG is active) */}
               <aside className="relative flex w-64 shrink-0 basis-1/4 flex-col">
                 <VerticalSoftHairline />
-                <PlayersHeader />
-                <PlayersList
-                  onSendMessage={handleOpenDm}
-                  onViewProfile={setProfilePlayerId}
-                />
+                {isBattleLogActive ? (
+                  roundMapEntries.length > 0 || battleActive ? (
+                    <RoundMap
+                      entries={roundMapEntries}
+                      playerAId={battlePlayerAId}
+                      playerBId={battlePlayerBId}
+                      playerAName={battlePlayerAName}
+                      playerBName={battlePlayerBName}
+                    />
+                  ) : (
+                    <div className="flex flex-1 items-center justify-center px-4">
+                      <p className="text-center text-[11px] uppercase tracking-[0.18em] text-text-muted">
+                        No battle in progress
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    <PlayersHeader />
+                    <PlayersList
+                      onSendMessage={handleOpenDm}
+                      onViewProfile={setProfilePlayerId}
+                    />
+                  </>
+                )}
               </aside>
             </>
           )}
@@ -502,6 +607,57 @@ function DmTabButton({ tab, active, unread, onActivate, onClose }: DmTabButtonPr
       >
         <X className="h-3 w-3" aria-hidden />
       </button>
+      {active && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-accent"
+          style={{ boxShadow: ACTIVE_TAB_INDICATOR_SHADOW }}
+        />
+      )}
+    </div>
+  );
+}
+
+interface BattleLogTabButtonProps {
+  active: boolean;
+  onActivate: () => void;
+  // Present only while the tab is showing the archived `lastBattleLog` after
+  // a battle has finished. During an active battle the tab is non-closeable.
+  onClose?: () => void;
+}
+
+function BattleLogTabButton({ active, onActivate, onClose }: BattleLogTabButtonProps) {
+  return (
+    <div
+      className={clsx(
+        'relative flex h-full shrink-0 items-center pl-3',
+        onClose ? 'pr-1.5' : 'pr-4',
+        active
+          ? 'text-text-primary'
+          : 'text-text-muted hover:text-text-primary',
+      )}
+    >
+      <button
+        type="button"
+        onClick={onActivate}
+        className="flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] focus:outline-none"
+      >
+        <span className={clsx('flex', active && 'text-accent')}>
+          <Swords className="h-3.5 w-3.5" aria-hidden />
+        </span>
+        <span>Battle Log</span>
+      </button>
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close battle log"
+          title="Close tab"
+          className="ml-1 flex h-5 w-5 items-center justify-center rounded-sm text-text-muted transition-colors duration-150 hover:text-kombats-gold focus:outline-none focus-visible:text-kombats-gold"
+        >
+          <X className="h-3 w-3" aria-hidden />
+        </button>
+      )}
       {active && (
         <span
           aria-hidden

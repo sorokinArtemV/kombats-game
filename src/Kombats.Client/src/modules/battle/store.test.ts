@@ -4,6 +4,11 @@ import type { BattleZone } from '@/types/battle';
 
 function resetStore() {
   useBattleStore.getState().reset();
+  // reset() now intentionally preserves lastBattleLog and lastTurnHistory
+  // (so the BattleLog tab can survive lobby return). For test isolation,
+  // also wipe both.
+  useBattleStore.getState().clearLastBattleLog();
+  useBattleStore.getState().clearLastTurnHistory();
 }
 
 function getState() {

@@ -1,5 +1,4 @@
-import { useState, type CSSProperties } from 'react';
-import { clsx } from 'clsx';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { useBattlePhase, useBattleActions, useBattleConnectionState } from '../hooks';
 import { ALL_ZONES, VALID_BLOCK_PAIRS } from '../zones';
@@ -376,8 +375,28 @@ export function BodyZoneSelector() {
   const turnOpen = phase === 'TurnOpen';
   const connectionBlocked = connectionState !== 'connected';
   const disabled = !turnOpen || connectionBlocked || actions.isSubmitting;
-  const canGo = actions.canSubmit && !connectionBlocked;
   const isWaiting = phase === 'Submitted' || phase === 'Resolving';
+
+  // Layout-gap compensation for the scale(0.75) wrapper. transform: scale
+  // shrinks the visual but leaves the original layout box in place, so the
+  // glass panel reserves the full natural height and a 25% empty band sits
+  // below the silhouettes. We measure the inner grid's natural offsetHeight
+  // and feed (height * 0.25) back as a negative marginBottom on the wrapper,
+  // collapsing the unused band to zero.
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [naturalHeight, setNaturalHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const inner = innerRef.current;
+    if (!inner) return;
+    const measure = () => {
+      setNaturalHeight(inner.offsetHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
 
   const handleAttackClick = (zone: BattleZone) => {
     if (disabled) return;
@@ -394,75 +413,70 @@ export function BodyZoneSelector() {
   return (
     <div className="flex flex-col gap-4">
       <div
-        className="grid grid-cols-2 gap-4 rounded-sm border-[0.5px] border-border-subtle bg-glass-subtle p-4"
-        style={{ backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' }}
+        style={{
+          transform: 'scale(0.75)',
+          transformOrigin: 'top center',
+          height: '75%',
+          // Horizontal compensation: layout box is widened by 1/0.75 so that
+          // after scale(0.75) the visible silhouette block fills the panel's
+          // content area exactly. Visible side gap then equals the panel's
+          // padding (p-5 → 20px), matching the visible bottom gap.
+          marginLeft: '-16.67%',
+          marginRight: '-16.67%',
+          marginBottom:
+            naturalHeight > 0 ? `${-Math.round(naturalHeight * 0.25)}px` : '-25%',
+        }}
       >
-        {isWaiting ? (
-          <div className="col-span-2 flex items-center justify-center py-6">
-            <LockedInSpinner reduceMotion={reduceMotion ?? false} />
-          </div>
-        ) : (
-          <>
-            <SilhouetteColumn
-              mode="attack"
-              headerLabel="Attack"
-              headerColor="var(--color-kombats-crimson-light)"
-              headerGlow="0 2px 14px rgba(var(--rgb-crimson), 0.35)"
-              selected={
-                actions.selectedAttackZone ? [actions.selectedAttackZone] : []
-              }
-              onZoneClick={handleAttackClick}
-              selectionLabel={actions.selectedAttackZone ?? null}
-              placeholder="Select zone"
-              disabled={disabled}
-            />
-            <SilhouetteColumn
-              mode="block"
-              headerLabel="Block"
-              headerColor="var(--color-kombats-jade-light)"
-              headerGlow="0 2px 14px rgba(var(--rgb-jade), 0.35)"
-              selected={
-                actions.selectedBlockPair
-                  ? [actions.selectedBlockPair[0], actions.selectedBlockPair[1]]
-                  : []
-              }
-              onZoneClick={handleBlockClick}
-              hoverPairFor={autoAnchoredBlockPair}
-              selectionLabel={
-                actions.selectedBlockPair
-                  ? `${actions.selectedBlockPair[0]} + ${actions.selectedBlockPair[1]}`
-                  : null
-              }
-              placeholder="Select pair"
-              disabled={disabled}
-            />
-          </>
-        )}
-      </div>
-
-      <div className="flex flex-col items-center gap-2">
-        <button
-          type="button"
-          onClick={actions.submitAction}
-          disabled={!canGo && !isWaiting}
-          aria-label={isWaiting ? 'Locked in' : 'Lock in attack and block'}
-          className={clsx(
-            'inline-flex items-center justify-center rounded-md px-10 py-2.5 font-display text-[13px] font-normal uppercase tracking-[0.24em] transition-[background-color,border-color,opacity] duration-150',
-            isWaiting
-              ? 'cursor-not-allowed border-[0.5px] border-border-emphasis bg-transparent text-accent-text'
-              : canGo
-                ? 'bg-accent-primary text-text-on-accent hover:bg-kombats-gold-light'
-                : 'cursor-not-allowed bg-bg-surface text-text-muted opacity-60',
-          )}
+        <div
+          ref={innerRef}
+          className="grid grid-cols-2 gap-4 rounded-sm border-[0.5px] border-border-subtle bg-glass-subtle p-4"
+          style={{
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+          }}
         >
-          {isWaiting ? 'Locked In ✓' : 'Lock In'}
-        </button>
-
-        {connectionBlocked && turnOpen && (
-          <p className="text-center text-[11px] uppercase tracking-[0.18em] text-kombats-crimson-light">
-            Waiting for connection before submitting…
-          </p>
-        )}
+          {isWaiting ? (
+            <div className="col-span-2 flex items-center justify-center py-6">
+              <LockedInSpinner reduceMotion={reduceMotion ?? false} />
+            </div>
+          ) : (
+            <>
+              <SilhouetteColumn
+                mode="attack"
+                headerLabel="Attack"
+                headerColor="var(--color-kombats-crimson-light)"
+                headerGlow="0 2px 14px rgba(var(--rgb-crimson), 0.35)"
+                selected={
+                  actions.selectedAttackZone ? [actions.selectedAttackZone] : []
+                }
+                onZoneClick={handleAttackClick}
+                selectionLabel={actions.selectedAttackZone ?? null}
+                placeholder="Select zone"
+                disabled={disabled}
+              />
+              <SilhouetteColumn
+                mode="block"
+                headerLabel="Block"
+                headerColor="var(--color-kombats-jade-light)"
+                headerGlow="0 2px 14px rgba(var(--rgb-jade), 0.35)"
+                selected={
+                  actions.selectedBlockPair
+                    ? [actions.selectedBlockPair[0], actions.selectedBlockPair[1]]
+                    : []
+                }
+                onZoneClick={handleBlockClick}
+                hoverPairFor={autoAnchoredBlockPair}
+                selectionLabel={
+                  actions.selectedBlockPair
+                    ? `${actions.selectedBlockPair[0]} + ${actions.selectedBlockPair[1]}`
+                    : null
+                }
+                placeholder="Select pair"
+                disabled={disabled}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Accessible secondary pair list for keyboard users. */}

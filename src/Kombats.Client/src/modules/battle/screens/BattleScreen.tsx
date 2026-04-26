@@ -1,8 +1,15 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { motion, useReducedMotion } from 'motion/react';
 import { clsx } from 'clsx';
-import { useBattlePhase, useBattleHp, useBattleTurn } from '../hooks';
+import {
+  useBattlePhase,
+  useBattleHp,
+  useBattleTurn,
+  useBattleActions,
+  useBattleConnectionState,
+} from '../hooks';
 import { useBattleStore } from '../store';
 import { useAuthStore } from '@/modules/auth/store';
 import { usePlayerStore } from '@/modules/player/store';
@@ -16,7 +23,6 @@ import { TurnTimer } from '../components/TurnTimer';
 import { Spinner } from '@/ui/components/Spinner';
 import { ErrorBoundary } from '@/ui/components/ErrorBoundary';
 import { logger } from '@/app/logger';
-import { useBattleConnectionState } from '../hooks';
 import { getAvatarAsset } from '@/modules/player/avatar-assets';
 import bgScene from '@/ui/assets/backgrounds/bg-1.png';
 import type { PlayerCardResponse } from '@/types/player';
@@ -263,13 +269,19 @@ function CombatPanelHeader() {
   );
 }
 
-// DESIGN_REFERENCE.md §5.17 — 3-col grid: round label / center timer / turn pill.
+// DESIGN_REFERENCE.md §5.17 — meta row: ROUND on the left, timer + lock-in
+// grouped together on the right so they read as a single "time left / act"
+// pair instead of being stretched across the panel by space-between.
 function CombatMetaRow() {
   const { turnIndex } = useBattleTurn();
   const phase = useBattlePhase();
+  const actions = useBattleActions();
+  const connectionState = useBattleConnectionState();
 
-  const isYourTurn = phase === 'TurnOpen';
+  const connectionBlocked = connectionState !== 'connected';
+  const isTurnOpen = phase === 'TurnOpen';
   const isWaiting = phase === 'Submitted' || phase === 'Resolving';
+  const canGo = actions.canSubmit && !connectionBlocked;
 
   return (
     <div
@@ -287,47 +299,66 @@ function CombatMetaRow() {
         <TurnTimer />
       </div>
 
-      <div className="flex items-center justify-end gap-2">
-        <TurnIndicatorPill
-          state={
-            isYourTurn ? 'your_turn' : isWaiting ? 'opponent_turn' : 'idle'
-          }
-        />
+      <div className="flex items-center justify-end">
+        {isTurnOpen ? (
+          <LockInButton onClick={actions.submitAction} disabled={!canGo} />
+        ) : isWaiting ? (
+          <span className="text-[11px] uppercase tracking-[0.18em] text-accent-text">
+            Submitted
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-text-secondary">
+            <span
+              aria-hidden
+              className="inline-block h-1.5 w-1.5 rounded-full"
+              style={{ background: 'var(--color-accent-muted)' }}
+            />
+            Standby
+          </span>
+        )}
       </div>
     </div>
   );
 }
 
-function TurnIndicatorPill({
-  state,
+// Outline LOCK IN button. Tailwind utility classes for color/background were
+// being visually overridden by panel/state styling, so the resting and hover
+// surface colors are written as inline styles using the same gold token as
+// the SELECT ATTACK & BLOCK title (--color-accent-primary). Hover is driven
+// by component state because inline styles outrank Tailwind's `hover:`
+// pseudo-class on the same property.
+function LockInButton({
+  onClick,
+  disabled,
 }: {
-  state: 'your_turn' | 'opponent_turn' | 'idle';
+  onClick: () => void;
+  disabled: boolean;
 }) {
-  const label =
-    state === 'your_turn'
-      ? 'Your Turn'
-      : state === 'opponent_turn'
-        ? "Opponent's Turn"
-        : 'Standby';
-  const dot =
-    state === 'your_turn'
-      ? {
-          background: 'var(--color-accent)',
-          boxShadow: '0 0 8px rgba(var(--rgb-gold), 0.55)',
-        }
-      : {
-          background: 'var(--color-accent-muted)',
-          boxShadow: 'none',
-        };
+  const [hovered, setHovered] = useState(false);
+  const filled = hovered && !disabled;
+
   return (
-    <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] text-text-secondary">
-      <span
-        aria-hidden
-        className="inline-block h-1.5 w-1.5 rounded-full"
-        style={dot}
-      />
-      {label}
-    </span>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label="Lock in attack and block"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={clsx(
+        'inline-flex items-center justify-center rounded-md px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors duration-150',
+        disabled && 'cursor-not-allowed opacity-50',
+      )}
+      style={{
+        background: filled ? 'var(--color-accent-primary)' : 'transparent',
+        border: '1px solid var(--color-accent-primary)',
+        color: filled
+          ? 'var(--color-text-on-accent)'
+          : 'var(--color-accent-primary)',
+      }}
+    >
+      Lock In
+    </button>
   );
 }
 
