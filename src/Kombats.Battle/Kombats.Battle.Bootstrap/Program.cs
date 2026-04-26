@@ -139,6 +139,7 @@ builder.Services.AddMessaging<BattleDbContext>(
     configure: messagingBuilder =>
     {
         messagingBuilder.Map<CreateBattle>("CreateBattle");
+        messagingBuilder.Map<BattleCreated>("BattleCreated");
         messagingBuilder.Map<BattleCompleted>("BattleCompleted");
     });
 
