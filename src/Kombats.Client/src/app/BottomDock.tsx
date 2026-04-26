@@ -460,13 +460,21 @@ interface DmTabButtonProps {
 }
 
 function DmTabButton({ tab, active, unread, onActivate, onClose }: DmTabButtonProps) {
+  // Pulse only when the tab is inactive AND has unread inbound messages.
+  // `addDirectMessage` will not increment unread for the focused sender, so
+  // an active tab should already have unread === 0 — the `!active` guard is
+  // defensive against any race where a tab is activated mid-frame.
+  const shouldPulse = unread > 0 && !active;
   return (
     <div
       className={clsx(
-        'relative flex h-full shrink-0 items-center pl-3 pr-1.5 transition-colors duration-150',
+        // 1px transparent border keeps every DM tab's layout identical;
+        // `animate-tab-pulse` fades that border to gold and back.
+        'relative flex h-full shrink-0 items-center rounded-md border border-transparent pl-3 pr-1.5 transition-colors duration-150',
         active
           ? 'text-text-primary'
           : 'text-text-muted hover:text-text-primary',
+        shouldPulse && 'animate-tab-pulse',
       )}
     >
       <button

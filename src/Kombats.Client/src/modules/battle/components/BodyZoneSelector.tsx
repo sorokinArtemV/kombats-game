@@ -447,7 +447,7 @@ export function BodyZoneSelector() {
           disabled={!canGo && !isWaiting}
           aria-label={isWaiting ? 'Locked in' : 'Lock in attack and block'}
           className={clsx(
-            'inline-flex items-center justify-center rounded-md px-10 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.24em] transition-[background-color,border-color,opacity] duration-150',
+            'inline-flex items-center justify-center rounded-md px-10 py-2.5 font-display text-[13px] font-normal uppercase tracking-[0.24em] transition-[background-color,border-color,opacity] duration-150',
             isWaiting
               ? 'cursor-not-allowed border-[0.5px] border-border-emphasis bg-transparent text-accent-text'
               : canGo

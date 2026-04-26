@@ -11,7 +11,7 @@ import * as playersApi from '@/transport/http/endpoints/players';
 import { BodyZoneSelector } from '../components/BodyZoneSelector';
 import { TurnResultPanel } from '../components/TurnResultPanel';
 import { BattleEndOverlay } from '../components/BattleEndOverlay';
-import { FighterCard } from '../components/FighterCard';
+import { FighterNameplate } from '@/modules/player/components/FighterNameplate';
 import { TurnTimer } from '../components/TurnTimer';
 import { Spinner } from '@/ui/components/Spinner';
 import { ErrorBoundary } from '@/ui/components/ErrorBoundary';
@@ -21,21 +21,32 @@ import { getAvatarAsset } from '@/modules/player/avatar-assets';
 import bgScene from '@/ui/assets/backgrounds/bg-1.png';
 import type { PlayerCardResponse } from '@/types/player';
 
-// DESIGN_REFERENCE.md §1.5 — full-bleed scene + ink-navy bottom gradient.
+// DESIGN_REFERENCE.md §1.3 — match LobbyScreen exactly (transparent → ink-navy).
+// BattleScreen reuses the lobby's two-stop gradient so the lobby ↔ battle
+// hand-off reads as a center-overlay swap, not a scene change.
 const sceneOverlayStyle: React.CSSProperties = {
   background:
-    'linear-gradient(to bottom, rgba(var(--rgb-ink-navy), 0.40) 0%, rgba(var(--rgb-ink-navy), 0.15) 35%, rgba(var(--rgb-ink-navy), 0.88) 100%)',
+    'linear-gradient(to bottom, transparent 0%, rgba(var(--rgb-ink-navy), 0.30) 60%, rgba(var(--rgb-ink-navy), 0.60) 100%)',
 };
 
-// DESIGN_REFERENCE.md §3.16 — oversized sprite drop shadow.
+// DESIGN_REFERENCE.md §3.16 — oversized sprite drop shadow + lobby anchor
+// (sprite extends 17vh below the viewport so the bottom of the silhouette is
+// cropped, identical to LobbyScreen's spriteStyle).
 const selfSpriteStyle: React.CSSProperties = {
   filter: 'drop-shadow(0 25px 50px rgba(var(--rgb-black), 0.9))',
+  marginBottom: '-17vh',
 };
 
 // DESIGN_REFERENCE.md §3.19 — mirrored opponent sprite. Hue rotation only
 // applies when both fighters happen to share the same avatar art (so the
 // player can still tell them apart); distinct avatars render naturally.
 const opponentSpriteFilterBase = 'drop-shadow(0 25px 50px rgba(var(--rgb-black), 0.9))';
+
+// Opponent sprite mirrors the player's lobby anchor so both fighters meet at
+// the same bottom band of the scene.
+const opponentSpriteOuterStyle: React.CSSProperties = {
+  marginBottom: '-17vh',
+};
 
 /**
  * Battle layout. Full-bleed scene with bottom-anchored player/opponent
@@ -57,7 +68,8 @@ export function BattleScreen() {
   const isPlayerA = myId !== null && myId === playerAId;
   const myFighterId = isPlayerA ? playerAId : playerBId;
   const oppFighterId = isPlayerA ? playerBId : playerAId;
-  const myName = isPlayerA ? playerAName : playerBName;
+  // Self name comes from playerStore via the default FighterNameplate; only
+  // the opponent's display name needs to be derived from the battle store.
   const oppName = isPlayerA ? playerBName : playerAName;
   const myHp = isPlayerA ? playerAHp : playerBHp;
   const oppHp = isPlayerA ? playerBHp : playerAHp;
@@ -120,23 +132,20 @@ export function BattleScreen() {
         style={sceneOverlayStyle}
       />
 
-      {/* Self sprite + nameplate (bottom-left). */}
-      <div className="pointer-events-none absolute bottom-0 left-0 z-10 flex flex-col items-start pl-4 sm:pl-8">
-        <div className="pointer-events-auto mb-2">
-          <FighterCard
-            name={myName}
-            level={myCard?.level ?? null}
-            tone="friendly"
-            hp={myHp}
-            maxHp={myMaxHp}
-            card={myCard}
-          />
+      {/* LEFT — local player. Anchored bottom-left, sprite renders normally
+          (no scaleX), HP bar is jade/green via the default `friendly` tone,
+          no mirror. Layout (items-center, h-[82vh], marginBottom -17vh) is
+          identical to LobbyScreen so the lobby ↔ battle hand-off reads as a
+          center-overlay swap, not a scene change. */}
+      <div className="pointer-events-none absolute bottom-0 left-0 z-10 flex flex-col items-center">
+        <div className="pointer-events-auto">
+          <FighterNameplate tone="friendly" hp={myHp} maxHp={myMaxHp} />
         </div>
         <motion.img
           src={myAvatarSrc}
           alt=""
           aria-hidden
-          className="pointer-events-none h-[min(70vh,620px)] w-auto object-contain"
+          className="pointer-events-none h-[82vh] w-auto object-contain"
           style={selfSpriteStyle}
           initial={reduceMotion ? false : { opacity: 0, x: -50 }}
           animate={reduceMotion ? undefined : { opacity: 1, x: 0 }}
@@ -144,23 +153,27 @@ export function BattleScreen() {
         />
       </div>
 
-      {/* Opponent sprite + nameplate (bottom-right, mirrored sprite). */}
-      <div className="pointer-events-none absolute bottom-0 right-0 z-10 flex flex-col items-end pr-4 sm:pr-8">
-        <div className="pointer-events-auto mb-2">
-          <FighterCard
+      {/* RIGHT — opponent. Anchored bottom-right, sprite mirrored via
+          scaleX(-1) so the fighter faces the player, HP bar is crimson/red
+          via tone="hostile" and visually mirrored via hpBarMirror so it
+          depletes right-to-left. Mirrors the LEFT block geometry so both
+          fighters anchor at identical heights. */}
+      <div className="pointer-events-none absolute bottom-0 right-0 z-10 flex flex-col items-center">
+        <div className="pointer-events-auto">
+          <FighterNameplate
             name={oppName}
             level={oppCard?.level ?? null}
-            tone="hostile"
             hp={oppHp}
             maxHp={oppMaxHp}
             card={oppCard}
+            tone="hostile"
             hpBarMirror
             alignRight
           />
         </div>
         <div
-          className="pointer-events-none h-[min(70vh,620px)] w-auto"
-          style={{ transform: 'scaleX(-1)' }}
+          className="pointer-events-none h-[82vh] w-auto"
+          style={{ ...opponentSpriteOuterStyle, transform: 'scaleX(-1)' }}
         >
           <motion.img
             src={oppAvatarSrc}

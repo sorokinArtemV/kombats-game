@@ -178,9 +178,28 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       nextUnread.set(senderId, current + 1);
     }
 
+    // Auto-open a DM tab for inbound senders that don't already have one,
+    // so a fresh DM (or one received after the user closed the tab) surfaces
+    // in the dock without requiring the recipient to find the sender in the
+    // players list. The new tab is NOT focused — the pulse animation driven
+    // by `unreadByPlayerId` keeps drawing attention until the user clicks it.
+    let nextTabs = state.openDmTabs;
+    if (isInbound) {
+      const hasTab = state.openDmTabs.some((t) =>
+        sameId(t.otherPlayerId, senderId),
+      );
+      if (!hasTab) {
+        nextTabs = [
+          ...state.openDmTabs,
+          { otherPlayerId: senderId, displayName: msg.sender.displayName },
+        ];
+      }
+    }
+
     set({
       directConversations: updated,
       ...(nextUnread !== state.unreadByPlayerId ? { unreadByPlayerId: nextUnread } : {}),
+      ...(nextTabs !== state.openDmTabs ? { openDmTabs: nextTabs } : {}),
     });
     return { suppressed };
   },

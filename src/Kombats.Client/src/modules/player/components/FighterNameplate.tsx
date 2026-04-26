@@ -6,6 +6,7 @@ import type { LucideIcon } from 'lucide-react';
 import { playerKeys } from '@/app/query-client';
 import * as playersApi from '@/transport/http/endpoints/players';
 import { useAuthStore } from '@/modules/auth/store';
+import type { PlayerCardResponse } from '@/types/player';
 import { usePlayerStore } from '../store';
 import { deriveMaxHp } from '../hp-formula';
 
@@ -25,7 +26,8 @@ const nameShadow: React.CSSProperties = {
     '0 2px 8px rgba(var(--rgb-black), 0.95), 0 0 20px rgba(var(--rgb-black), 0.7)',
 };
 
-// Chevron drop-shadow per design — softer (1px / 3px) than the battle FighterCard.
+// Chevron drop-shadow per design — soft 1px/3px black to keep the chevron
+// readable over scene art without clobbering the surrounding name halo.
 const chevronShadow: React.CSSProperties = {
   filter: 'drop-shadow(0 1px 3px rgba(var(--rgb-black), 0.9))',
 };
@@ -48,35 +50,128 @@ const ATTR_COLOR: Record<AttrTone, string> = {
   silver: 'var(--color-kombats-moon-silver)',
 };
 
+interface AttrSet {
+  strength: number;
+  agility: number;
+  intuition: number;
+  vitality: number;
+}
+
+interface FighterNameplateProps {
+  /** Override displayed name. Falls back to playerStore.character.name. */
+  name?: string;
+  /** Override displayed level. Falls back to playerStore.character.level. */
+  level?: number | null;
+  /** Live HP. Falls back to maxHp (idle lobby state). */
+  hp?: number | null;
+  /** Max HP. Falls back to deriveMaxHp(playerStore.character.vitality). */
+  maxHp?: number | null;
+  /**
+   * Externally-resolved fighter card (e.g. an opponent's card). When provided
+   * the popover reads attributes/record from this card and the own-card query
+   * is skipped.
+   */
+  card?: PlayerCardResponse | null;
+  /** Mirror the HP bar so it depletes right-to-left (opponent layout). */
+  hpBarMirror?: boolean;
+  /** Right-align the name + chevron + popover (opponent layout). */
+  alignRight?: boolean;
+  /** HP bar / accent tone. 'friendly' = jade (default), 'hostile' = crimson. */
+  tone?: 'friendly' | 'hostile';
+}
+
 /**
- * Lobby-side fighter nameplate — reads from the player's own character +
- * players/:id/card query. Expandable stats popover opens upward.
+ * Fighter nameplate. By default reads the signed-in player's character +
+ * own /players/:id/card (lobby usage). Pass override props (`name`, `level`,
+ * `hp`, `maxHp`, `card`) to render a different fighter — used in battle
+ * for both the player (overrides hp/maxHp) and the opponent (overrides
+ * everything + `hpBarMirror` + `alignRight` + `tone="hostile"`).
+ *
  * DESIGN_REFERENCE.md §5.18 (nameplate) + §5.12 (stats popover).
  */
-export function FighterNameplate() {
+export function FighterNameplate({
+  name,
+  level,
+  hp,
+  maxHp,
+  card,
+  hpBarMirror = false,
+  alignRight = false,
+  tone = 'friendly',
+}: FighterNameplateProps = {}) {
   const character = usePlayerStore((s) => s.character);
   const userIdentityId = useAuthStore((s) => s.userIdentityId);
   const [open, setOpen] = useState(false);
 
-  const cardQuery = useQuery({
+  // Only fetch own card when no external card was supplied. Without `card`
+  // the nameplate is rendering the signed-in player and needs the record.
+  const externalCardProvided = card !== undefined;
+  const ownCardQuery = useQuery({
     queryKey: playerKeys.card(userIdentityId ?? ''),
     queryFn: () => playersApi.getCard(userIdentityId!),
-    enabled: !!userIdentityId,
+    enabled: !!userIdentityId && !externalCardProvided,
     staleTime: 30_000,
   });
+  const resolvedCard: PlayerCardResponse | null = externalCardProvided
+    ? (card ?? null)
+    : (ownCardQuery.data ?? null);
 
-  if (!character) return null;
+  const resolvedName = name ?? character?.name ?? 'Unknown';
+  const resolvedLevel =
+    level !== undefined ? level : (character?.level ?? null);
 
-  const wins = cardQuery.data?.wins ?? 0;
-  const losses = cardQuery.data?.losses ?? 0;
+  // Attributes for the popover. External card takes precedence; otherwise
+  // the signed-in character's stats. If neither is available the popover
+  // simply hides the attribute block.
+  const resolvedAttrs: AttrSet | null = externalCardProvided
+    ? resolvedCard
+      ? {
+          strength: resolvedCard.strength,
+          agility: resolvedCard.agility,
+          intuition: resolvedCard.intuition,
+          vitality: resolvedCard.vitality,
+        }
+      : null
+    : character
+      ? {
+          strength: character.strength,
+          agility: character.agility,
+          intuition: character.intuition,
+          vitality: character.vitality,
+        }
+      : null;
+
+  // HP source is explicit when the caller passes either hp or maxHp (even as
+  // null). In that mode — battle — HP must come from the battle store and we
+  // never derive from character vitality. Lobby usage passes neither, so we
+  // fall back to a full bar derived from the signed-in character's vitality.
+  const battleHpProvided = hp !== undefined || maxHp !== undefined;
+  const resolvedMaxHp = battleHpProvided
+    ? (maxHp ?? 0)
+    : character
+      ? deriveMaxHp(character.vitality)
+      : 0;
+  const resolvedHp = battleHpProvided ? (hp ?? 0) : resolvedMaxHp;
+
+  // Render whenever the caller has handed us battle data (hp/maxHp) or an
+  // external card (opponent mode); only the pure lobby self-mode short-
+  // circuits before the player store has loaded a character. Without this
+  // gate the LEFT (player) nameplate would disappear during the brief window
+  // between BattleScreen mounting and playerStore.character settling, and
+  // the green HP bar would never render.
+  if (!externalCardProvided && !battleHpProvided && !character) return null;
+
+  const wins = resolvedCard?.wins ?? 0;
+  const losses = resolvedCard?.losses ?? 0;
   const total = wins + losses;
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
-  const maxHp = deriveMaxHp(character.vitality);
-  const hp = maxHp;
+  const popoverLevel = resolvedLevel ?? '—';
 
   return (
-    <div className="relative z-20 mb-3 w-[420px] max-w-[calc(100vw-3rem)]">
+    <div
+      className={`relative z-20 mb-3 w-[420px] max-w-[calc(100vw-3rem)]${alignRight ? ' text-right' : ''}`}
+    >
       <AnimatePresence>
         {open && (
           <motion.div
@@ -87,25 +182,27 @@ export function FighterNameplate() {
             transition={{ duration: 0.2 }}
             className="absolute bottom-full left-0 right-0 mb-3 overflow-hidden rounded-md border-[0.5px] border-border-subtle bg-glass shadow-[var(--shadow-panel)] backdrop-blur-[20px]"
           >
-            <div className="flex items-center justify-between border-b border-border-divider px-4 py-2">
+            <div
+              className={`flex items-center justify-between border-b border-border-divider px-4 py-2${alignRight ? ' flex-row-reverse' : ''}`}
+            >
               <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-text-muted">
                 Fighter Profile
               </span>
               <span className="text-[10px] font-medium uppercase tracking-[0.22em] text-kombats-gold">
-                Lv {character.level}
+                Lv {popoverLevel}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 px-4 py-3">
+            <div className="grid grid-cols-2 gap-x-6 px-4 py-3 text-left">
               <div>
                 <div className="mb-2 text-[9px] uppercase tracking-[0.05em] text-text-muted">
                   Attributes
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <AttrRow icon={Sword} tone="crimson" label="Strength" value={character.strength} />
-                  <AttrRow icon={Zap} tone="gold" label="Agility" value={character.agility} />
-                  <AttrRow icon={TrendingUp} tone="jade" label="Intuition" value={character.intuition} />
-                  <AttrRow icon={Heart} tone="silver" label="Vitality" value={character.vitality} />
+                  <AttrRow icon={Sword} tone="crimson" label="Strength" value={resolvedAttrs?.strength ?? 0} />
+                  <AttrRow icon={Zap} tone="gold" label="Agility" value={resolvedAttrs?.agility ?? 0} />
+                  <AttrRow icon={TrendingUp} tone="jade" label="Intuition" value={resolvedAttrs?.intuition ?? 0} />
+                  <AttrRow icon={Heart} tone="silver" label="Vitality" value={resolvedAttrs?.vitality ?? 0} />
                 </div>
               </div>
               <div>
@@ -132,17 +229,17 @@ export function FighterNameplate() {
       <div aria-hidden className="pointer-events-none absolute" style={halo} />
 
       <div className="relative">
-        <div className="mb-2 flex">
+        <div className={`mb-2 flex${alignRight ? ' justify-end' : ''}`}>
           <h2
             className="text-2xl leading-none tracking-wide text-text-primary"
             style={nameShadow}
           >
-            {character.name ?? 'Unknown'}
+            {resolvedName}
           </h2>
         </div>
 
-        <div className="flex items-center gap-2">
-          <HpBar hp={hp} maxHp={maxHp} />
+        <div className={`flex items-center gap-2${alignRight ? ' flex-row-reverse' : ''}`}>
+          <HpBar hp={resolvedHp} maxHp={resolvedMaxHp} tone={tone} mirror={hpBarMirror} />
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -160,36 +257,59 @@ export function FighterNameplate() {
 }
 
 // DESIGN_REFERENCE.md §3.11 — parallelogram HP bar with jade gradient fill.
-// Matches design_V2/GameScreens.tsx lobby HpBar (non-mirrored variant).
-function HpBar({ hp, maxHp }: { hp: number; maxHp: number }) {
+// `mirror` flips the parallelogram skew + fill direction for the opponent
+// nameplate; `tone` swaps the jade fill for crimson.
+interface HpBarProps {
+  hp: number;
+  maxHp: number;
+  tone: 'friendly' | 'hostile';
+  mirror: boolean;
+}
+
+function HpBar({ hp, maxHp, tone, mirror }: HpBarProps) {
   const pct = maxHp > 0 ? Math.max(0, Math.min(100, (hp / maxHp) * 100)) : 0;
+
+  const skewLeft = 'polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)';
+  const skewRight = 'polygon(0 0, calc(100% - 12px) 0, 100% 100%, 12px 100%)';
+
+  const fillBackground =
+    tone === 'hostile'
+      ? 'linear-gradient(180deg, var(--palette-hp-crimson-1) 0%, var(--palette-hp-crimson-2) 55%, var(--palette-hp-crimson-3) 100%)'
+      : 'linear-gradient(180deg, var(--palette-hp-jade-1) 0%, var(--palette-hp-jade-2) 55%, var(--palette-hp-jade-3) 100%)';
+
   return (
     <div
       className="relative h-7 flex-1"
       style={{
-        clipPath: 'polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%)',
+        clipPath: mirror ? skewRight : skewLeft,
         background: 'rgba(var(--rgb-ink-navy), 0.75)',
         border: '0.5px solid rgba(var(--rgb-white), 0.08)',
       }}
     >
       <div
         aria-hidden
-        className="absolute inset-y-0 left-0 transition-[width] duration-300 ease-out"
+        className="absolute inset-y-0 transition-[width] duration-300 ease-out"
         style={{
           width: `${pct}%`,
-          background:
-            'linear-gradient(180deg, var(--palette-hp-jade-1) 0%, var(--palette-hp-jade-2) 55%, var(--palette-hp-jade-3) 100%)',
+          left: mirror ? 'auto' : 0,
+          right: mirror ? 0 : 'auto',
+          background: fillBackground,
         }}
       >
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 right-0 w-px"
-          style={{ background: 'rgba(var(--rgb-white), 0.22)' }}
+          className="pointer-events-none absolute inset-y-0 w-px"
+          style={{
+            left: mirror ? 0 : 'auto',
+            right: mirror ? 'auto' : 0,
+            background: 'rgba(var(--rgb-white), 0.22)',
+          }}
         />
       </div>
       <span
-        className="absolute inset-0 flex items-center justify-end font-display tabular-nums text-text-primary"
+        className="absolute inset-0 flex items-center font-display tabular-nums text-text-primary"
         style={{
+          justifyContent: mirror ? 'flex-start' : 'flex-end',
           padding: '0 14px',
           fontStyle: 'italic',
           fontSize: 13,
