@@ -120,8 +120,8 @@ export function BottomDock() {
   const clearLastTurnHistory = useBattleStore((s) => s.clearLastTurnHistory);
   const battlePlayerAId = useBattleStore((s) => s.playerAId);
   const battlePlayerBId = useBattleStore((s) => s.playerBId);
-  const battlePlayerAName = useBattleStore((s) => s.playerAName);
-  const battlePlayerBName = useBattleStore((s) => s.playerBName);
+  const liveBattlePlayerAName = useBattleStore((s) => s.playerAName);
+  const liveBattlePlayerBName = useBattleStore((s) => s.playerBName);
   const battleActive = battleId !== null;
   const archivedActive = !battleActive && lastBattleLog !== null;
   const battleLogVisible = battleActive || archivedActive;
@@ -131,6 +131,14 @@ export function BottomDock() {
   const roundMapEntries: readonly TurnResolutionLogRealtime[] = battleActive
     ? liveTurnHistory
     : lastTurnHistory ?? [];
+  // Names follow the same active/archived split as entries so the RoundMap
+  // header keeps showing real nicknames after reset() wipes the live store.
+  const battlePlayerAName = battleActive
+    ? liveBattlePlayerAName
+    : lastBattleLog?.playerAName ?? null;
+  const battlePlayerBName = battleActive
+    ? liveBattlePlayerBName
+    : lastBattleLog?.playerBName ?? null;
 
   // Local UI override that takes precedence over the chat store's activeTabId
   // when set. Kept out of the chat store so its tab-id type doesn't have to

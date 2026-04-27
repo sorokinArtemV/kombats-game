@@ -176,7 +176,9 @@
       "Bash(git -C D:/Programming/Sharp/kombats-game/kombats-game ls-files src/Kombats.Client/src/ui/assets/fighters/)",
       "Bash(echo \"EXIT $?\")",
       "Bash(echo \"---TSC-EXIT: $?---\")",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(echo \"TSC EXIT: $?\")",
+      "Bash(echo \"TSC-B EXIT: $?\")"
     ]
   }
 }

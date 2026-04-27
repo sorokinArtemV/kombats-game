@@ -86,7 +86,15 @@ interface BattleState {
   // the BottomDock can keep the BATTLE LOG tab around once the user
   // returns to /lobby; cleared by the next startBattle() or by
   // clearLastBattleLog() (the user dismissing the tab).
-  lastBattleLog: { battleId: Uuid; entries: BattleFeedEntry[] } | null;
+  // Carries the two player names alongside entries so the lobby tab can
+  // render BattleLog/RoundMap with the same identities the live battle
+  // showed — the active playerAName/playerBName fields are wiped by reset().
+  lastBattleLog: {
+    battleId: Uuid;
+    entries: BattleFeedEntry[];
+    playerAName: string | null;
+    playerBName: string | null;
+  } | null;
 
   // Archived turn-history snapshot of the most recently finished battle —
   // mirror of lastBattleLog for the RoundMap. Captured at BattleEnded,
@@ -156,7 +164,12 @@ const INITIAL_STATE = {
   lastResolution: null,
   turnHistory: [] as TurnResolutionLogRealtime[],
   feedEntries: [] as BattleFeedEntry[],
-  lastBattleLog: null as { battleId: Uuid; entries: BattleFeedEntry[] } | null,
+  lastBattleLog: null as {
+    battleId: Uuid;
+    entries: BattleFeedEntry[];
+    playerAName: string | null;
+    playerBName: string | null;
+  } | null,
   lastTurnHistory: null as TurnResolutionLogRealtime[] | null,
   connectionState: 'disconnected' as ConnectionState,
   lastError: null,
@@ -301,7 +314,12 @@ export const useBattleStore = create<BattleState>()((set, get) => ({
       // mirrors any subsequent entries into lastBattleLog while battleId is
       // still set.
       lastBattleLog: state.battleId
-        ? { battleId: state.battleId, entries: state.feedEntries }
+        ? {
+            battleId: state.battleId,
+            entries: state.feedEntries,
+            playerAName: state.playerAName,
+            playerBName: state.playerBName,
+          }
         : state.lastBattleLog,
       // RoundMap snapshot — turn history is fully populated by the time
       // BattleEnded arrives (each turn appended in handleTurnResolved), so
@@ -333,7 +351,12 @@ export const useBattleStore = create<BattleState>()((set, get) => ({
     const archive = state.lastBattleLog;
     const updatedArchive =
       archive && state.battleId && archive.battleId === state.battleId
-        ? { battleId: archive.battleId, entries: trimmed }
+        ? {
+            battleId: archive.battleId,
+            entries: trimmed,
+            playerAName: archive.playerAName,
+            playerBName: archive.playerBName,
+          }
         : archive;
 
     set({
