@@ -178,7 +178,8 @@
       "Bash(echo \"---TSC-EXIT: $?---\")",
       "Bash(git *)",
       "Bash(echo \"TSC EXIT: $?\")",
-      "Bash(echo \"TSC-B EXIT: $?\")"
+      "Bash(echo \"TSC-B EXIT: $?\")",
+      "Bash(awk *)"
     ]
   }
 }

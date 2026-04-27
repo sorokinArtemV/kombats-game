@@ -16,7 +16,6 @@ import { InitialStatsScreen } from '@/modules/onboarding/screens/InitialStatsScr
 import { LobbyScreen } from '@/modules/player/screens/LobbyScreen';
 import { BattleScreen } from '@/modules/battle/screens/BattleScreen';
 import { BattleResultScreen } from '@/modules/battle/screens/BattleResultScreen';
-import { DebugBattleScreen } from './debug/DebugBattleScreen';
 
 export const router = createBrowserRouter([
   // Unauthenticated landing
@@ -105,7 +104,6 @@ export const router = createBrowserRouter([
         {
           element: <SessionShell />,
           children: [
-            { path: '/debug/battle', element: <DebugBattleScreen /> },
           ],
         },
       ]
